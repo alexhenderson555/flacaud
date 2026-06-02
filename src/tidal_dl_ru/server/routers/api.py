@@ -37,6 +37,14 @@ import syncedlyrics
 import tempfile
 logger = logging.getLogger(__name__)
 router = APIRouter()
+@router.get("/api/logs")
+def get_app_logs():
+    import os
+    if os.path.exists("app.log"):
+        with open("app.log", "r", encoding="utf-8") as f:
+            return {"logs": f.read()}
+    return {"logs": "No logs found."}
+
 @router.get("/api/providers", response_model=list[ProviderInfo])
 def providers() -> list[ProviderInfo]:
     return [ProviderInfo(name=p.name, display_name=p.display_name) for p in all_providers()]
@@ -312,6 +320,8 @@ def auth_callback(req: AuthCallback):
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
+from tidal_dl_ru.server import jobs as job_state
+
 @router.get("/api/downloads")
 def get_downloads() -> dict[str, str]:
     return job_state.get_downloaded_registry()
@@ -361,14 +371,6 @@ async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES
 
 @router.get("/api/stream/{provider}/{track_id}")
 async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_current_user), quality: str = "LOW", bypass_registry: str = "false"):
-    if not current_user.can_download:
-        raise HTTPException(status_code=403, detail="Daily limit reached.")
-    
-    # Increment quota
-    with next(get_session()) as s:
-        db_u = s.merge(current_user)
-        db_u.downloads_today += 1
-        s.commit()
     if bypass_registry.lower() != "true":
         registry = job_state.get_downloaded_registry()
         if track_id in registry:
@@ -484,9 +486,6 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
                 final_path = cache_dir / f"{track_id}_{quality.upper()}{ext}"
                 
                 if not final_path.exists():
-                    import asyncio
-                    import httpx
-                    
                     async def fetch_segment(client, url, idx):
                         resp = await client.get(url)
                         resp.raise_for_status()

@@ -11,15 +11,24 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):
     """Use a temporary database for each test."""
-    import tidal_dl_ru.bot.users as users_mod
+    import tidal_dl_ru.database.database as db_mod
+    from sqlmodel import SQLModel
 
-    monkeypatch.setattr(users_mod, "_USERS_DB", tmp_path / "test_users.db")
-    # Reset engine so it gets recreated with the new path.
-    users_mod._engine = None
-    users_mod._SessionLocal = None
+    test_db = tmp_path / "test_users.db"
+    monkeypatch.setattr(db_mod, "_db_path", test_db)
+    from sqlmodel import create_engine
+    db_mod.engine = create_engine(f"sqlite:///{test_db.as_posix()}", connect_args={"check_same_thread": False})
+    
+    # Create tables
+    import tidal_dl_ru.database.models
+    from sqlmodel import SQLModel
+    SQLModel.metadata.create_all(db_mod.engine)
+    print("TABLES:", SQLModel.metadata.tables.keys())
     yield
-    users_mod._engine = None
-    users_mod._SessionLocal = None
+    
+    # Cleanup
+    db_mod.engine = None
+    db_mod.SessionLocal = None
 
 
 class TestGetOrCreate:
@@ -177,3 +186,39 @@ class TestResetQuotas:
         u2 = get_or_create(200)
         assert u1.downloads_today == 0
         assert u2.downloads_today == 0
+
+
+class TestReserveWebDownload:
+    def test_enforces_then_resets_next_day(self):
+        """The web path must reset the daily counter on a new day — otherwise
+        users get permanently locked out after hitting the limit once."""
+        from datetime import datetime, timedelta, timezone
+
+        from sqlmodel import Session
+        from tidal_dl_ru.bot.users import get_or_create, reserve_web_download
+        from tidal_dl_ru.database import database
+        from tidal_dl_ru.database.models import User
+
+        u = get_or_create(100)
+        for _ in range(3):  # free-tier daily limit
+            allowed, _ = reserve_web_download(u.id)
+            assert allowed is True
+        allowed, _ = reserve_web_download(u.id)
+        assert allowed is False  # locked out within the same day
+
+        # Roll the reset timestamp back one day → next call must reset & allow.
+        with Session(database.engine) as s:
+            db_u = s.get(User, u.id)
+            db_u.quota_reset_at = datetime.now(timezone.utc) - timedelta(days=1)
+            s.commit()
+
+        allowed, user = reserve_web_download(u.id)
+        assert allowed is True
+        assert user.downloads_today == 1
+
+    def test_unknown_user(self):
+        from tidal_dl_ru.bot.users import reserve_web_download
+
+        allowed, user = reserve_web_download(999999)
+        assert allowed is False
+        assert user is None

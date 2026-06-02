@@ -24,6 +24,10 @@ tidal_auth.json
 # Throwaway ops/debug scripts & build artifacts
 scratch/
 *.tar.gz
+*.zip
+*.log
 alex.txt
 *_output.txt
+logs.txt
+remote_*.txt
 tidal_login_url.txt

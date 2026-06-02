@@ -176,8 +176,8 @@ export default function Sync() {
                 )}
 
                 {downloadReady ? (
-                  <a 
-                    href={`/api/jobs/${jobId}/zip`}
+                  <a
+                    href={`/api/jobs/${jobId}/zip?token=${localStorage.getItem('tidal-token') || ''}`}
                     download
                     className="btn-primary"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '16px', textDecoration: 'none', background: 'var(--success)' }}

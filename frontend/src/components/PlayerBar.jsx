@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders, ListMusic, Volume2, Waves } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders, ListMusic, Volume2, Waves, Radio } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function PlayerBar({
@@ -31,7 +31,8 @@ export default function PlayerBar({
   toggleOverlay,
   setVolume,
   timeSpanRef,
-  progressRef
+  progressRef,
+  startTrackRadio
 }) {
 
   const formatTime = (timeInSeconds) => {
@@ -43,8 +44,8 @@ export default function PlayerBar({
 
   return (
     <div className="player-bar glass-panel" style={{ borderBottom: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-        <div style={{ width: '56px', height: '56px', borderRadius: '8px', background: 'var(--bg-surface-hover)', overflow: 'hidden' }}>
+      <div className="player-left" style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: 0 }}>
+        <div style={{ width: '56px', height: '56px', minWidth: '56px', borderRadius: '8px', background: 'var(--bg-surface-hover)', overflow: 'hidden' }}>
            {currentTrack?.cover_url ? (
              <img src={currentTrack.cover_url} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
            ) : (
@@ -53,11 +54,13 @@ export default function PlayerBar({
              </div>
            )}
         </div>
-        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-          <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-             {currentTrack ? currentTrack.title : t('readyToPlay')}
+        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+               {currentTrack ? currentTrack.title : t('readyToPlay')}
+             </span>
              {currentTrack && (
-               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+               <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                  {actualQuality && (
                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--accent-solid)', borderRadius: '4px', color: '#fff' }}>
                      {actualQuality === 'HI_RES' || actualQuality === 'HI_RES_LOSSLESS' ? 'MAX' : actualQuality === 'LOSSLESS' ? 'FLAC' : actualQuality}
@@ -71,7 +74,7 @@ export default function PlayerBar({
                </div>
              )}
           </div>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {currentTrack ? (
               currentTrack.artists ? currentTrack.artists.map((artistName, i) => {
                 const artistId = currentTrack.artist_ids?.[i];
@@ -91,7 +94,7 @@ export default function PlayerBar({
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 2, justifyContent: 'center', color: 'var(--text-primary)' }}>
+      <div className="player-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 2, justifyContent: 'center', color: 'var(--text-primary)' }}>
          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
            <SkipBack 
              size={20} 
@@ -144,7 +147,7 @@ export default function PlayerBar({
          </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, justifyContent: 'flex-end', color: 'var(--text-secondary)' }}>
+      <div className="player-right" style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, justifyContent: 'flex-end', color: 'var(--text-secondary)' }}>
          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginRight: '16px', borderRight: '1px solid var(--border-subtle)', paddingRight: '24px' }}>
            <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '20px', padding: '2px', border: '1px solid rgba(255,255,255,0.1)' }}>
              {[
@@ -198,6 +201,13 @@ export default function PlayerBar({
                 style={{ color: 'var(--text-primary)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
                 title="Add to Playlist"
               />
+              <Radio 
+                size={22} 
+                cursor={currentTrack ? "pointer" : "default"}
+                onClick={() => currentTrack && startTrackRadio(currentTrack)}
+                style={{ color: 'var(--text-primary)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
+                title={t('startTrackRadio') || "Start Track Radio"}
+              />
               {currentTrack && (
                <Download 
                  size={22} 
@@ -238,8 +248,9 @@ export default function PlayerBar({
             </div>
          </div>
 
-         <Volume2 size={20} />
+         <Volume2 className="hide-on-mobile" size={20} />
          <div 
+           className="hide-on-mobile"
            style={{ width: '100px', height: '4px', background: 'var(--bg-surface-hover)', borderRadius: '2px', cursor: 'pointer', position: 'relative' }}
            onClick={(e) => {
              const rect = e.currentTarget.getBoundingClientRect();

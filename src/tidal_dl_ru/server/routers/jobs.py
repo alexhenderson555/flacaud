@@ -15,17 +15,15 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 async def create_job(req: JobCreate, request: Request, current_user: User = Depends(get_current_user)) -> JobStatus:
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
-    if not current_user.can_download:
-        raise HTTPException(status_code=403, detail="Daily limit reached.")
 
-    # Increment quota (optimistic, proper way is in worker, but good enough for MVP)
-    from tidal_dl_ru.database.database import get_session
-    from sqlalchemy.orm import Session
-    with next(get_session()) as s:
-        db_u = s.merge(current_user)
-        db_u.downloads_today += 1
-        s.commit()
+    # Reset-aware quota check + reservation. Shared with the bot path so the
+    # daily counter actually rolls over on a new day (previously the web path
+    # only ever incremented, permanently locking users out after day one).
+    from tidal_dl_ru.bot.users import reserve_web_download
+
+    allowed, _ = reserve_web_download(current_user.id)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Daily limit reached.")
 
     if req.job_type == "analyze_set":
         job_id = job_state.new_job_id()

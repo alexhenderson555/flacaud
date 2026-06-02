@@ -376,16 +376,32 @@ input {
     position: fixed !important;
     width: 100% !important;
     bottom: 70px !important; /* above the mobile sidebar */
-    padding: 12px !important;
-    height: 80px !important;
+    padding: 16px !important;
+    height: auto !important;
     background: rgba(18, 18, 26, 0.95) !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    align-items: stretch !important;
+    border-radius: 20px 20px 0 0 !important;
   }
-  .player-bar > div:last-child {
-    display: none !important; /* Hide volume controls */
+  .player-bar > .player-left {
+    width: 100% !important;
   }
-  .player-bar > div:nth-child(2) {
-    flex: 1 !important;
+  .player-bar > .player-center {
+    width: 100% !important;
     max-width: 100% !important;
+  }
+  .player-bar > .player-right {
+    display: flex !important;
+    width: 100% !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 20px !important;
+  }
+  .player-bar > .player-right > div {
+    margin-right: 0 !important;
+    border-right: none !important;
+    padding-right: 0 !important;
   }
   .search-bar-container {
     width: 100% !important;

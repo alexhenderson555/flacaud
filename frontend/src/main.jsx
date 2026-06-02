@@ -13,6 +13,8 @@ import './index.css'
 
 import ArtistProfile from './pages/ArtistProfile.jsx'
 import AlbumView from './pages/AlbumView.jsx'
+import Recommendations from './pages/Recommendations.jsx'
+import Playlists from './pages/Playlists.jsx'
 
 // Tauri fetch interceptor
 const originalFetch = window.fetch;
@@ -41,6 +43,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="library" element={<Library />} />
           <Route path="radio" element={<Radio />} />
           <Route path="account" element={<Account />} />
+          <Route path="recommendations" element={<Recommendations />} />
+          <Route path="playlists" element={<Playlists />} />
           <Route path="analyzer" element={<SetAnalyzer />} />
           <Route path="splitter" element={<StemSplitter />} />
           <Route path="artist/:id" element={<ArtistProfile />} />

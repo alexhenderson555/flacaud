@@ -122,7 +122,7 @@ export default function Search() {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: 10 })
+        body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: 30 })
       });
       const data = await res.json();
       if (data.tracks) setRealResults(data.tracks);
@@ -293,7 +293,7 @@ export default function Search() {
       <motion.div 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        style={{ marginBottom: '40px', width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
+        style={{ marginBottom: '40px', width: '100%', width: '100%', maxWidth: '1400px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
       >
         <div style={{ display: 'flex', background: 'var(--bg-surface-hover)', borderRadius: '16px', padding: '6px', marginBottom: '32px' }}>
           <button 
@@ -335,7 +335,7 @@ export default function Search() {
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.2, duration: 0.4 }}
-        style={{ position: 'relative', width: '100%', maxWidth: '800px', marginBottom: '40px' }}
+        style={{ position: 'relative', width: '100%', width: '100%', maxWidth: '1400px', marginBottom: '40px' }}
       >
         {searchMode === 'normal' ? (
           <form className="glass-panel" onSubmit={(e) => { e.preventDefault(); performSearch(query); }} style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', borderRadius: '24px', width: '100%' }}>
@@ -454,7 +454,7 @@ export default function Search() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4 }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '800px' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px' }}
         >
           <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>{t('results')}</h2>
           {realResults.map((result, idx) => (
@@ -543,7 +543,7 @@ export default function Search() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '800px', width: '100%', marginTop: '40px' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px', width: '100%', marginTop: '40px' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{aiQuery} Mix</h2>

@@ -1,5 +1,13 @@
 from __future__ import annotations
 import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("app.log", encoding="utf-8")
+    ]
+)
 logger = logging.getLogger(__name__)
 """FastAPI app — REST surface over the CLI core.
 

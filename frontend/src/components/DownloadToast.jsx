@@ -17,7 +17,7 @@ export default function DownloadToast() {
     } else if (job.provider_id) {
       url = await getCachedAudioUrl({ provider: job.provider, provider_id: job.provider_id }, job.quality);
       if (!url) {
-        url = `/api/stream/${job.provider}/${job.provider_id}?quality=${job.quality}`;
+        url = `/api/stream/${job.provider}/${job.provider_id}?quality=${job.quality}&token=${localStorage.getItem('tidal-token') || ''}`;
       }
     }
     

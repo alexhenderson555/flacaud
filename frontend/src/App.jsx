@@ -42,7 +42,9 @@ const dict = {
     failedToRemove: 'Failed to remove track',
     failedToAdd: 'Failed to add track',
     networkError: 'Network error',
-    comingSoon: 'Coming soon!'
+    recommendations: 'Recommendations',
+    comingSoon: 'Coming soon!',
+    startTrackRadio: 'Start Track Radio'
   },
   ru: {
     search: 'Поиск и Шазам',
@@ -66,7 +68,9 @@ const dict = {
     failedToRemove: 'Ошибка при удалении',
     failedToAdd: 'Ошибка при добавлении',
     networkError: 'Ошибка сети',
-    comingSoon: 'Скоро появится!'
+    recommendations: 'Рекомендации',
+    comingSoon: 'Скоро появится!',
+    startTrackRadio: 'Радио по треку'
   }
 };
 
@@ -274,7 +278,7 @@ function App() {
       if (!url) {
         const isDownloaded = downloadedTracksRef.current.has(currentTrack.provider_id);
         const bypass = isDownloaded ? 'false' : 'true';
-        url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}`;
+        url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&token=${localStorage.getItem('tidal-token') || ''}`;
         try {
           const qRes = await fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}`);
           if (qRes.ok) {
@@ -302,7 +306,7 @@ function App() {
         if (!url) {
           const isDownloaded = downloadedTracksRef.current.has(nextTrack.provider_id);
           const bypass = isDownloaded ? 'false' : 'true';
-          url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}`;
+          url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&token=${localStorage.getItem('tidal-token') || ''}`;
         }
         setPreloadAudioSrc(url);
       } else {
@@ -554,6 +558,33 @@ function App() {
     }
   };
 
+  const startTrackRadio = async (track) => {
+    setIsLoading(true);
+    try {
+      const vibeQuery = lang === 'ru'
+        ? `Сыграй треки, похожие на ${track.title} от ${track.artists?.[0] || 'Unknown'}`
+        : `Play tracks similar to ${track.title} by ${track.artists?.[0] || 'Unknown'}`;
+      
+      const res = await fetch('/api/ai-playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: vibeQuery, limit: 15 })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.tracks && data.tracks.length > 0) {
+        setPlaylist(data.tracks);
+        togglePlay(data.tracks[0], data.tracks);
+        showToast(lang === 'ru' ? 'Радио по треку запущено! 📻' : 'Track Radio started! 📻');
+      } else {
+        showToast(lang === 'ru' ? 'Не удалось запустить радио' : 'Could not start radio');
+      }
+    } catch (err) {
+      showToast(lang === 'ru' ? 'Ошибка сети' : 'Network error');
+    }
+    setIsLoading(false);
+  };
+
   const playPrevious = () => {
     if (!currentTrack) return;
     const currentTime = audioRef.current?.currentTime || 0;
@@ -650,7 +681,8 @@ function App() {
     lang,
     setLang,
     t,
-    downloadedTracks
+    downloadedTracks,
+    startTrackRadio
   };
 
   useEffect(() => {
@@ -743,10 +775,10 @@ function App() {
             <Search size={20} />
             <span>{t('search')}</span>
           </NavLink>
-          <div className="nav-item hide-on-mobile" onClick={() => alert(t('comingSoon'))} style={{ cursor: 'pointer' }}>
+          <NavLink to="/recommendations" className={({ isActive }) => isActive ? "nav-item active hide-on-mobile" : "nav-item hide-on-mobile"}>
             <Flame size={20} />
-            <span>{t('trending')}</span>
-          </div>
+            <span>{t('recommendations')}</span>
+          </NavLink>
           <NavLink to="/radio" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
             <Radio size={20} />
             <span>{t('radio')}</span>
@@ -757,10 +789,10 @@ function App() {
             <Heart size={20} />
             <span>{t('library')}</span>
           </NavLink>
-          <div className="nav-item hide-on-mobile" onClick={() => alert(t('comingSoon'))} style={{ cursor: 'pointer' }}>
+          <NavLink to="/playlists" className={({ isActive }) => isActive ? "nav-item active hide-on-mobile" : "nav-item hide-on-mobile"}>
             <ListMusic size={20} />
             <span>{t('playlists')}</span>
-          </div>
+          </NavLink>
           <NavLink to="/sync" className={({ isActive }) => isActive ? "nav-item active nav-item-sync hide-on-mobile" : "nav-item hide-on-mobile"}>
             <Repeat size={20} />
             <span>{t('transfer')}</span>
@@ -905,6 +937,7 @@ function App() {
         setVolume={setVolume}
         timeSpanRef={timeSpanRef}
         progressRef={progressRef}
+        startTrackRadio={startTrackRadio}
       />
       
       {/* Hiding old code temporarily to not cause parsing errors */}

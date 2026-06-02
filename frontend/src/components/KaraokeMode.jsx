@@ -115,7 +115,8 @@ export default function KaraokeMode({ currentTrack, audioRef, onClose }) {
         style={{
           flex: 1,
           width: '100%',
-          maxWidth: '800px',
+          maxWidth: '1400px',
+          padding: '0 20px',
           overflowY: 'auto',
           scrollBehavior: 'smooth',
           display: 'flex',

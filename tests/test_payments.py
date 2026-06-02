@@ -11,14 +11,18 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):
     """Use a temporary database for each test."""
-    import tidal_dl_ru.bot.users as users_mod
-
-    monkeypatch.setattr(users_mod, "_USERS_DB", tmp_path / "test_users.db")
-    users_mod._engine = None
-    users_mod._SessionLocal = None
+    import tidal_dl_ru.database.database as db_mod
+    from sqlmodel import SQLModel
+    test_db = tmp_path / "test_users.db"
+    monkeypatch.setattr(db_mod, "_db_path", test_db)
+    from sqlmodel import create_engine
+    db_mod.engine = create_engine(f"sqlite:///{test_db.as_posix()}", connect_args={"check_same_thread": False})
+    import tidal_dl_ru.database.models
+    from sqlmodel import SQLModel
+    SQLModel.metadata.create_all(db_mod.engine)
     yield
-    users_mod._engine = None
-    users_mod._SessionLocal = None
+    db_mod.engine = None
+    db_mod.SessionLocal = None
 
 
 def _verified(plan: str, telegram_id: str = "12345", value: str | None = None):

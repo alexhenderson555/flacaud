@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import Session
+from sqlmodel import Session, select
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import User
 
@@ -29,7 +29,7 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 def _pw_bytes(password: str) -> bytes:
     # bcrypt only uses the first 72 bytes and bcrypt>=4 raises on longer input,
@@ -52,12 +52,22 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+from fastapi import Request
+from tidal_dl_ru.database.database import engine
+
+def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token:
+        # Fallback for browser contexts that can't send an Authorization header
+        # (<audio src>, <a href> downloads, EventSource). Query-param tokens can
+        # land in access logs, so this is only a fallback, not the primary path.
+        token = request.query_params.get("token")
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -65,8 +75,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Dep
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-        
-    user = session.query(User).filter(User.username == username).first()
-    if user is None:
-        raise credentials_exception
-    return user
+
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.username == username)).first()
+        if user is None:
+            raise credentials_exception
+        session.expunge(user)
+        return user

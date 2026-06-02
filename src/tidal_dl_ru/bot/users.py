@@ -1,7 +1,7 @@
-"""User storage — SQLite-backed via SQLAlchemy.
+"""User storage — unified with the Web SQLModel database.
 
 Tracks Telegram users, their subscription plan, and daily download counts.
-Lightweight — no Postgres needed for MVP.
+Shares the exact same SQLite database and `User` model as the Web UI API.
 """
 
 from __future__ import annotations
@@ -10,24 +10,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    DateTime,
-    Engine,
-    Integer,
-    String,
-    create_engine,
-)
-from sqlalchemy.orm import (
-    DeclarativeBase,
-    Mapped,
-    Session,
-    mapped_column,
-    sessionmaker,
-)
+from sqlmodel import Session, select
 
-from tidal_dl_ru.config import CONFIG_DIR, ensure_dirs
+from tidal_dl_ru.database.models import User
 
 
 class Plan(str, Enum):
@@ -52,83 +37,31 @@ PLAN_PRICES = {
 }
 
 
-# --- ORM ---
-
-class Base(DeclarativeBase):
-    pass
-
-
-class User(Base):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    first_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    plan: Mapped[str] = mapped_column(String(16), default=Plan.FREE.value)
-    subscription_expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
-    )
-    downloads_today: Mapped[int] = mapped_column(Integer, default=0)
-    total_downloads: Mapped[int] = mapped_column(Integer, default=0)
-    quota_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    karaoke_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    dj_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
-    )
-
-    @property
-    def effective_plan(self) -> Plan:
-        """Return the active plan, downgrading to FREE if subscription expired."""
-        p = Plan(self.plan)
-        if p == Plan.FREE or p == Plan.LIFETIME:
-            return p
-        if self.subscription_expires_at:
-            expires = self.subscription_expires_at
-            # Handle both naive and aware datetimes (SQLite stores naive).
-            now = datetime.now(timezone.utc)
-            if expires.tzinfo is None:
-                expires = expires.replace(tzinfo=timezone.utc)
-            if expires > now:
-                return p
-        return Plan.FREE
-
-    @property
-    def daily_limit(self) -> int:
-        return PLAN_LIMITS.get(self.effective_plan, PLAN_LIMITS[Plan.FREE])
-
-    @property
-    def can_download(self) -> bool:
-        return self.downloads_today < self.daily_limit
-
-
-# --- engine / session ---
-
-_USERS_DB = CONFIG_DIR / "users.db"
-_engine: Optional[Engine] = None
-_SessionLocal: Optional[sessionmaker[Session]] = None
-
-
-def _get_engine() -> Engine:
-    global _engine, _SessionLocal
-    if _engine is None:
-        ensure_dirs()
-        _engine = create_engine(
-            f"sqlite:///{_USERS_DB}", connect_args={"check_same_thread": False}
-        )
-        Base.metadata.create_all(_engine)
-        _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
-    return _engine
-
-
 def _session() -> Session:
-    _get_engine()
-    assert _SessionLocal is not None
-    return _SessionLocal()
+    """Open a session on the shared web DB engine.
+
+    Resolved lazily (not imported at module load) so tests can monkeypatch
+    ``database.engine`` with a temporary database.
+    """
+    from tidal_dl_ru.database import database
+
+    return Session(database.engine, expire_on_commit=False)
 
 
-# --- operations ---
+def _maybe_reset_daily(user: User, now: datetime) -> None:
+    """Zero the daily counter when the calendar day has rolled over.
+
+    Used by BOTH the bot and the web paths so the quota resets consistently
+    without relying on an external cron (the web path previously had no reset
+    at all, which permanently locked users out after their first day).
+    """
+    reset_at = user.quota_reset_at
+    if reset_at is not None and reset_at.tzinfo is None:
+        reset_at = reset_at.replace(tzinfo=timezone.utc)
+    if reset_at is None or now.date() > reset_at.date():
+        user.downloads_today = 0
+        user.quota_reset_at = now
+
 
 def get_or_create(
     telegram_id: int,
@@ -137,42 +70,59 @@ def get_or_create(
 ) -> User:
     """Get existing user or create a new free-tier one."""
     with _session() as s:
-        user = s.query(User).filter(User.telegram_id == telegram_id).first()
+        user = s.exec(select(User).where(User.telegram_id == telegram_id)).first()
         if user is None:
+            # Adopt an existing web account (matched by username) that has no
+            # Telegram link yet, to avoid duplicate rows / unique clashes.
+            if username:
+                existing = s.exec(select(User).where(User.username == username)).first()
+                if existing and not existing.telegram_id:
+                    existing.telegram_id = telegram_id
+                    existing.first_name = first_name
+                    s.commit()
+                    s.refresh(existing)
+                    return existing
+
+            # Username must be unique — fall back to a synthetic one on clash.
+            safe_username = username
+            if username and s.exec(select(User).where(User.username == username)).first():
+                safe_username = f"tg_{telegram_id}"
+
             user = User(
                 telegram_id=telegram_id,
-                username=username,
+                username=safe_username,
                 first_name=first_name,
+                plan=Plan.FREE.value,
             )
             s.add(user)
             s.commit()
             s.refresh(user)
         else:
-            # Update profile info if changed.
             changed = False
             if username and user.username != username:
-                user.username = username
-                changed = True
+                if not s.exec(select(User).where(User.username == username)).first():
+                    user.username = username
+                    changed = True
             if first_name and user.first_name != first_name:
                 user.first_name = first_name
                 changed = True
             if changed:
                 s.commit()
+                s.refresh(user)
         return user
 
 
 def check_and_increment(telegram_id: int) -> tuple[bool, User]:
-    """Check if user can download. If yes, increment counter. Returns (allowed, user)."""
+    """Bot path: reset-if-new-day, check the limit, reserve one download.
+
+    Returns (allowed, user)."""
     with _session() as s:
-        user = s.query(User).filter(User.telegram_id == telegram_id).first()
+        user = s.exec(select(User).where(User.telegram_id == telegram_id)).first()
         if user is None:
             return False, User(telegram_id=telegram_id, plan=Plan.FREE.value, downloads_today=0)
 
-        # Reset daily counter if needed.
         now = datetime.now(timezone.utc)
-        if user.quota_reset_at is None or now.date() > user.quota_reset_at.date():
-            user.downloads_today = 0
-            user.quota_reset_at = now
+        _maybe_reset_daily(user, now)
 
         if not user.can_download:
             s.commit()
@@ -181,6 +131,31 @@ def check_and_increment(telegram_id: int) -> tuple[bool, User]:
         user.downloads_today += 1
         user.total_downloads += 1
         s.commit()
+        s.refresh(user)
+        return True, user
+
+
+def reserve_web_download(user_id: int) -> tuple[bool, Optional[User]]:
+    """Web-API counterpart of ``check_and_increment``, keyed by web user id.
+
+    Resets the daily counter on a new day, enforces the plan limit, and
+    reserves one download. Returns (allowed, user)."""
+    with _session() as s:
+        user = s.get(User, user_id)
+        if user is None:
+            return False, None
+
+        now = datetime.now(timezone.utc)
+        _maybe_reset_daily(user, now)
+
+        if not user.can_download:
+            s.commit()
+            return False, user
+
+        user.downloads_today += 1
+        user.total_downloads += 1
+        s.commit()
+        s.refresh(user)
         return True, user
 
 
@@ -189,11 +164,10 @@ def record_downloads(telegram_id: int, count: int) -> None:
     if count <= 0:
         return
     with _session() as s:
-        user = s.query(User).filter(User.telegram_id == telegram_id).first()
+        user = s.exec(select(User).where(User.telegram_id == telegram_id)).first()
         if user is None:
             return
-        # First download already incremented by check_and_increment,
-        # so add count-1 for the remaining tracks.
+        # First download already counted by check_and_increment, so add count-1.
         user.downloads_today += count - 1
         user.total_downloads += count - 1
         s.commit()
@@ -206,19 +180,20 @@ def set_plan(
 ) -> Optional[User]:
     """Update user's subscription plan."""
     with _session() as s:
-        user = s.query(User).filter(User.telegram_id == telegram_id).first()
+        user = s.exec(select(User).where(User.telegram_id == telegram_id)).first()
         if user is None:
             return None
         user.plan = plan.value
         user.subscription_expires_at = expires_at
         s.commit()
+        s.refresh(user)
         return user
 
 
 def toggle_karaoke(telegram_id: int) -> bool:
     """Toggle karaoke mode. Returns new state."""
     with _session() as s:
-        user = s.query(User).filter(User.telegram_id == telegram_id).first()
+        user = s.exec(select(User).where(User.telegram_id == telegram_id)).first()
         if user is None:
             return False
         user.karaoke_enabled = not user.karaoke_enabled
@@ -229,7 +204,7 @@ def toggle_karaoke(telegram_id: int) -> bool:
 def toggle_dj(telegram_id: int) -> bool:
     """Toggle DJ analysis mode. Returns new state."""
     with _session() as s:
-        user = s.query(User).filter(User.telegram_id == telegram_id).first()
+        user = s.exec(select(User).where(User.telegram_id == telegram_id)).first()
         if user is None:
             return False
         user.dj_enabled = not user.dj_enabled
@@ -238,11 +213,17 @@ def toggle_dj(telegram_id: int) -> bool:
 
 
 def reset_all_daily_quotas() -> int:
-    """Reset downloads_today for all users. Run as daily cron."""
+    """Reset downloads_today for all users. Returns the number of users reset.
+
+    Kept for use as a daily cron; the per-request reset in
+    ``check_and_increment`` / ``reserve_web_download`` means the app no longer
+    depends on it being scheduled.
+    """
     with _session() as s:
         now = datetime.now(timezone.utc)
-        result = s.query(User).update(
-            {User.downloads_today: 0, User.quota_reset_at: now}
-        )
+        users = s.exec(select(User)).all()
+        for u in users:
+            u.downloads_today = 0
+            u.quota_reset_at = now
         s.commit()
-        return result
+        return len(users)

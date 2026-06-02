@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session
+from sqlmodel import Session, select
 from datetime import timedelta
 
 from tidal_dl_ru.database.database import get_session
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserRead)
 def register_user(user: UserCreate, session: Session = Depends(get_session)):
-    db_user = session.query(User).filter((User.email == user.email) | (User.username == user.username)).first()
+    db_user = session.exec(select(User).where((User.email == user.email) | (User.username == user.username))).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email or username already registered")
     
@@ -31,7 +31,7 @@ def register_user(user: UserCreate, session: Session = Depends(get_session)):
 
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
-    user = session.query(User).filter(User.username == form_data.username).first()
+    user = session.exec(select(User).where(User.username == form_data.username)).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     
@@ -43,7 +43,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = D
 
 @router.get("/me", response_model=UserRead)
 def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    data = current_user.model_dump()
+    data["effective_plan"] = current_user.effective_plan
+    data["daily_limit"] = current_user.daily_limit
+    return data
 
 @router.get("/status")
 def auth_status():
@@ -69,7 +72,7 @@ def auth_callback(req: AuthCallback):
             tokens = pkce_exchange_code(c, code, req.verifier)
             save_tokens(tokens)
         return {"ok": True}
-    except AuthError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except AuthError:
+        raise HTTPException(status_code=400, detail="Tidal authorization failed")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Authorization callback failed")

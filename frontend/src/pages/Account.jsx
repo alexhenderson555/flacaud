@@ -77,6 +77,7 @@ export default function Account() {
   const [email, setEmail] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [userData, setUserData] = useState(null);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('tidal-token');
@@ -89,6 +90,8 @@ export default function Account() {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
+        const data = await res.json();
+        setUserData(data);
         setIsLoggedIn(true);
       } else if (res.status === 401) {
         setIsLoggedIn(false);
@@ -201,10 +204,10 @@ export default function Account() {
                   <span style={{ fontSize: '2.5rem' }}>{avatar}</span>
                 </div>
                 <div>
-                  <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{localStorage.getItem('tidal-user') || 'User'}</h2>
-                  <div style={{ color: 'var(--accent-solid)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{userData?.username || localStorage.getItem('tidal-user') || 'User'}</h2>
+                  <div style={{ color: 'var(--accent-solid)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase' }}>
                     <Shield size={16} />
-                    PRO Plan
+                    {userData?.effective_plan || 'FREE'} Plan
                   </div>
                 </div>
               </div>
@@ -212,7 +215,7 @@ export default function Account() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>{t('downloads')}</span>
-                  <span style={{ fontWeight: 600 }}>42 <span style={{ color: 'var(--text-muted)' }}>/ 200</span></span>
+                  <span style={{ fontWeight: 600 }}>{userData?.downloads_today || 0} <span style={{ color: 'var(--text-muted)' }}>/ {userData?.daily_limit || 3}</span></span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>{t('nextBilling')}</span>
