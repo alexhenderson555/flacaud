@@ -1,29 +1,42 @@
+import os
+import zipfile
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
-from tidal_dl_ru.server.schemas import JobCreate, JobStatus
-from tidal_dl_ru.database.models import User
-from tidal_dl_ru.database.auth import get_current_user, get_media_user
-from tidal_dl_ru.server import jobs as job_state
-from tidal_dl_ru.server.settings import settings
+
 from tidal_dl_ru.core.router import find_provider
-import zipfile
-import os
+from tidal_dl_ru.database.auth import decode_token, get_current_user, get_media_user, oauth2_scheme
+from tidal_dl_ru.database.models import User
+from tidal_dl_ru.server import jobs as job_state
+from tidal_dl_ru.server.schemas import JobCreate, JobStatus
+from tidal_dl_ru.server.settings import settings
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 @router.post("", response_model=JobStatus)
-async def create_job(req: JobCreate, request: Request, current_user: User = Depends(get_current_user)) -> JobStatus:
+async def create_job(
+    req: JobCreate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
+) -> JobStatus:
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
 
     # Reset-aware quota check + reservation. Shared with the bot path so the
     # daily counter actually rolls over on a new day (previously the web path
     # only ever incremented, permanently locking users out after day one).
+    #
+    # The Telegram bot already meters each download (bot.users.check_and_increment)
+    # before calling us and marks its tokens src=bot; reserving again here would
+    # double-charge the shared daily limit, so we skip it for bot-originated jobs.
     from tidal_dl_ru.bot.users import reserve_web_download
 
-    allowed, _ = reserve_web_download(current_user.id)
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Daily limit reached.")
+    via_bot = bool(token) and decode_token(token).get("src") == "bot"
+    if not via_bot:
+        allowed, _ = reserve_web_download(current_user.id)
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Daily limit reached.")
 
     if req.job_type == "analyze_set":
         job_id = job_state.new_job_id()
@@ -31,9 +44,9 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
         arq_pool = getattr(request.app.state, "arq", None)
         if arq_pool is None:
             raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
-            
+
         await arq_pool.enqueue_job("analyze_set", job_id, req.url, _job_id=job_id)
-        
+
         status = job_state.load(job_id)
         assert status is not None
         return status
@@ -51,7 +64,7 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
     arq_pool = getattr(request.app.state, "arq", None)
     if arq_pool is None:
         raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
-        
+
     await arq_pool.enqueue_job(
         "download_url",
         job_id,
@@ -64,7 +77,7 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
         req.split,
         _job_id=job_id,
     )
-        
+
     status = job_state.load(job_id)
     assert status is not None
     return status
@@ -86,7 +99,7 @@ def download_job_zip(job_id: str, current_user: User = Depends(get_media_user)):
     job_dir = settings.jobs_dir / job_id
     if not job_dir.exists():
         raise HTTPException(status_code=404, detail="Job not found")
-        
+
     zip_path = settings.jobs_dir / f"{job_id}.zip"
     if not zip_path.exists():
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -96,8 +109,8 @@ def download_job_zip(job_id: str, current_user: User = Depends(get_media_user)):
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, job_dir)
                         zf.write(file_path, arcname)
-                        
+
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Failed to create zip")
-        
+
     return FileResponse(zip_path, media_type="application/zip", filename=f"{job_id}.zip")

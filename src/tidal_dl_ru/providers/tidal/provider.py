@@ -13,6 +13,8 @@ from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url, parse_url
 from tidal_dl_ru.providers.tidal.download import download_track
 from tidal_dl_ru.providers.tidal.models import (
     AudioQuality,
+)
+from tidal_dl_ru.providers.tidal.models import (
     Track as TidalTrack,
 )
 
@@ -157,8 +159,16 @@ class TidalProvider(Provider):
         finally:
             http.close()
 
-    def search(self, query: str, limit: int = 10) -> list[Track]:
+    def search(self, query: str, limit: int = 10, offset: int = 0) -> list[Track]:
+        tracks, _ = self.search_page(query, limit=limit, offset=offset)
+        return tracks
+
+    def search_page(self, query: str, limit: int = 10, offset: int = 0) -> tuple[list[Track], bool]:
         with self._client() as c:
-            data = c.search(query, limit=limit)
-        items = data.get("tracks", {}).get("items", [])
-        return [_to_universal(TidalTrack.model_validate(it)) for it in items]
+            data = c.search(query, limit=limit, offset=offset)
+        block = data.get("tracks", {})
+        items = block.get("items", [])
+        total = block.get("totalNumberOfItems", 0)
+        tracks = [_to_universal(TidalTrack.model_validate(it)) for it in items]
+        has_more = bool(total and offset + len(items) < total)
+        return tracks, has_more

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { fetchLyricsForTrack, getCachedLyrics } from '../utils/lyrics';
 
 export default function LyricsView({ currentTrack, audioRef, onClose }) {
   const [lyrics, setLyrics] = useState([]);
@@ -10,30 +11,36 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
-    const fetchLyrics = async () => {
-      if (!currentTrack) return;
-      setIsLoading(true);
-      try {
-        const query = encodeURIComponent(`${currentTrack.artists[0]} ${currentTrack.title}`);
-        const res = await fetch(`/api/lyrics?q=${query}`);
-        if (res.ok) {
-          const data = await res.json();
-          setLyrics(data.lyrics || []);
-        } else {
-          setLyrics([]);
-        }
-      } catch (err) {
-        setLyrics([]);
-      }
+    if (!currentTrack) return;
+
+    const cached = getCachedLyrics(currentTrack);
+    if (cached !== null) {
+      setLyrics(cached);
       setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+    fetchLyricsForTrack(currentTrack)
+      .then((lines) => {
+        if (!cancelled) setLyrics(lines);
+      })
+      .catch(() => {
+        if (!cancelled) setLyrics([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
     };
-    fetchLyrics();
   }, [currentTrack]);
 
-  // Sync with audio time
   useEffect(() => {
     if (lyrics.length === 0 || !audioRef?.current) return;
-    
+
     let rafId;
     const update = () => {
       if (audioRef.current) {
@@ -57,7 +64,6 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
     return () => cancelAnimationFrame(rafId);
   }, [lyrics, audioRef]);
 
-  // Auto-scroll logic
   useEffect(() => {
     if (activeIdx >= 0 && containerRef.current) {
       const activeEl = containerRef.current.children[activeIdx];
@@ -70,7 +76,7 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
   }, [activeIdx]);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ y: '100%' }}
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
@@ -85,10 +91,10 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
         backdropFilter: 'blur(40px)',
         zIndex: 9999,
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
       }}
     >
-      <button 
+      <button
         onClick={onClose}
         style={{
           position: 'absolute',
@@ -104,25 +110,23 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          zIndex: 10
+          zIndex: 10,
         }}
       >
         <X size={24} />
       </button>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 16px', overflow: 'hidden' }}>
-        
-
-        <div 
+        <div
           ref={containerRef}
-          style={{ 
-            flex: 1, 
-            width: '100%', 
-            maxWidth: '800px', 
-            overflowY: 'auto', 
+          style={{
+            flex: 1,
+            width: '100%',
+            maxWidth: '800px',
+            overflowY: 'auto',
             textAlign: 'center',
             paddingBottom: '50vh',
-            scrollBehavior: 'smooth'
+            scrollBehavior: 'smooth',
           }}
           className="hide-scrollbar"
         >
@@ -134,8 +138,8 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
             lyrics.map((line, idx) => {
               const isActive = activeIdx === idx;
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   style={{
                     fontSize: isActive ? 'clamp(2rem, 8vw, 3.5rem)' : 'clamp(1.5rem, 6vw, 2.5rem)',
                     fontWeight: 700,
@@ -144,7 +148,7 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
                     marginBottom: '32px',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     textShadow: isActive ? '0 0 40px rgba(255,255,255,0.2)' : 'none',
-                    lineHeight: 1.2
+                    lineHeight: 1.2,
                   }}
                 >
                   {line.text}

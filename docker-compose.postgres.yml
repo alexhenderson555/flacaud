@@ -1,0 +1,31 @@
+# Optional Postgres instead of SQLite. Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tidal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-tidaldl}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tidal} -d ${POSTGRES_DB:-tidaldl}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tidal}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tidaldl}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tidal}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tidaldl}
+
+volumes:
+  pg-data:

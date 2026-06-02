@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { showToast } from './utils/toast';
 import { Outlet, NavLink, useLocation, Link } from 'react-router-dom';
 import { Search, ListMusic, User, Waves, Play, Pause, SkipBack, SkipForward, Volume2, Repeat, Mic2, Disc3, Heart, Download, Radio, Sliders, Flame, Disc, Plus, Menu, X } from 'lucide-react';
@@ -14,10 +14,14 @@ import Titlebar from './components/Titlebar';
 import DownloadToast from './components/DownloadToast';
 import ToastContainer from './components/ToastContainer';
 import CommandPalette from './components/CommandPalette';
-import PlaylistModal from './components/PlaylistModal';
+import HotkeyHint from './components/HotkeyHint';
+import { startDownloadJob } from './utils/downloadJobs';
 import { FastAverageColor } from 'fast-average-color';
 import { getCachedAudioUrl } from './utils/cache';
 import { getMediaToken } from './utils/mediaToken';
+import { prefetchLyrics } from './utils/lyrics';
+import { analyzeTrackFeatures, getTrackFeaturesSync } from './utils/trackFeatures';
+import { serializeTrackForStorage, normalizeArtists, tracksMatch } from './utils/trackNormalize';
 import { Navigate } from 'react-router-dom';
 
 const dict = {
@@ -45,7 +49,12 @@ const dict = {
     networkError: 'Network error',
     recommendations: 'Recommendations',
     comingSoon: 'Coming soon!',
-    startTrackRadio: 'Start Track Radio'
+    startTrackRadio: 'Start Track Radio',
+    hotkeys: 'Keyboard shortcuts',
+    downloadStarted: 'Download started',
+    setAnalyzer: 'Set Analyzer',
+    proTools: 'Pro Tools',
+    myMusic: 'My Music',
   },
   ru: {
     search: 'Поиск и Шазам',
@@ -71,7 +80,12 @@ const dict = {
     networkError: 'Ошибка сети',
     recommendations: 'Рекомендации',
     comingSoon: 'Скоро появится!',
-    startTrackRadio: 'Радио по треку'
+    startTrackRadio: 'Радио по треку',
+    hotkeys: 'Горячие клавиши',
+    downloadStarted: 'Загрузка начата',
+    setAnalyzer: 'Анализатор сетов',
+    proTools: 'Pro Tools',
+    myMusic: 'Моя музыка',
   }
 };
 
@@ -105,6 +119,11 @@ function App() {
   const [isDJOpen, setIsDJOpen] = useState(false);
   const [isKaraokeOpen, setIsKaraokeOpen] = useState(false);
   const [likedTracks, setLikedTracks] = useState(new Map());
+  const [libraryRevision, setLibraryRevision] = useState(0);
+  const pendingPlayRef = useRef(false);
+  const playlistRef = useRef(playlist);
+  const currentTrackIndexRef = useRef(currentTrackIndex);
+  const currentTrackRef = useRef(currentTrack);
   const [isPlaylistModalOpenPlayer, setIsPlaylistModalOpenPlayer] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -136,8 +155,12 @@ function App() {
   const [downloadedTracks, setDownloadedTracks] = useState(new Set());
   const downloadedTracksRef = useRef(new Set());
   const audioRef = useRef(null);
+  const preloadAudioRef = useRef(null);
+  const crossfadingRef = useRef(false);
+  const skipEndedRef = useRef(false);
   const progressRef = useRef(null);
   const timeSpanRef = useRef(null);
+  const CROSSFADE_SEC = 3;
   
   const fetchLibrary = async () => {
     const token = localStorage.getItem('tidal-token');
@@ -157,7 +180,9 @@ function App() {
     fetchLibrary();
   }, []);
 
-  const toggleLike = async (track) => {
+  const toggleLike = async (track, e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     if (!track) return;
     const token = localStorage.getItem('tidal-token');
     if (!token) {
@@ -166,6 +191,7 @@ function App() {
     }
     const pId = String(track.provider_id);
     const isLiked = likedTracks.has(pId);
+    const artists = normalizeArtists(track);
     
     if (isLiked) {
       const dbId = likedTracks.get(pId);
@@ -178,6 +204,7 @@ function App() {
           const newMap = new Map(likedTracks);
           newMap.delete(pId);
           setLikedTracks(newMap);
+          setLibraryRevision((r) => r + 1);
           showToast(t('removedFromLibrary'));
         } else {
           showToast(t('failedToRemove'));
@@ -193,12 +220,12 @@ function App() {
           body: JSON.stringify({
             provider: track.provider || 'tidal',
             provider_id: pId,
-            title: track.title,
-            artists_json: JSON.stringify(track.artists || []),
-            cover_url: track.cover_url,
+            title: track.title || 'Unknown',
+            artists_json: JSON.stringify(artists),
+            cover_url: track.cover_url || null,
             duration: track.duration_s || track.duration || 0,
             album: track.album || '',
-            quality: track.quality || 'LOW'
+            quality: track.quality || 'LOW',
           })
         });
         if (res.ok) {
@@ -206,6 +233,7 @@ function App() {
           const newMap = new Map(likedTracks);
           newMap.set(pId, data.id);
           setLikedTracks(newMap);
+          setLibraryRevision((r) => r + 1);
           showToast(t('addedToLibrary'));
         } else {
           showToast(t('failedToAdd'));
@@ -234,17 +262,47 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('tidal-current-track', JSON.stringify(currentTrack));
+    playlistRef.current = playlist;
+  }, [playlist]);
+
+  useEffect(() => {
+    currentTrackIndexRef.current = currentTrackIndex;
+  }, [currentTrackIndex]);
+
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
   }, [currentTrack]);
 
   useEffect(() => {
-    localStorage.setItem('tidal-current-playlist', JSON.stringify(playlist));
-    localStorage.setItem('tidal-current-index', currentTrackIndex.toString());
+    try {
+      const slim = serializeTrackForStorage(currentTrack);
+      if (slim) localStorage.setItem('tidal-current-track', JSON.stringify(slim));
+      else localStorage.removeItem('tidal-current-track');
+    } catch (e) {
+      console.warn('Could not persist current track', e);
+    }
+  }, [currentTrack]);
+
+  useEffect(() => {
+    try {
+      const slimPlaylist = (playlist || []).map(serializeTrackForStorage).filter(Boolean);
+      localStorage.setItem('tidal-current-playlist', JSON.stringify(slimPlaylist));
+      localStorage.setItem('tidal-current-index', currentTrackIndex.toString());
+    } catch (e) {
+      console.warn('Could not persist playlist', e);
+    }
   }, [playlist, currentTrackIndex]);
 
   useEffect(() => {
-    // We intentionally do not save playbackQuality to localStorage here,
-    // so the quality selector acts as a temporary override.
+    if (!currentTrack || !playlist?.length) return;
+    const idx = playlist.findIndex((t) => tracksMatch(t, currentTrack));
+    if (idx !== -1 && idx !== currentTrackIndex) {
+      setCurrentTrackIndex(idx);
+    }
+  }, [currentTrack, playlist, currentTrackIndex]);
+
+  useEffect(() => {
+    localStorage.setItem('tidal-quality', playbackQuality);
   }, [playbackQuality]);
 
   useEffect(() => {
@@ -277,23 +335,19 @@ function App() {
       }
       let url = await getCachedAudioUrl(currentTrack, playbackQuality);
       if (!url) {
-        const isDownloaded = downloadedTracksRef.current.has(currentTrack.provider_id);
+        const isDownloaded = downloadedTracksRef.current.has(String(currentTrack.provider_id));
         const bypass = isDownloaded ? 'false' : 'true';
-        url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${await getMediaToken()}`;
-        try {
-          const qRes = await fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}`);
-          if (qRes.ok) {
-            const qData = await qRes.json();
-            setActualQuality(qData.quality || playbackQuality);
-          } else {
-            setActualQuality(playbackQuality);
-          }
-        } catch (e) {
-          setActualQuality(playbackQuality);
-        }
-      } else {
-        setActualQuality(playbackQuality);
+        const mt = await getMediaToken();
+        url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${mt}`;
+        // Start buffering immediately; resolve actual quality in parallel (don't block playback).
+        setCurrentAudioSrc(url);
+        fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}`)
+          .then((qRes) => (qRes.ok ? qRes.json() : null))
+          .then((qData) => setActualQuality(qData?.quality || playbackQuality))
+          .catch(() => setActualQuality(playbackQuality));
+        return;
       }
+      setActualQuality(playbackQuality);
       setCurrentAudioSrc(url);
     };
     updateAudioSrc();
@@ -316,6 +370,15 @@ function App() {
     };
     updatePreloadSrc();
   }, [playlist, currentTrackIndex, playbackQuality]);
+
+  useEffect(() => {
+    if (currentTrack) {
+      prefetchLyrics(currentTrack);
+    }
+    if (playlist?.length && currentTrackIndex >= 0 && currentTrackIndex < playlist.length - 1) {
+      prefetchLyrics(playlist[currentTrackIndex + 1]);
+    }
+  }, [currentTrack, playlist, currentTrackIndex]);
 
   useEffect(() => {
     if (currentTrack) {
@@ -354,52 +417,15 @@ function App() {
     }
   }, [currentTrack]);
 
-  useEffect(() => {
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.setActionHandler('previoustrack', playPrevious);
-      navigator.mediaSession.setActionHandler('nexttrack', playNext);
-    }
-  }, [playlist, currentTrackIndex]);
-
   const t = (key) => dict[lang][key] || key;
 
   const trackDuration = currentTrack?.duration_s || currentTrack?.duration || 0;
 
   useEffect(() => {
-    let animationFrameId;
-    const updateProgress = () => {
-      if (audioRef.current && trackDuration > 0 && progressRef.current && timeSpanRef.current) {
-        const ct = audioRef.current.currentTime;
-        const percent = Math.min(100, (ct / trackDuration) * 100);
-        progressRef.current.style.width = `${percent}%`;
-        
-        const formatted = formatTime(ct);
-        if (timeSpanRef.current.innerText !== formatted) {
-          timeSpanRef.current.innerText = formatted;
-        }
-
-        // Auto Crossfade logic (fade out last 7 seconds, fade in first 3 seconds)
-        if (trackDuration - ct < 7) {
-          const fadeFactor = Math.max(0, (trackDuration - ct) / 7);
-          audioRef.current.volume = volume * fadeFactor;
-        } else if (ct < 3) {
-          const fadeFactor = ct / 3;
-          audioRef.current.volume = volume * fadeFactor;
-        } else {
-          audioRef.current.volume = volume;
-        }
-      }
-      animationFrameId = requestAnimationFrame(updateProgress);
-    };
-
-    if (isPlaying) {
-      animationFrameId = requestAnimationFrame(updateProgress);
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
     }
-    
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [isPlaying, trackDuration]);
+  }, [currentTrack, volume]);
 
   const initAudioEngine = () => {
     if (!window.audioCtx) {
@@ -419,83 +445,88 @@ function App() {
         analyser.fftSize = 256;
         audioRef.current._analyser = analyser;
 
-        const compressor = ctx.createDynamicsCompressor();
-        compressor.threshold.setValueAtTime(-24, ctx.currentTime);
-        compressor.knee.setValueAtTime(30, ctx.currentTime);
-        compressor.ratio.setValueAtTime(12, ctx.currentTime);
-        compressor.attack.setValueAtTime(0.003, ctx.currentTime);
-        compressor.release.setValueAtTime(0.25, ctx.currentTime);
-
         source.connect(analyser);
-        analyser.connect(compressor);
-        compressor.connect(ctx.destination);
+        analyser.connect(ctx.destination);
       } catch (err) {
         console.warn("Audio routing failed:", err);
       }
     }
   };
 
-  const togglePlay = (track, contextPlaylist = null) => {
+  const togglePlay = useCallback((track, contextPlaylist = null) => {
     initAudioEngine();
-    
-    if (currentTrack && currentTrack.provider_id === track.provider_id) {
-      if (isPlaying) audioRef.current?.pause();
-      else audioRef.current?.play();
-    } else {
-      setCurrentTrack(track);
-      if (contextPlaylist) {
-        setPlaylist(contextPlaylist);
-        const idx = contextPlaylist.findIndex(t => t.provider_id === track.provider_id);
-        setCurrentTrackIndex(idx);
-      }
-      setIsPlaying(false);
-      setIsLoading(true);
-      setProgress(0);
-      
-      setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.play().catch(e => {
-            if (e.name !== 'AbortError') {
-              showToast(t('failedToStream') || 'Failed to stream track');
-              setIsPlaying(false);
-              setIsLoading(false);
-            }
-          });
-        }
-      }, 50);
-    }
-  };
+    const trackId = String(track.provider_id);
+    const activePlaylist = contextPlaylist || playlistRef.current || [];
+    const playing = currentTrackRef.current;
+    const playingId = playing ? String(playing.provider_id) : null;
 
-  const handleReorderQueue = (newPlaylist) => {
-    if (currentTrack) {
-      const newIndex = newPlaylist.findIndex(t => t.provider_id === currentTrack.provider_id);
-      if (newIndex !== -1 && newIndex !== currentTrackIndex) {
-        setCurrentTrackIndex(newIndex);
+    if (playingId === trackId) {
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current?.play();
       }
-    }
-    setPlaylist(newPlaylist);
-  };
-
-  const playNext = async () => {
-    if (!playlist) return;
-    
-    if (currentTrackIndex < playlist.length - 1) {
-      const nextTrack = playlist[currentTrackIndex + 1];
-      togglePlay(nextTrack, playlist);
       return;
     }
 
-    // Auto-DJ Harmonic Mixing Fallback
+    pendingPlayRef.current = true;
+    setCurrentTrack({ ...track, provider_id: trackId });
+
+    if (contextPlaylist) {
+      const normalized = contextPlaylist.map((t) => ({ ...t, provider_id: String(t.provider_id) }));
+      setPlaylist(normalized);
+      const idx = normalized.findIndex((t) => String(t.provider_id) === trackId);
+      setCurrentTrackIndex(idx >= 0 ? idx : 0);
+    } else if (activePlaylist.length) {
+      const idx = activePlaylist.findIndex((t) => String(t.provider_id) === trackId);
+      if (idx !== -1) setCurrentTrackIndex(idx);
+    }
+
+    setIsPlaying(false);
+    setIsLoading(true);
+    setProgress(0);
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+
+  const handleReorderQueue = (newPlaylist) => {
+    const normalized = newPlaylist.map((t) => ({ ...t, provider_id: String(t.provider_id) }));
+    if (currentTrackRef.current) {
+      const newIndex = normalized.findIndex((t) => tracksMatch(t, currentTrackRef.current));
+      if (newIndex !== -1) {
+        setCurrentTrackIndex(newIndex);
+      }
+    }
+    setPlaylist(normalized);
+  };
+
+  const resolveQueueIndex = useCallback(() => {
+    const pl = playlistRef.current || [];
+    if (!pl.length) return -1;
+    const idx = currentTrackIndexRef.current;
+    if (idx >= 0 && idx < pl.length && tracksMatch(pl[idx], currentTrackRef.current)) {
+      return idx;
+    }
+    const found = pl.findIndex((t) => tracksMatch(t, currentTrackRef.current));
+    return found;
+  }, []);
+
+  const playNext = useCallback(async () => {
+    const pl = playlistRef.current || [];
+    if (pl.length > 0) {
+      const idx = resolveQueueIndex();
+      const safeIdx = idx >= 0 ? idx : 0;
+      const nextTrack = pl[(safeIdx + 1) % pl.length];
+      togglePlay(nextTrack, pl);
+      return;
+    }
+
+    // Auto-DJ Harmonic Mixing Fallback (no queue)
+    const currentTrack = currentTrackRef.current;
     if (currentTrack) {
       setIsLoading(true);
       try {
-        const getMockFeatures = (t) => {
-          if (t.bpm && t.key) return { bpm: t.bpm, key: t.key };
-          const hash = String(t.provider_id).split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-          const bpms = [120, 124, 128, 130, 95, 140, 115, 100];
-          const keys = ['8A', '9A', '10A', '11A', '12A', '1A', '2A', '3A'];
-          return { bpm: bpms[hash % bpms.length], key: keys[hash % keys.length] };
-        };
         const getHarmonicMatches = (key) => {
            const match = key.match(/(\d+)([AB])/i);
            if (!match) return [key];
@@ -512,21 +543,19 @@ function App() {
           const libRes = await fetch('/api/library', { headers: { Authorization: `Bearer ${token}` } });
           if (libRes.ok) {
             const library = await libRes.json();
-            const { bpm: cBpm, key: cKey } = getMockFeatures(currentTrack);
+            const { bpm: cBpm, camelotKey: cKey } = getTrackFeaturesSync(currentTrack);
             const allowedKeys = getHarmonicMatches(cKey);
-            const existingIds = new Set(playlist.map(t => t.provider_id));
+            const existingIds = new Set(pl.map(t => String(t.provider_id)));
             
-            // Find harmonic match
             const candidates = library.filter(t => {
-              if (existingIds.has(t.provider_id)) return false;
-              const { bpm, key } = getMockFeatures(t);
-              return allowedKeys.includes(key) && Math.abs(bpm - cBpm) <= 5;
+              if (existingIds.has(String(t.provider_id))) return false;
+              const { bpm, camelotKey } = getTrackFeaturesSync(t);
+              return allowedKeys.includes(camelotKey) && Math.abs(bpm - cBpm) <= 5;
             });
 
             if (candidates.length > 0) {
-              // Pick random match
               const nextTrack = candidates[Math.floor(Math.random() * candidates.length)];
-              const newPlaylist = [...playlist, nextTrack];
+              const newPlaylist = [...pl, { ...nextTrack, provider_id: String(nextTrack.provider_id) }];
               setPlaylist(newPlaylist);
               togglePlay(nextTrack, newPlaylist);
               setIsLoading(false);
@@ -536,15 +565,16 @@ function App() {
           }
         }
 
-        // Fallback to Radio if no harmonic match found
-        const res = await fetch(`/api/artist/${currentTrack.artist_ids[0]}`);
+        const res = await fetch(`/api/artist/${currentTrack.artist_ids?.[0]}`);
         if (res.ok) {
           const data = await res.json();
           if (data.top_tracks?.length > 0) {
-            const existingIds = new Set(playlist.map(t => t.provider_id));
-            const newTracks = data.top_tracks.filter(t => !existingIds.has(t.provider_id));
+            const existingIds = new Set(pl.map(t => String(t.provider_id)));
+            const newTracks = data.top_tracks
+              .filter(t => !existingIds.has(String(t.provider_id)))
+              .map(t => ({ ...t, provider_id: String(t.provider_id) }));
             if (newTracks.length > 0) {
-              const newPlaylist = [...playlist, ...newTracks];
+              const newPlaylist = [...pl, ...newTracks];
               setPlaylist(newPlaylist);
               togglePlay(newTracks[0], newPlaylist);
               setIsLoading(false);
@@ -557,7 +587,91 @@ function App() {
       }
       setIsLoading(false);
     }
-  };
+  }, [resolveQueueIndex, togglePlay]);
+
+  useEffect(() => {
+    let animationFrameId;
+    const updateProgress = () => {
+      if (audioRef.current && trackDuration > 0 && progressRef.current && timeSpanRef.current) {
+        const ct = audioRef.current.currentTime;
+        const percent = Math.min(100, (ct / trackDuration) * 100);
+        progressRef.current.style.width = `${percent}%`;
+
+        const formatted = formatTime(ct);
+        if (timeSpanRef.current.innerText !== formatted) {
+          timeSpanRef.current.innerText = formatted;
+        }
+
+        const remaining = trackDuration - ct;
+        const pl = playlistRef.current || [];
+        const hasNext = pl.length > 1 && resolveQueueIndex() >= 0;
+        if (
+          isPlaying &&
+          !crossfadingRef.current &&
+          hasNext &&
+          preloadAudioSrc &&
+          remaining > 0 &&
+          remaining <= CROSSFADE_SEC
+        ) {
+          const preload = preloadAudioRef.current;
+          if (preload && preload.src) {
+            crossfadingRef.current = true;
+            preload.volume = 0;
+            preload.currentTime = 0;
+            preload.play().catch(() => { crossfadingRef.current = false; });
+            const fadeStart = performance.now();
+            const fade = (now) => {
+              const t = Math.min(1, (now - fadeStart) / (CROSSFADE_SEC * 1000));
+              if (audioRef.current) audioRef.current.volume = volume * (1 - t);
+              if (preloadAudioRef.current) preloadAudioRef.current.volume = volume * t;
+              if (t >= 1) {
+                skipEndedRef.current = true;
+                crossfadingRef.current = false;
+                if (preloadAudioRef.current) {
+                  preloadAudioRef.current.pause();
+                  preloadAudioRef.current.volume = 0;
+                }
+                if (audioRef.current) audioRef.current.volume = volume;
+                playNext();
+              } else {
+                requestAnimationFrame(fade);
+              }
+            };
+            requestAnimationFrame(fade);
+          }
+        }
+      }
+      animationFrameId = requestAnimationFrame(updateProgress);
+    };
+
+    if (isPlaying) {
+      animationFrameId = requestAnimationFrame(updateProgress);
+    }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [isPlaying, trackDuration, volume, preloadAudioSrc, playNext, resolveQueueIndex]);
+
+  const playPrevious = useCallback(() => {
+    const currentTrack = currentTrackRef.current;
+    if (!currentTrack) return;
+    const currentTime = audioRef.current?.currentTime || 0;
+    if (currentTime > 3) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+      return;
+    }
+
+    const pl = playlistRef.current || [];
+    if (pl.length > 0) {
+      const idx = resolveQueueIndex();
+      const safeIdx = idx >= 0 ? idx : 0;
+      const prevTrack = pl[(safeIdx - 1 + pl.length) % pl.length];
+      togglePlay(prevTrack, pl);
+    }
+  }, [resolveQueueIndex, togglePlay]);
 
   const startTrackRadio = async (track) => {
     setIsLoading(true);
@@ -574,30 +688,49 @@ function App() {
       const data = await res.json();
       
       if (res.ok && data.tracks && data.tracks.length > 0) {
-        setPlaylist(data.tracks);
-        togglePlay(data.tracks[0], data.tracks);
+        const normalized = data.tracks.map((t) => ({ ...t, provider_id: String(t.provider_id) }));
+        setPlaylist(normalized);
+        togglePlay(normalized[0], normalized);
         showToast(lang === 'ru' ? 'Радио по треку запущено! 📻' : 'Track Radio started! 📻');
-      } else {
-        showToast(lang === 'ru' ? 'Не удалось запустить радио' : 'Could not start radio');
+        setIsLoading(false);
+        return;
       }
+
+      const artistId = track.artist_ids?.[0];
+      if (artistId) {
+        const artistRes = await fetch(`/api/artist/${artistId}`);
+        if (artistRes.ok) {
+          const artistData = await artistRes.json();
+          const top = (artistData.top_tracks || []).map((t) => ({ ...t, provider_id: String(t.provider_id) }));
+          if (top.length > 0) {
+            setPlaylist(top);
+            togglePlay(top[0], top);
+            showToast(lang === 'ru' ? 'Радио по артисту 📻' : 'Artist radio started 📻');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      showToast(lang === 'ru' ? 'Не удалось запустить радио' : 'Could not start radio');
     } catch (err) {
       showToast(lang === 'ru' ? 'Ошибка сети' : 'Network error');
     }
     setIsLoading(false);
   };
 
-  const playPrevious = () => {
-    if (!currentTrack) return;
-    const currentTime = audioRef.current?.currentTime || 0;
-    if (currentTime > 3) {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-      }
-    } else if (playlist && currentTrackIndex > 0) {
-      const prevTrack = playlist[currentTrackIndex - 1];
-      togglePlay(prevTrack, playlist);
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('previoustrack', playPrevious);
+      navigator.mediaSession.setActionHandler('nexttrack', playNext);
     }
-  };
+  }, [playNext, playPrevious]);
+
+  useEffect(() => {
+    if (currentTrack && currentAudioSrc) {
+      analyzeTrackFeatures(currentTrack, currentAudioSrc).catch(() => {});
+    }
+  }, [currentTrack, currentAudioSrc]);
 
   const changeQuality = (newQ) => {
     if (newQ === playbackQuality) return;
@@ -639,38 +772,34 @@ function App() {
 
   const handleDownloadPlayer = async () => {
     if (!currentTrack) return;
+    await handleDownload(currentTrack);
+  };
+
+  const handleDownload = async (track, e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    if (!track) return;
     try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({
-          provider: currentTrack.provider,
-          url: `https://tidal.com/track/${currentTrack.provider_id}`,
-          quality: playbackQuality,
-          type: 'track'
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const saved = localStorage.getItem('tidal-queue-jobs');
-        const jobs = saved ? JSON.parse(saved) : [];
-        jobs.push(data.job_id);
-        localStorage.setItem('tidal-queue-jobs', JSON.stringify(jobs));
-      } else {
-        showToast('Failed to start download: ' + (data.detail || 'Unknown error'));
-      }
+      const url = track.source_url || `https://tidal.com/track/${track.provider_id}`;
+      await startDownloadJob({ url, quality: playbackQuality });
+      showToast(t('downloadStarted'));
     } catch (err) {
       console.error(err);
-      showToast('Error starting download');
+      showToast(lang === 'ru' ? 'Ошибка загрузки' : 'Download failed');
     }
   };
 
   const playerContext = { 
     togglePlay, 
-    playingTrackId: isPlaying && currentTrack ? currentTrack.provider_id : null,
+    currentTrackId: currentTrack ? String(currentTrack.provider_id) : null,
+    playingTrackId: isPlaying && currentTrack ? String(currentTrack.provider_id) : null,
+    isPlaying,
+    isLoading,
     likedTracks,
     toggleLike,
+    handleDownload,
     fetchLibrary,
+    libraryRevision,
     playbackQuality,
     setPlaybackQuality,
     theme,
@@ -718,13 +847,12 @@ function App() {
           toggleOverlay('lyrics');
           break;
         case 'KeyK':
-          e.preventDefault();
-          toggleOverlay('karaoke');
-          break;
-        case 'KeyK':
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             setIsCommandPaletteOpen(prev => !prev);
+          } else {
+            e.preventDefault();
+            toggleOverlay('karaoke');
           }
           break;
         case 'KeyD':
@@ -736,6 +864,22 @@ function App() {
         case 'KeyQ':
           e.preventDefault();
           toggleOverlay('queue');
+          break;
+        case 'KeyF':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            if (!document.fullscreenElement) {
+              document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+              document.exitFullscreen().catch(() => {});
+            }
+          }
+          break;
+        case 'KeyM':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setVolume((v) => (v > 0 ? 0 : parseFloat(localStorage.getItem('tidal-volume') || '1') || 1));
+          }
           break;
         default:
           break;
@@ -785,7 +929,7 @@ function App() {
             <span>{t('radio')}</span>
           </NavLink>
 
-          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '24px' }}>My Music</div>
+          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '24px' }}>{t('myMusic')}</div>
           <NavLink to="/library" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
             <Heart size={20} />
             <span>{t('library')}</span>
@@ -799,14 +943,14 @@ function App() {
             <span>{t('transfer')}</span>
           </NavLink>
 
-          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '24px' }}>Pro Tools</div>
+          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '24px' }}>{t('proTools')}</div>
           <NavLink to="/analyzer" className={({ isActive }) => isActive ? "nav-item active hide-on-mobile" : "nav-item hide-on-mobile"}>
             <ListMusic size={20} />
-            <span>Set Analyzer</span>
+            <span>{t('setAnalyzer')}</span>
           </NavLink>
           <NavLink to="/splitter" className={({ isActive }) => isActive ? "nav-item active hide-on-mobile" : "nav-item hide-on-mobile"}>
             <Disc size={20} />
-            <span>Stem Splitter</span>
+            <span>{t('stemSplitter')}</span>
           </NavLink>
           <NavLink to="/account" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
             <User size={20} />
@@ -889,13 +1033,40 @@ function App() {
         src={currentAudioSrc}
         onPlay={() => { setIsPlaying(true); setIsLoading(false); }}
         onPause={() => setIsPlaying(false)}
-        onEnded={() => { setIsPlaying(false); playNext(); }}
+        onEnded={() => {
+          if (skipEndedRef.current) {
+            skipEndedRef.current = false;
+            return;
+          }
+          setIsPlaying(false);
+          playNext();
+        }}
         onWaiting={() => setIsLoading(true)}
-        onCanPlay={() => setIsLoading(false)}
-        onError={() => setIsLoading(false)}
+        onCanPlay={() => {
+          setIsLoading(false);
+          if (audioRef.current) {
+            audioRef.current.volume = volume;
+          }
+          if (pendingPlayRef.current && audioRef.current) {
+            pendingPlayRef.current = false;
+            audioRef.current.play().catch((e) => {
+              if (e.name !== 'AbortError') {
+                showToast(t('failedToStream') || 'Failed to stream track');
+                setIsPlaying(false);
+                setIsLoading(false);
+              }
+            });
+          }
+        }}
+        onError={() => {
+          pendingPlayRef.current = false;
+          setIsLoading(false);
+          setIsPlaying(false);
+        }}
       />
 
       <audio 
+        ref={preloadAudioRef}
         preload="auto"
         src={preloadAudioSrc}
         style={{ display: 'none' }}
@@ -906,7 +1077,13 @@ function App() {
         {isDJOpen && <DJMode currentTrack={currentTrack} audioRef={audioRef} onClose={() => setIsDJOpen(false)} />}
         {isQueueOpen && <PlaybackQueue playlist={playlist} currentTrackIndex={currentTrackIndex} setPlaylist={handleReorderQueue} togglePlay={togglePlay} onClose={() => setIsQueueOpen(false)} />}
         {isEQOpen && <Equalizer audioCtx={window.audioCtx} audioRef={audioRef} onClose={() => setIsEQOpen(false)} />}
-        {isPlaylistModalOpenPlayer && <PlaylistModal track={currentTrack} onClose={() => setIsPlaylistModalOpenPlayer(false)} />}
+        {isPlaylistModalOpenPlayer && (
+          <PlaylistModal
+            track={currentTrack}
+            onClose={() => setIsPlaylistModalOpenPlayer(false)}
+            onUpdated={() => setLibraryRevision((r) => r + 1)}
+          />
+        )}
       </AnimatePresence>
 
       <PlayerBar 
@@ -1154,6 +1331,7 @@ function App() {
       </div>
       )}
       
+      <HotkeyHint lang={lang} />
       <ToastContainer />
       <DownloadToast />
       <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />

@@ -1,0 +1,28 @@
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN uv sync --no-install-project --no-dev --extra worker
+
+COPY src ./src
+RUN uv sync --no-dev --extra worker
+
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+
+ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONPATH=/app/src \
+    PYTHONUNBUFFERED=1 \
+    TIDALDLRU_ENV=production
+
+RUN mkdir -p /var/lib/tidal-dl-ru/jobs /root/.config/tidal-dl-ru
+
+CMD ["arq", "tidal_dl_ru.server.worker.WorkerSettings"]

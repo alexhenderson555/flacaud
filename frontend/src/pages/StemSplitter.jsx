@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { showToast } from '../utils/toast';
+import { useOutletContext } from 'react-router-dom';
 import { Disc, Download, Loader2, Music, Mic2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { enqueueDownloadJob } from '../utils/downloadJobs';
 
 export default function StemSplitter() {
   const [url, setUrl] = useState('');
@@ -23,6 +25,8 @@ export default function StemSplitter() {
       const data = await res.json();
       setJobId(data.job_id);
       setStatus(data.status);
+      enqueueDownloadJob(data.job_id);
+      showToast('Stem split started — see progress bottom-right');
     } catch (e) {
       setError(e.message);
     }
@@ -38,7 +42,7 @@ export default function StemSplitter() {
             const data = await res.json();
             setStatus(data.status);
             if (data.status === 'failed') {
-              setError(data.error || 'Job failed');
+              setError(data.tracks?.[0]?.error || 'Job failed');
               clearInterval(interval);
             } else if (data.status === 'done') {
               setTracks(data.tracks || []);
@@ -78,6 +82,7 @@ export default function StemSplitter() {
           />
         </div>
         <button
+          type="button"
           className="btn-primary"
           onClick={startSplit}
           disabled={status === 'running' || status === 'queued' || !url.trim()}

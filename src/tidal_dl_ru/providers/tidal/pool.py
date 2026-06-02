@@ -16,7 +16,6 @@ from typing import Optional
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import (
-    Boolean,
     DateTime,
     Engine,
     ForeignKey,  # noqa: F401 — reserved for future user→account mapping
@@ -124,6 +123,7 @@ _SessionLocal: Optional[sessionmaker[Session]] = None
 
 
 import threading
+
 _engine_lock = threading.Lock()
 
 def _get_engine() -> Engine:
@@ -139,6 +139,8 @@ def _get_engine() -> Engine:
     return _engine
 
 import contextlib
+
+
 @contextlib.contextmanager
 def session():
     _get_engine()

@@ -1,14 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session, select
 from datetime import timedelta
 
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from sqlmodel import Session, select
+
+from tidal_dl_ru.database.auth import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    MEDIA_TOKEN_TTL,
+    create_access_token,
+    get_current_user,
+    get_password_hash,
+    sign_media_token,
+    verify_password,
+)
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import User, UserCreate, UserRead
-from tidal_dl_ru.database.auth import get_password_hash, verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, sign_media_token, MEDIA_TOKEN_TTL
-from tidal_dl_ru.providers.tidal.auth import load_tokens, pkce_login_url, extract_code_from_url, pkce_exchange_code, save_tokens, AuthError
-import httpx
-from pydantic import BaseModel
+from tidal_dl_ru.providers.tidal.auth import (
+    AuthError,
+    extract_code_from_url,
+    load_tokens,
+    pkce_exchange_code,
+    pkce_login_url,
+    save_tokens,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -17,7 +33,7 @@ def register_user(user: UserCreate, session: Session = Depends(get_session)):
     db_user = session.exec(select(User).where((User.email == user.email) | (User.username == user.username))).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email or username already registered")
-    
+
     hashed_password = get_password_hash(user.password)
     new_user = User(
         email=user.email,
@@ -34,7 +50,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = D
     user = session.exec(select(User).where(User.username == form_data.username)).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires

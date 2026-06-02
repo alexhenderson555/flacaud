@@ -1,12 +1,11 @@
 import asyncio
-import os
 import io
+import os
 import tempfile
-from pathlib import Path
-from typing import Callable
 
 from tidal_dl_ru.core.router import get_provider_by_name
 from tidal_dl_ru.server import jobs as job_state
+
 
 async def analyze_set_task(
     job_id: str,
@@ -16,27 +15,27 @@ async def analyze_set_task(
     import yt_dlp
     from pydub import AudioSegment
     from ShazamAPI import Shazam
-    from tidal_dl_ru.server.schemas import SetTrackInfo
+
 
     results = []
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         audio_file = os.path.join(temp_dir, "set_audio.mp3")
-        
+
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': audio_file.replace('.mp3', '.%(ext)s'),
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-            'quiet': True, 
+            'quiet': True,
             'no_warnings': True,
         }
-        
+
         job_state.mark_running(job_id, 1, ["Downloading Set Audio"])
-        
+
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
-                
+
         try:
             await asyncio.to_thread(_download)
         except Exception as e:
@@ -48,7 +47,7 @@ async def analyze_set_task(
             return {"ok": False, "error": "No audio file"}
 
         job_state.mark_running(job_id, 1, ["Analyzing Audio"])
-        
+
         try:
             def _load_audio():
                 return AudioSegment.from_mp3(audio_file)
@@ -61,14 +60,16 @@ async def analyze_set_task(
         last_confirmed = None
         pending_track = None
         pending_timestamp = None
-        
+
         provider = get_provider_by_name("tidal")
-        
+
         for i in range(total_segments):
+            pct = int((i / max(total_segments, 1)) * 100)
+            job_state.mark_running(job_id, 1, [f"Analyzing… {pct}%"])
             start_ms = i * interval * 1000
             end_ms = start_ms + 10000
             segment = audio[start_ms:end_ms]
-            
+
             def _shazam_segment(seg):
                 buffer = io.BytesIO()
                 seg.export(buffer, format='wav')
@@ -87,7 +88,7 @@ async def analyze_set_task(
 
             current_track, current_artist, current_title = await asyncio.to_thread(_shazam_segment, segment)
             timestamp = f"{start_ms // 60000}:{(start_ms // 1000) % 60:02d}"
-            
+
             if current_track:
                 if current_track == last_confirmed:
                     pass
@@ -99,7 +100,7 @@ async def analyze_set_task(
                         "timestamp": pending_timestamp,
                         "matched_track": None
                     }
-                    
+
                     if provider:
                         query = f"{track_info['artist']} {track_info['title']}"
                         try:
@@ -108,10 +109,10 @@ async def analyze_set_task(
                                 track_info["matched_track"] = tidal_tracks[0].model_dump()
                         except Exception:
                             pass
-                            
+
                     results.append(track_info)
                     job_state.update_set_tracks(job_id, results)
-                    
+
                     last_confirmed = current_track
                     pending_track = None
                 else:
@@ -121,6 +122,6 @@ async def analyze_set_task(
                     current_title_pending = current_title
             else:
                 pending_track = None
-                
+
         job_state.mark_done(job_id)
         return {"ok": True, "count": len(results)}

@@ -203,7 +203,7 @@ def _compute_chroma_aubio(audio_path: Path) -> Optional[np.ndarray]:
         samples, read = src()
         spectrum = pv(samples)
         magnitudes = spectrum.norm
-        
+
         valid_mags = magnitudes[valid_idx] ** 2
         np.add.at(chroma_sum, pitch_classes, valid_mags)
 
@@ -262,7 +262,7 @@ def _compute_chroma_ffmpeg(audio_path: Path) -> Optional[np.ndarray]:
         frame = samples[start : start + win_size]
         windowed = frame * window
         spectrum = np.abs(np.fft.rfft(windowed))
-        
+
         valid_mags = spectrum[valid_idx] ** 2
         np.add.at(chroma_sum, pitch_classes, valid_mags)
 
@@ -362,7 +362,7 @@ def _tag_m4a_dj(path: Path, bpm: Optional[float], key: Optional[str]) -> None:
 
 
 def _tag_mp3_dj(path: Path, bpm: Optional[float], key: Optional[str]) -> None:
-    from mutagen.id3 import ID3, ID3NoHeaderError, TBPM, TKEY
+    from mutagen.id3 import ID3, TBPM, TKEY, ID3NoHeaderError
 
     try:
         tags = ID3(path)
@@ -438,11 +438,10 @@ def export_rekordbox_xml(
     tree.write(str(output_path), encoding="utf-8", xml_declaration=True)
     return output_path
 
-import mutagen
 from mutagen.flac import FLAC
-from mutagen.mp4 import MP4
 from mutagen.id3 import ID3
-from pathlib import Path
+from mutagen.mp4 import MP4
+
 
 def read_bpm_key(path: Path):
     ext = path.suffix.lower()

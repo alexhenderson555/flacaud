@@ -1,12 +1,9 @@
 import os
 from pathlib import Path
-from sqlmodel import SQLModel, create_engine, Session
-from sqlalchemy.orm import sessionmaker
 
-# Absolute, env-configurable DB path. The previous "./flacaudio.db" default was
-# relative to the process CWD, so in Docker (no volume there) the user DB was wiped
-# on every restart — surfacing as "invalid credentials" after a redeploy. Mount a
-# volume at the parent dir and set TIDALDLRU_DB_PATH to persist accounts.
+from sqlmodel import Session, SQLModel, create_engine
+
+# SQLite path (default) or full DATABASE_URL (Postgres in production).
 _db_path = Path(
     os.environ.get(
         "TIDALDLRU_DB_PATH",
@@ -14,18 +11,34 @@ _db_path = Path(
     )
 )
 _db_path.parent.mkdir(parents=True, exist_ok=True)
-DATABASE_URL = f"sqlite:///{_db_path.as_posix()}"
 
-from sqlalchemy.pool import NullPool
+DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{_db_path.as_posix()}"
 
-# Setting check_same_thread=False is needed in SQLite for FastAPI dependencies
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False}, poolclass=NullPool)
+
+def _engine_connect_args(url: str) -> dict:
+    if url.startswith("sqlite"):
+        return {"check_same_thread": False}
+    return {}
+
+
+def _engine_pool(url: str):
+    if url.startswith("sqlite"):
+        from sqlalchemy.pool import NullPool
+        return NullPool
+    return None
+
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=_engine_connect_args(DATABASE_URL),
+    poolclass=_engine_pool(DATABASE_URL),
+)
+
 
 def _migrate_sqlite_columns():
-    """Add columns missing from an older `user` table so the unified schema
-    doesn't crash on a pre-existing DB (SQLModel.create_all only creates
-    missing tables, never missing columns). Idempotent: only adds what's absent.
-    """
+    """Add columns missing from an older `user` table (SQLite only)."""
+    if not DATABASE_URL.startswith("sqlite"):
+        return
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
@@ -49,13 +62,23 @@ def _migrate_sqlite_columns():
 
 
 def create_db_and_tables():
-    # Import models so their tables are registered on SQLModel.metadata before
-    # create_all — otherwise nothing is created if models weren't imported yet.
     import tidal_dl_ru.database.models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite_columns()
 
+
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def check_db() -> bool:
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False

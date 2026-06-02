@@ -18,7 +18,7 @@ export default function Library() {
   const [filterBpmRange, setFilterBpmRange] = useState({ min: 60, max: 200 });
   const [showDjFilters, setShowDjFilters] = useState(false);
 
-  const { togglePlay: playerContextTogglePlay, playingTrackId, downloadedTracks } = useOutletContext();
+  const { togglePlay: playerContextTogglePlay, playingTrackId, downloadedTracks, libraryRevision } = useOutletContext();
 
   const togglePlay = (track, contextList) => {
     playerContextTogglePlay(track, contextList);
@@ -26,43 +26,48 @@ export default function Library() {
 
   const getToken = () => localStorage.getItem('tidal-token');
 
+  const loadLibraryData = async () => {
+    const token = getToken();
+    if (token) {
+      try {
+        const [libRes, pRes] = await Promise.all([
+          fetch('/api/library', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/playlists', { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        if (libRes.ok) {
+          const data = await libRes.json();
+          const mappedLib = data.map(t => ({
+            ...t,
+            provider_id: String(t.provider_id),
+            artists: JSON.parse(t.artists_json || '[]'),
+            source_url: t.source_url || `https://tidal.com/track/${t.provider_id}`,
+          }));
+          setLibrary(mappedLib);
+        }
+        if (pRes.ok) {
+          const data = await pRes.json();
+          const mappedPlaylists = data.map(p => ({
+            ...p,
+            tracks: JSON.parse(p.tracks_json || '[]').map(tr => ({
+              ...tr,
+              provider_id: String(tr.provider_id),
+              source_url: tr.source_url || `https://tidal.com/track/${tr.provider_id}`,
+            })),
+          }));
+          setPlaylists(mappedPlaylists);
+        }
+      } catch (e) { console.error("Failed to load from DB", e); }
+    } else {
+      const savedLib = localStorage.getItem('tidal-library');
+      if (savedLib) try { setLibrary(JSON.parse(savedLib)); } catch (e) { }
+      const savedPlaylists = localStorage.getItem('tidal-playlists');
+      if (savedPlaylists) try { setPlaylists(JSON.parse(savedPlaylists)); } catch (e) { }
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      const token = getToken();
-      if (token) {
-        try {
-          const [libRes, pRes] = await Promise.all([
-            fetch('/api/library', { headers: { Authorization: `Bearer ${token}` } }),
-            fetch('/api/playlists', { headers: { Authorization: `Bearer ${token}` } })
-          ]);
-          if (libRes.ok) {
-            const data = await libRes.json();
-            // Parse artists_json back to artists array
-            const mappedLib = data.map(t => ({
-              ...t,
-              artists: JSON.parse(t.artists_json || '[]')
-            }));
-            setLibrary(mappedLib);
-          }
-          if (pRes.ok) {
-            const data = await pRes.json();
-            const mappedPlaylists = data.map(p => ({
-              ...p,
-              tracks: JSON.parse(p.tracks_json || '[]')
-            }));
-            setPlaylists(mappedPlaylists);
-          }
-        } catch (e) { console.error("Failed to load from DB", e); }
-      } else {
-        // Fallback to local
-        const savedLib = localStorage.getItem('tidal-library');
-        if (savedLib) try { setLibrary(JSON.parse(savedLib)); } catch (e) { }
-        const savedPlaylists = localStorage.getItem('tidal-playlists');
-        if (savedPlaylists) try { setPlaylists(JSON.parse(savedPlaylists)); } catch (e) { }
-      }
-    };
-    fetchData();
-  }, []);
+    loadLibraryData();
+  }, [libraryRevision]);
 
   const saveLibrary = async (newLib) => {
     setLibrary(newLib);
@@ -107,9 +112,10 @@ export default function Library() {
     
     const token = getToken();
     if (token && updatedPlaylist) {
-      await fetch(`/api/playlists/${playlistId}?tracks_json=${encodeURIComponent(JSON.stringify(updatedPlaylist.tracks))}`, {
+      await fetch(`/api/playlists/${playlistId}`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tracks: updatedPlaylist.tracks }),
       });
     }
   };
@@ -138,7 +144,7 @@ export default function Library() {
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({ url: track.source_url, quality: 'LOSSLESS' })
+        body: JSON.stringify({ url: track.source_url || `https://tidal.com/track/${track.provider_id}`, quality: 'LOSSLESS' })
       });
       if (res.ok) {
         const data = await res.json();
@@ -211,9 +217,9 @@ export default function Library() {
         <button 
           className="btn-secondary" 
           onClick={(e) => { e.stopPropagation(); togglePlay(track, contextList); }}
-          style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: playingTrackId === track.provider_id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
+          style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: playingTrackId === String(track.provider_id) ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
         >
-          {playingTrackId === track.provider_id ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+          {playingTrackId === String(track.provider_id) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
         </button>
 
         <button 
@@ -445,7 +451,7 @@ export default function Library() {
                         const res = await fetch('/api/jobs', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-                          body: JSON.stringify({ url: track.source_url, quality: 'LOSSLESS' })
+                          body: JSON.stringify({ url: track.source_url || `https://tidal.com/track/${track.provider_id}`, quality: 'LOSSLESS' })
                         });
                         if (res.ok) {
                           const data = await res.json();
@@ -458,7 +464,7 @@ export default function Library() {
                         console.error(e);
                       }
                     }
-                    showToast('Playlist download started! Check the Queue tab.');
+                    showToast('Playlist download started! Progress is shown bottom-right.');
                   }
                 }}
                 className="btn-primary"
@@ -493,23 +499,16 @@ export default function Library() {
       {playlistModalTrack === true && (
         <PlaylistModal 
           track={null} 
-          onClose={() => {
-            setPlaylistModalTrack(null);
-            const saved = localStorage.getItem('tidal-playlists');
-            if (saved) setPlaylists(JSON.parse(saved));
-          }} 
+          onClose={() => setPlaylistModalTrack(null)}
+          onUpdated={loadLibraryData}
         />
       )}
 
-      {/* Add to Playlist Modal (Specific Track) */}
       {playlistModalTrack && playlistModalTrack !== true && (
         <PlaylistModal 
           track={playlistModalTrack} 
-          onClose={() => {
-            setPlaylistModalTrack(null);
-            const saved = localStorage.getItem('tidal-playlists');
-            if (saved) setPlaylists(JSON.parse(saved));
-          }} 
+          onClose={() => setPlaylistModalTrack(null)}
+          onUpdated={loadLibraryData}
         />
       )}
     </div>

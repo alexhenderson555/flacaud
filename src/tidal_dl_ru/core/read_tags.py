@@ -1,8 +1,9 @@
-import mutagen
-from mutagen.flac import FLAC
-from mutagen.mp4 import MP4
-from mutagen.id3 import ID3
 from pathlib import Path
+
+from mutagen.flac import FLAC
+from mutagen.id3 import ID3
+from mutagen.mp4 import MP4
+
 
 def read_bpm_key(path: Path):
     ext = path.suffix.lower()

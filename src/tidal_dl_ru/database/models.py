@@ -1,6 +1,7 @@
-from typing import Optional, List
-from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime, timezone
+from typing import List, Optional
+
+from sqlmodel import Field, Relationship, SQLModel
 
 
 def _utcnow() -> datetime:
@@ -14,7 +15,7 @@ class User(UserBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=_utcnow)
-    
+
     telegram_id: Optional[int] = Field(default=None, unique=True, index=True)
     first_name: Optional[str] = Field(default=None)
     plan: str = Field(default="free")
@@ -78,7 +79,7 @@ class SavedTrack(SavedTrackBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
     added_at: datetime = Field(default_factory=_utcnow)
-    
+
     user: User = Relationship(back_populates="saved_tracks")
 
 class PlaylistBase(SQLModel):
@@ -89,7 +90,7 @@ class Playlist(PlaylistBase, table=True):
     user_id: int = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=_utcnow)
     tracks_json: str = "[]" # Stores the list of tracks as JSON string to save having a complex link table for now. Can be migrated later.
-    
+
     user: User = Relationship(back_populates="playlists")
 
 class PlaylistRead(PlaylistBase):

@@ -3,18 +3,20 @@ from __future__ import annotations
 import base64
 import os
 import re
-import httpx
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable, Optional
+
+import httpx
 
 from tidal_dl_ru.core.models import Quality, Track
 from tidal_dl_ru.providers.base import Provider, ProviderError
+
 # Circular import removed
 
 class SpotifyProvider(Provider):
     name = "spotify"
     display_name = "Spotify (via Tidal matching)"
-    
+
     URL_PATTERN = re.compile(r"https?://open\.spotify\.com/(track|playlist|album)/([a-zA-Z0-9]+)", re.IGNORECASE)
 
     def __init__(self):
@@ -27,7 +29,7 @@ class SpotifyProvider(Provider):
     def _get_token(self) -> str:
         if self._access_token:
             return self._access_token
-        
+
         client_id = os.environ.get("SPOTIPY_CLIENT_ID")
         client_secret = os.environ.get("SPOTIPY_CLIENT_SECRET")
         if not client_id or not client_secret:
@@ -65,18 +67,18 @@ class SpotifyProvider(Provider):
         m = self.URL_PATTERN.match(url)
         if not m:
             return []
-            
+
         type_ = m.group(1).lower()
         id_ = m.group(2)
-        
+
         if type_ == "track" and not os.environ.get("SPOTIPY_CLIENT_ID"):
             return self._expand_track_html(url)
-            
+
         token = self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         matched_tracks = []
-        
+
         if type_ == "track":
             try:
                 resp = httpx.get(f"https://api.spotify.com/v1/tracks/{id_}", headers=headers, timeout=10.0)
@@ -88,7 +90,7 @@ class SpotifyProvider(Provider):
                 if t: matched_tracks.append(t)
             except Exception as e:
                 raise ProviderError(f"Failed to fetch Spotify track: {e}")
-                
+
         elif type_ == "playlist":
             try:
                 resp = httpx.get(f"https://api.spotify.com/v1/playlists/{id_}/tracks?limit=100", headers=headers, timeout=10.0)
@@ -103,7 +105,7 @@ class SpotifyProvider(Provider):
                     if t: matched_tracks.append(t)
             except Exception as e:
                 raise ProviderError(f"Failed to fetch Spotify playlist: {e}")
-                
+
         elif type_ == "album":
             try:
                 resp = httpx.get(f"https://api.spotify.com/v1/albums/{id_}/tracks?limit=50", headers=headers, timeout=10.0)
@@ -119,7 +121,7 @@ class SpotifyProvider(Provider):
 
         if not matched_tracks:
             raise ProviderError("Could not match any Spotify tracks on Tidal.")
-            
+
         return matched_tracks
 
     def _expand_track_html(self, url: str) -> list[Track]:
@@ -134,15 +136,15 @@ class SpotifyProvider(Provider):
         if not title_match:
             raise ProviderError("Could not find track title on Spotify page")
         title = title_match.group(1)
-        
+
         desc_match = re.search(r'<meta property="og:description" content="([^"]+)"', html)
         if not desc_match:
             raise ProviderError("Could not find track description on Spotify page")
         desc = desc_match.group(1)
-        
+
         parts = desc.replace("&#183;", "\xb7").replace("·", "\xb7").split("\xb7")
         artist = parts[0].strip() if parts else ""
-        
+
         t = self._match_tidal(f"{artist} {title}")
         if t:
             return [t]

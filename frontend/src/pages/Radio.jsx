@@ -10,13 +10,16 @@ export default function Radio() {
   const [error, setError] = useState(null);
   const { 
     togglePlay: playerContextTogglePlay, 
-    playingTrackId,
+    currentTrackId,
+    isPlaying,
     likedTracks,
     toggleLike,
     handleDownload,
     lang,
-    t
   } = useOutletContext();
+
+  const isTrackCurrent = (track) => currentTrackId === String(track.provider_id);
+  const showPauseIcon = (track) => isTrackCurrent(track) && isPlaying;
 
   const togglePlay = (track) => {
     playerContextTogglePlay(track, stationTracks);
@@ -72,7 +75,7 @@ export default function Radio() {
         <div style={{ 
           width: '120px', height: '120px', borderRadius: '50%', background: 'var(--accent-gradient)', 
           display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
-          boxShadow: isGenerating || playingTrackId ? '0 0 40px var(--accent-glow)' : '0 10px 30px rgba(0,0,0,0.3)',
+          boxShadow: isGenerating || (currentTrackId && stationTracks.some(t => isTrackCurrent(t))) ? '0 0 40px var(--accent-glow)' : '0 10px 30px rgba(0,0,0,0.3)',
           animation: isGenerating ? 'pulse 2s infinite' : 'none'
         }}>
           {isGenerating ? <Loader2 size={48} color="white" className="spin" /> : <RadioIcon size={48} color="white" />}
@@ -129,7 +132,7 @@ export default function Radio() {
               >
                 <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden' }}>
                   <img src={track.cover_url} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  {playingTrackId === track.provider_id && (
+                  {isTrackCurrent(track) && isPlaying && (
                     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <div className="playing-indicator"><div/><div/><div/></div>
                     </div>
@@ -137,7 +140,7 @@ export default function Radio() {
                 </div>
                 
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 600, color: playingTrackId === track.provider_id ? 'var(--accent-solid)' : 'white', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 600, color: isTrackCurrent(track) ? 'var(--accent-solid)' : 'white', marginBottom: '4px' }}>
                     {track.title}
                   </div>
                   <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>

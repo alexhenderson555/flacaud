@@ -1,17 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Download, CheckCircle2, X, AlertCircle, RotateCcw } from 'lucide-react';
 import { getCachedAudioUrl } from '../utils/cache';
 import { getMediaToken } from '../utils/mediaToken';
+import { removeDownloadJob, retryDownloadJob } from '../utils/downloadJobs';
 
 const qualityLabel = (q) => (q === 'HI_RES' ? 'MAX' : q);
+const STUCK_MS = 8 * 60 * 1000;
+const DONE_HIDE_MS = 6000;
 
 export default function DownloadToast() {
   const [activeJobs, setActiveJobs] = useState([]);
   const [browserProgressMap, setBrowserProgressMap] = useState({});
-  const autoDownloadedRef = React.useRef(new Set());
+  const autoDownloadedRef = useRef(new Set());
+  const browserProgressRef = useRef({});
+  const hideAfterRef = useRef({});
+  const progressHistoryRef = useRef({});
+  const dismissedRef = useRef(new Set());
 
-  const handleSaveToPC = async (job, setBrowserProgress) => {
+  const setBrowserProgress = useCallback((jobId, value) => {
+    browserProgressRef.current[jobId] = value;
+    setBrowserProgressMap({ ...browserProgressRef.current });
+    if (value === 100) {
+      hideAfterRef.current[jobId] = Date.now() + 4000;
+    }
+  }, []);
+
+  const dismissJob = useCallback((jobId) => {
+    dismissedRef.current.add(jobId);
+    removeDownloadJob(jobId);
+    delete browserProgressRef.current[jobId];
+    delete hideAfterRef.current[jobId];
+    delete progressHistoryRef.current[jobId];
+    setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setBrowserProgressMap({ ...browserProgressRef.current });
+  }, []);
+
+  const handleSaveToPC = async (job) => {
     let url = null;
     if (job.file_token) {
       url = `/api/files/${job.file_token}`;
@@ -21,38 +46,37 @@ export default function DownloadToast() {
         url = `/api/stream/${job.provider}/${job.provider_id}?quality=${job.quality}&mt=${await getMediaToken()}`;
       }
     }
-    
+
     if (!url) return;
     if (window.__TAURI__ && url.startsWith('/api')) {
       url = 'http://localhost:8000' + url;
     }
-    
+
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error('Network response was not ok');
-      
+
       const contentLength = response.headers.get('content-length');
       const total = parseInt(contentLength, 10);
       let loaded = 0;
-      
+
       const reader = response.body.getReader();
       const chunks = [];
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
         loaded += value.length;
         if (total) {
-          setBrowserProgress(Math.round((loaded / total) * 100));
+          setBrowserProgress(job.id, Math.round((loaded / total) * 100));
         } else {
-          // If chunked encoding, simulate some progress or just keep it at 0 until done
-          // We can just rely on the final 100% call below.
+          setBrowserProgress(job.id, Math.min(95, Math.round(loaded / 500000)));
         }
       }
-      
-      setBrowserProgress(100);
-      
+
+      setBrowserProgress(job.id, 100);
+
       const blob = new Blob(chunks);
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -68,8 +92,9 @@ export default function DownloadToast() {
         const ct = response.headers.get('content-type') || '';
         if (ct.includes('mp4')) ext = 'mp4';
         if (ct.includes('m4a') || ct.includes('aac')) ext = 'm4a';
+        if (ct.includes('mpeg')) ext = 'mp3';
       }
-      
+
       a.download = `${job.title}.${ext}`;
       document.body.appendChild(a);
       a.click();
@@ -77,6 +102,7 @@ export default function DownloadToast() {
       window.URL.revokeObjectURL(blobUrl);
     } catch (e) {
       console.error('Download failed:', e);
+      setBrowserProgress(job.id, -1);
     }
   };
 
@@ -85,112 +111,176 @@ export default function DownloadToast() {
       const saved = localStorage.getItem('tidal-queue-jobs');
       if (!saved) return;
       try {
-        const jobIds = JSON.parse(saved);
+        const jobIds = JSON.parse(saved).filter((id) => !dismissedRef.current.has(id));
         if (jobIds.length === 0) return;
-        
-        const jobPromises = jobIds.map(id => fetch(`/api/jobs/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } }).then(r => r.ok ? r.json() : null));
-        const results = await Promise.all(jobPromises);
-        
+
+        const token = localStorage.getItem('tidal-token') || '';
+        const results = await Promise.all(
+          jobIds.map((id) =>
+            fetch(`/api/jobs/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          )
+        );
+
+        const now = Date.now();
         const newItems = [];
-        results.forEach(job => {
+        const keepIds = [];
+
+        results.forEach((job) => {
           if (!job) return;
+          if (job.job_type === 'analyze_set') return;
+
+          keepIds.push(job.job_id);
+
           const trackProgress = job.tracks && job.tracks[0];
           const isDone = job.status === 'done' || (trackProgress && trackProgress.status === 'done');
+          let isFailed = job.status === 'failed' || (trackProgress && trackProgress.status === 'failed');
 
           let progress = 0;
-          if (trackProgress && trackProgress.bytes_total && trackProgress.bytes_total > 0) {
-            // bytes_total can be an ESTIMATE for multi-segment (DASH) downloads, so the
-            // running byte count may momentarily reach or exceed it. Cap at 99% until the
-            // job actually reports done — otherwise the "save to PC" trigger below would
-            // fire against a file the server hasn't finished writing (no file_token yet).
+          if (trackProgress?.bytes_total && trackProgress.bytes_total > 0) {
             progress = Math.min(99, Math.round((trackProgress.bytes_written / trackProgress.bytes_total) * 100));
+          } else if (job.status === 'running') {
+            progress = trackProgress?.bytes_written ? Math.min(30, 5 + Math.floor(trackProgress.bytes_written / 500000)) : 2;
           }
           if (isDone) progress = 100;
 
+          const hist = progressHistoryRef.current[job.job_id] || { progress: 0, at: now };
+          if (progress !== hist.progress) {
+            progressHistoryRef.current[job.job_id] = { progress, at: now };
+          } else if (job.status === 'running' && !isDone && now - hist.at > STUCK_MS) {
+            isFailed = true;
+          }
+
           const jobObj = {
             id: job.job_id,
-            title: trackProgress ? trackProgress.title : 'Download',
-            progress: progress,
+            title: trackProgress?.title || (job.total_tracks > 1 ? `Download (${job.done_tracks}/${job.total_tracks})` : 'Downloading…'),
+            progress,
             status: job.status,
-            provider_id: trackProgress ? trackProgress.provider_id : null,
-            file_token: trackProgress ? trackProgress.file_token : null,
-            provider: trackProgress ? trackProgress.provider : 'tidal',
-            quality: job.quality || 'LOSSLESS'
+            failed: isFailed,
+            error: trackProgress?.error || (isFailed ? 'Download stalled or failed' : null),
+            provider_id: trackProgress?.provider_id || null,
+            file_token: trackProgress?.file_token || null,
+            provider: job.provider || 'tidal',
+            quality: job.quality || 'LOSSLESS',
+            url: trackProgress?.source_url || null,
           };
 
-          // Auto-save to PC only once the server has truly finished (file is ready).
-          if (isDone && !autoDownloadedRef.current.has(job.job_id)) {
+          if (isDone && jobObj.file_token && !autoDownloadedRef.current.has(job.job_id) && !window.__E2E_DISABLE_AUTOSAVE__) {
             autoDownloadedRef.current.add(job.job_id);
-            setBrowserProgressMap(prev => ({ ...prev, [job.job_id]: 0 }));
-            handleSaveToPC(jobObj, (p) => {
-              setBrowserProgressMap(prev => ({ ...prev, [job.job_id]: p }));
-              if (p === 100) {
-                setTimeout(() => {
-                  setBrowserProgressMap(prev => ({ ...prev, [job.job_id]: 101 })); // 101 means ready to hide
-                }, 3000);
-              }
-            });
+            setBrowserProgress(job.job_id, 0);
+            handleSaveToPC(jobObj);
           }
-          
-          if (progress < 100 || (browserProgressMap[job.job_id] !== undefined && browserProgressMap[job.job_id] <= 100)) {
+
+          if (isDone && !jobObj.file_token && !hideAfterRef.current[job.job_id]) {
+            hideAfterRef.current[job.job_id] = now + DONE_HIDE_MS;
+          }
+
+          const bp = browserProgressRef.current[job.job_id];
+          const hideAfter = hideAfterRef.current[job.job_id];
+          const visible =
+            !dismissedRef.current.has(job.job_id) &&
+            (isFailed ||
+              progress < 100 ||
+              bp === -1 ||
+              (bp !== undefined && bp >= 0 && bp < 100) ||
+              (bp === 100 && hideAfter && now < hideAfter) ||
+              (isDone && hideAfter && now < hideAfter));
+
+          if (visible) {
             newItems.push(jobObj);
+          } else if (hideAfter && now >= hideAfter) {
+            keepIds.splice(keepIds.indexOf(job.job_id), 1);
           }
         });
-        const activeIds = newItems.map(j => j.id);
-        if (activeIds.length !== jobIds.length) {
-          localStorage.setItem('tidal-queue-jobs', JSON.stringify(activeIds));
+
+        if (keepIds.length !== jobIds.length) {
+          localStorage.setItem('tidal-queue-jobs', JSON.stringify(keepIds));
         }
-        
+
         setActiveJobs(newItems);
       } catch (err) {
         console.error(err);
       }
     };
 
+    fetchJobs();
     const interval = setInterval(fetchJobs, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [setBrowserProgress]);
 
-
+  const handleRetry = async (job) => {
+    dismissJob(job.id);
+    try {
+      await retryDownloadJob(job);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
-    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 10000, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <div style={{ position: 'fixed', bottom: '100px', right: '24px', zIndex: 10000, display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <AnimatePresence>
-        {activeJobs.map(job => (
-          <motion.div
-            key={job.id}
-            initial={{ opacity: 0, x: 50, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 50, scale: 0.9 }}
-            className="glass-panel"
-            style={{ padding: '16px', borderRadius: '16px', width: '300px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border-subtle)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: job.progress === 100 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(37, 117, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: job.progress === 100 ? 'var(--success)' : 'var(--accent-solid)' }}>
-                  {job.progress === 100 ? <CheckCircle2 size={20} /> : <Download size={20} />}
-                </div>
-                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{job.title}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    {job.progress === 100 ? (browserProgressMap[job.id] !== undefined ? (browserProgressMap[job.id] === 100 ? 'Saved to PC' : `Saving to PC... ${browserProgressMap[job.id]}%`) : 'Downloaded') : `Downloading... ${job.progress}%`}
+        {activeJobs.map((job) => {
+          const bp = browserProgressMap[job.id];
+          const isFailed = job.failed || bp === -1;
+          const isComplete = job.progress === 100 && !isFailed;
+          const barPct = job.progress < 100
+            ? Math.max(job.progress, job.status === 'running' ? 2 : 0)
+            : (bp !== undefined && bp >= 0 ? bp : 100);
+
+          return (
+            <motion.div
+              key={job.id}
+              data-testid="download-toast"
+              data-job-id={job.id}
+              initial={{ opacity: 0, x: 50, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 50, scale: 0.9 }}
+              className="glass-panel"
+              style={{ padding: '16px', borderRadius: '16px', width: '300px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border-subtle)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: isFailed ? 'rgba(239,68,68,0.15)' : isComplete ? 'rgba(16, 185, 129, 0.1)' : 'rgba(37, 117, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isFailed ? '#ef4444' : isComplete ? 'var(--success)' : 'var(--accent-solid)' }}>
+                    {isFailed ? <AlertCircle size={20} /> : isComplete ? <CheckCircle2 size={20} /> : <Download size={20} />}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{job.title}</div>
+                    <div data-testid="download-toast-status" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      {isFailed
+                        ? (job.error || 'Download failed')
+                        : isComplete
+                          ? (bp !== undefined && bp >= 0 ? (bp === 100 ? 'Saved to PC' : `Saving to PC… ${bp}%`) : 'Ready on server')
+                          : job.status === 'queued'
+                            ? 'Preparing…'
+                            : `Downloading… ${job.progress}%`}
+                    </div>
                   </div>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+                  {isFailed && (
+                    <button type="button" data-testid="download-retry-btn" onClick={() => handleRetry(job)} title="Retry" style={{ background: 'transparent', border: 'none', color: 'var(--accent-solid)', cursor: 'pointer', padding: '4px' }}>
+                      <RotateCcw size={16} />
+                    </button>
+                  )}
+                  <button type="button" data-testid="download-dismiss-btn" onClick={() => dismissJob(job.id)} title="Dismiss" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
-              {job.quality && (
-                <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: 'var(--bg-surface-hover)', color: 'var(--text-secondary)', letterSpacing: '0.5px', flexShrink: 0, marginLeft: '8px' }}>
-                  {qualityLabel(job.quality)}
-                </span>
+
+              {!isFailed && (job.progress < 100 || (bp !== undefined && bp >= 0 && bp <= 100)) && (
+                <div data-testid="download-toast-progress-track" style={{ width: '100%', height: '4px', background: 'var(--bg-surface-hover)', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div
+                    data-testid="download-toast-progress-bar"
+                    style={{ height: '100%', width: `${Math.min(100, barPct)}%`, background: isComplete ? 'var(--success)' : 'var(--accent-gradient)', transition: 'width 0.3s ease' }}
+                  />
+                </div>
               )}
-            </div>
-            
-            {(job.progress < 100 || (job.progress === 100 && browserProgressMap[job.id] !== undefined && browserProgressMap[job.id] <= 100)) && (
-              <div style={{ width: '100%', height: '4px', background: 'var(--bg-surface-hover)', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.min(100, job.progress < 100 ? job.progress : browserProgressMap[job.id])}%`, background: job.progress === 100 ? 'var(--success)' : 'var(--accent-gradient)', transition: 'width 0.3s ease' }} />
-              </div>
-            )}
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
     </div>
   );

@@ -1,44 +1,44 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Disc3, FastForward, Rewind, Sliders, Music2, Activity } from 'lucide-react';
+import { X, Disc3, FastForward, Rewind, Sliders, Music2 } from 'lucide-react';
+import { analyzeTrackFeatures, getCachedTrackFeatures } from '../utils/trackFeatures';
 
 export default function DJMode({ currentTrack, audioRef, onClose }) {
   const [playbackRate, setPlaybackRate] = useState(audioRef.current?.playbackRate || 1);
   const [preservePitch, setPreservePitch] = useState(audioRef.current?.preservesPitch ?? true);
   const [mockBpm, setMockBpm] = useState(120);
-  const [mockKey, setMockKey] = useState('C#m');
-
+  const [mockKey, setMockKey] = useState('Cm');
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    if (currentTrack && audioRef.current?.src) {
-      const analyze = async () => {
-        setAnalyzing(true);
-        try {
-          const res = await fetch(audioRef.current.src, { headers: { Range: 'bytes=0-3000000' } });
-          const arrayBuffer = await res.arrayBuffer();
-          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          
-          const { analyzeAudioBuffer } = await import('../utils/audioAnalysis');
-          const { bpm, key } = await analyzeAudioBuffer(audioBuffer);
-          
-          setMockBpm(bpm || 120);
-          setMockKey(key || 'C#m');
-        } catch (e) {
-          console.error("Audio analysis failed, falling back to hash", e);
-          const hash = String(currentTrack.provider_id).split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-          const bpms = [120, 124, 128, 130, 95, 140, 115, 100];
-          const keys = ['Cmin', 'C#m', 'Dmin', 'Emin', 'Fmin', 'Gmin', 'Amin', 'Bmin'];
-          setMockBpm(bpms[hash % bpms.length]);
-          setMockKey(keys[hash % keys.length]);
-        } finally {
-          setAnalyzing(false);
-        }
-      };
-      analyze();
+    if (!currentTrack) return;
+
+    const cached = getCachedTrackFeatures(currentTrack);
+    if (cached) {
+      setMockBpm(cached.bpm);
+      setMockKey(cached.musicalKey);
+      return;
     }
-  }, [currentTrack]);
+
+    const streamUrl = audioRef.current?.src;
+    if (!streamUrl) return;
+
+    let cancelled = false;
+    setAnalyzing(true);
+    analyzeTrackFeatures(currentTrack, streamUrl)
+      .then(({ bpm, musicalKey }) => {
+        if (cancelled) return;
+        setMockBpm(bpm);
+        setMockKey(musicalKey);
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyzing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, audioRef]);
 
   const handleRateChange = (e) => {
     const val = parseFloat(e.target.value);
@@ -87,7 +87,6 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
     return notes[newIdx] + (isMinor ? 'm' : '');
   };
 
-  // Calculate effective values
   const effectiveBpm = Math.round(mockBpm * playbackRate);
   const effectiveKey = getShiftedKey(mockKey, playbackRate, preservePitch);
 
@@ -117,6 +116,7 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
           <h2 style={{ margin: 0, fontSize: '1.5rem' }}>DJ Tools</h2>
         </div>
         <button
+          type="button"
           onClick={onClose}
           style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}
         >
@@ -127,13 +127,13 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
       <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
         <div className="glass-panel" style={{ flex: 1, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(37, 117, 252, 0.1)', border: '1px solid var(--accent-solid)' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>BPM</span>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{effectiveBpm}</span>
-          {playbackRate !== 1 && <span style={{ fontSize: '0.8rem', color: 'var(--accent-solid)' }}>Original: {mockBpm}</span>}
+          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : effectiveBpm}</span>
+          {playbackRate !== 1 && !analyzing && <span style={{ fontSize: '0.8rem', color: 'var(--accent-solid)' }}>Original: {mockBpm}</span>}
         </div>
 
         <div className="glass-panel" style={{ flex: 1, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Key</span>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{effectiveKey}</span>
+          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : effectiveKey}</span>
           <span style={{ fontSize: '0.8rem', color: !preservePitch && playbackRate !== 1 ? 'var(--warning)' : 'var(--text-muted)' }}>
             {!preservePitch && playbackRate !== 1 ? `Original: ${mockKey}` : 'Locked'}
           </span>
@@ -145,16 +145,16 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
           <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sliders size={20} color="var(--accent-solid)" /> Tempo / Pitch
           </h3>
-          <button onClick={resetSpeed} style={{ fontSize: '0.85rem', color: 'var(--accent-solid)', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Reset</button>
+          <button type="button" onClick={resetSpeed} style={{ fontSize: '0.85rem', color: 'var(--accent-solid)', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Reset</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-primary)', fontWeight: 600, fontSize: '1.5rem' }}>
-            <button onClick={() => stepRate(-0.01)} style={{ display: 'flex', color: 'var(--text-secondary)' }}>
+            <button type="button" onClick={() => stepRate(-0.01)} style={{ display: 'flex', color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
               <Rewind size={20} />
             </button>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{playbackRate.toFixed(2)}x</span>
-            <button onClick={() => stepRate(0.01)} style={{ display: 'flex', color: 'var(--text-secondary)' }}>
+            <button type="button" onClick={() => stepRate(0.01)} style={{ display: 'flex', color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
               <FastForward size={20} />
             </button>
           </div>
@@ -178,6 +178,7 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
             <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Changing speed alters the pitch</p>
           </div>
           <button
+            type="button"
             onClick={togglePreservePitch}
             style={{ background: !preservePitch ? 'var(--accent-solid)' : 'var(--bg-surface-hover)', color: 'white', border: 'none', padding: '6px 16px', borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: 600 }}
           >

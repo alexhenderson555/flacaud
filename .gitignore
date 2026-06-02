@@ -31,3 +31,11 @@ alex.txt
 logs.txt
 remote_*.txt
 tidal_login_url.txt
+
+# Frontend test artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
+# Legacy insecure deploy script (removed — use scripts/deploy.py)
+deploy_fast.py

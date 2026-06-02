@@ -1,29 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ListMusic, Plus, Play, MoreVertical } from 'lucide-react';
+import { ListMusic, Plus, Play } from 'lucide-react';
 import { showToast } from '../utils/toast';
 
 export default function Playlists() {
   const [playlists, setPlaylists] = useState([]);
-  const { lang, t } = useOutletContext();
+  const { lang, libraryRevision } = useOutletContext();
+
+  const getToken = () => localStorage.getItem('tidal-token');
+
+  const loadPlaylists = async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch('/api/playlists', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setPlaylists(data.map(p => ({
+          ...p,
+          tracks: JSON.parse(p.tracks_json || '[]'),
+        })));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
-    // In the future, this would fetch from /api/playlists
-    // For now, let's load from localStorage
-    const saved = localStorage.getItem('tidal-user-playlists');
-    if (saved) {
-      setPlaylists(JSON.parse(saved));
-    }
-  }, []);
+    loadPlaylists();
+  }, [libraryRevision]);
 
-  const createPlaylist = () => {
+  const createPlaylist = async () => {
     const name = prompt(lang === 'ru' ? 'Введите название плейлиста' : 'Enter playlist name');
-    if (name) {
-      const newPlaylist = { id: Date.now(), name, tracks: [], cover: 'https://via.placeholder.com/150/1a1a2e/2575fc?text=' + encodeURIComponent(name.charAt(0).toUpperCase()) };
-      const updated = [...playlists, newPlaylist];
-      setPlaylists(updated);
-      localStorage.setItem('tidal-user-playlists', JSON.stringify(updated));
+    if (!name) return;
+    const token = getToken();
+    if (!token) {
+      showToast(lang === 'ru' ? 'Войдите в аккаунт' : 'Please log in');
+      return;
+    }
+    const res = await fetch('/api/playlists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      await loadPlaylists();
       showToast(lang === 'ru' ? 'Плейлист создан' : 'Playlist created');
     }
   };
@@ -53,7 +75,6 @@ export default function Playlists() {
         <div style={{ textAlign: 'center', marginTop: '100px', color: 'var(--text-muted)' }}>
           <ListMusic size={64} style={{ opacity: 0.2, marginBottom: '16px' }} />
           <h2>{lang === 'ru' ? 'У вас пока нет плейлистов' : 'You have no playlists yet'}</h2>
-          <p>{lang === 'ru' ? 'Создайте свой первый плейлист, чтобы начать собирать любимые треки.' : 'Create your first playlist to start collecting your favorite tracks.'}</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '24px' }}>
@@ -67,13 +88,12 @@ export default function Playlists() {
               style={{ padding: '16px', cursor: 'pointer', transition: 'all 0.3s ease', display: 'flex', flexDirection: 'column', gap: '12px' }}
               whileHover={{ y: -5, scale: 1.02 }}
             >
-              <div style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
-                <img src={pl.cover} alt={pl.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div className="hover-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }}>
-                  <button className="btn-primary" style={{ padding: '12px', borderRadius: '50%' }}>
-                    <Play fill="currentColor" size={24} />
-                  </button>
-                </div>
+              <div style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', position: 'relative', background: 'var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {pl.tracks[0]?.cover_url ? (
+                  <img src={pl.tracks[0].cover_url} alt={pl.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <ListMusic size={48} color="var(--text-muted)" />
+                )}
               </div>
               <div>
                 <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pl.name}</h3>
@@ -85,12 +105,6 @@ export default function Playlists() {
           ))}
         </div>
       )}
-      
-      <style dangerouslySetInnerHTML={{__html: `
-        .glass-panel:hover .hover-overlay {
-          opacity: 1 !important;
-        }
-      `}} />
     </div>
   );
 }

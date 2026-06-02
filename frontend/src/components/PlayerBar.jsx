@@ -62,7 +62,10 @@ export default function PlayerBar({
              {currentTrack && (
                <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                  {actualQuality && (
-                   <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--accent-solid)', borderRadius: '4px', color: '#fff' }}>
+                   <span 
+                     style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--accent-solid)', borderRadius: '4px', color: '#fff' }}
+                     title={actualQuality !== playbackQuality ? `${playbackQuality} → ${actualQuality}` : actualQuality}
+                   >
                      {actualQuality === 'HI_RES' || actualQuality === 'HI_RES_LOSSLESS' ? 'MAX' : actualQuality === 'LOSSLESS' ? 'FLAC' : actualQuality}
                    </span>
                  )}
@@ -103,6 +106,7 @@ export default function PlayerBar({
              onClick={playPrevious}
            />
            <div 
+              data-testid="player-transport-btn"
               onClick={() => currentTrack && !isLoading && togglePlay(currentTrack)}
               style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--text-primary)', color: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: currentTrack && !isLoading ? 'pointer' : 'default', opacity: currentTrack ? 1 : 0.5, position: 'relative' }}
            >
@@ -118,8 +122,8 @@ export default function PlayerBar({
            </div>
            <SkipForward 
              size={20} 
-             opacity={(playlist.length > 0 && currentTrackIndex < playlist.length - 1) ? 1 : 0.5} 
-             cursor={(playlist.length > 0 && currentTrackIndex < playlist.length - 1) ? "pointer" : "default"} 
+             opacity={(playlist.length > 0 && currentTrack) ? 1 : 0.5} 
+             cursor={(playlist.length > 0 && currentTrack) ? "pointer" : "default"} 
              onClick={playNext}
            />
          </div>
@@ -187,12 +191,13 @@ export default function PlayerBar({
            <div style={{ display: 'flex', alignItems: 'center', gap: '28px', marginRight: '8px' }}>
               <Heart 
                 size={22} 
+                data-testid="player-like-btn"
                 cursor={currentTrack ? "pointer" : "default"}
                 fill={currentTrack && likedTracks.has(String(currentTrack.provider_id)) ? "var(--accent-solid)" : "none"}
                 color={currentTrack && likedTracks.has(String(currentTrack.provider_id)) ? "var(--accent-solid)" : "var(--text-primary)"}
-                onClick={() => toggleLike(currentTrack)}
+                onClick={(e) => { e.preventDefault(); toggleLike(currentTrack, e); }}
                 style={{ transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }} 
-                title="Like"
+                title={currentTrack && likedTracks.has(String(currentTrack.provider_id)) ? 'Remove from Library' : 'Add to Library'}
               />
               <Plus 
                 size={22} 
@@ -249,17 +254,18 @@ export default function PlayerBar({
          </div>
 
          <Volume2 className="hide-on-mobile" size={20} />
-         <div 
+         <input
+           type="range"
            className="hide-on-mobile"
-           style={{ width: '100px', height: '4px', background: 'var(--bg-surface-hover)', borderRadius: '2px', cursor: 'pointer', position: 'relative' }}
-           onClick={(e) => {
-             const rect = e.currentTarget.getBoundingClientRect();
-             const val = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-             setVolume(val);
-           }}
-         >
-           <div style={{ width: `${volume * 100}%`, height: '100%', background: 'var(--text-primary)', borderRadius: '2px', transition: 'width 0.1s' }}></div>
-         </div>
+           min="0"
+           max="1"
+           step="0.01"
+           value={volume}
+           onChange={(e) => setVolume(parseFloat(e.target.value))}
+           aria-label="Volume"
+           data-testid="volume-slider"
+           style={{ width: '100px', cursor: 'pointer', accentColor: 'var(--accent-solid)' }}
+         />
       </div>
     </div>
   );

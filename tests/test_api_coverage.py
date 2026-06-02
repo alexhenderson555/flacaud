@@ -4,10 +4,15 @@ from tidal_dl_ru.server.app import app
 
 client = TestClient(app)
 
+
 def test_healthz():
-    response = client.get("/healthz")
-    assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    with TestClient(app) as c:
+        response = c.get("/healthz")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["db"] is True
+        assert "ok" in data
+        assert "version" in data
 
 def test_providers():
     response = client.get("/api/providers")

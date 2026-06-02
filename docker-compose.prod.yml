@@ -1,0 +1,26 @@
+# Production overlay: TLS reverse proxy. Set DOMAIN in .env.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN for TLS}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@${DOMAIN}}
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_started
+
+  api:
+    ports: []  # only exposed via Caddy
+
+volumes:
+  caddy-data:
+  caddy-config:

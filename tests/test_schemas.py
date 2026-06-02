@@ -38,7 +38,7 @@ class TestSearchRequest:
     def test_defaults(self):
         r = SearchRequest(query="test")
         assert r.provider == "tidal"
-        assert r.limit == 10
+        assert r.limit == 50
 
     def test_limit_bounds(self):
         r = SearchRequest(query="test", limit=50)

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "fast-average-color": "^9.5.2",
@@ -15,7 +17,6 @@
     "localforage": "^1.10.0",
     "lucide-react": "^1.17.0",
     "music-tempo": "^1.0.3",
-    "playwright": "^1.60.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-player": "^3.4.0",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/cli": "^2.11.2",
     "@types/react": "^19.2.14",

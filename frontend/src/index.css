@@ -249,8 +249,11 @@ input {
 .page-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 40px;
   padding-bottom: 120px; /* space for player */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .player-bar {

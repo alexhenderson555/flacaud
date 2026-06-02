@@ -3,12 +3,13 @@ import secrets
 import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from sqlmodel import Session, select
-from tidal_dl_ru.database.database import get_session
+
 from tidal_dl_ru.database.models import User
 
 # JWT signing secret. MUST be set via TIDALDLRU_JWT_SECRET in production and kept
@@ -53,7 +54,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 from fastapi import Request
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
 from tidal_dl_ru.database.database import engine
 
 # ── Short-lived media tokens ────────────────────────────────────────────────
@@ -100,12 +102,37 @@ def _user_from_username(username: Optional[str]) -> User:
         return user
 
 
-def _user_from_jwt(token: str) -> User:
+def decode_token(token: str) -> dict:
+    """Decode + verify a JWT, raising 401 on any failure."""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         raise _creds_exc()
-    return _user_from_username(payload.get("sub"))
+
+
+def _user_from_id(uid: int) -> User:
+    with Session(engine) as session:
+        user = session.get(User, int(uid))
+        if user is None:
+            raise _creds_exc()
+        session.expunge(user)
+        return user
+
+
+def _user_from_payload(payload: dict) -> User:
+    # Web login tokens carry sub=username. The bot mints uid-keyed tokens
+    # instead: a Telegram user may have no @username to key on.
+    sub = payload.get("sub")
+    if sub is not None:
+        return _user_from_username(sub)
+    uid = payload.get("uid")
+    if uid is not None:
+        return _user_from_id(uid)
+    raise _creds_exc()
+
+
+def _user_from_jwt(token: str) -> User:
+    return _user_from_payload(decode_token(token))
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> User:

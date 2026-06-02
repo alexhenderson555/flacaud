@@ -2,6 +2,8 @@ import React from 'react';
 import { motion, Reorder } from 'framer-motion';
 import { X, Play, Music, Trash2 } from 'lucide-react';
 
+import { tracksMatch } from '../utils/trackNormalize';
+
 export default function PlaybackQueue({ playlist, currentTrackIndex, setPlaylist, togglePlay, onClose }) {
   const startIndex = currentTrackIndex >= 0 ? currentTrackIndex + 1 : 0;
   const [localPlaylist, setLocalPlaylist] = React.useState((playlist || []).slice(startIndex));
@@ -58,7 +60,7 @@ export default function PlaybackQueue({ playlist, currentTrackIndex, setPlaylist
         <Reorder.Group layoutScroll axis="y" values={localPlaylist} onReorder={setLocalPlaylist} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {localPlaylist.map((track, i) => {
             // Find its original index to see if it's currently playing
-            const origIndex = playlist.findIndex(t => t.provider_id === track.provider_id);
+            const origIndex = playlist.findIndex(t => tracksMatch(t, track));
             const isPlaying = origIndex === currentTrackIndex && currentTrackIndex !== -1;
             
             // Generate a safe key just in case

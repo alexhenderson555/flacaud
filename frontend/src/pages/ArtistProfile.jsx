@@ -11,7 +11,10 @@ export default function ArtistProfile() {
   const [bio, setBio] = useState('');
   const [bioLoading, setBioLoading] = useState(false);
   
-  const { togglePlay, playingTrackId } = useOutletContext();
+  const { togglePlay, currentTrackId, isPlaying, handleDownload } = useOutletContext();
+
+  const isTrackCurrent = (track) => currentTrackId === String(track.provider_id);
+  const showPauseIcon = (track) => isTrackCurrent(track) && isPlaying;
 
   useEffect(() => {
     const fetchArtist = async () => {
@@ -130,9 +133,9 @@ export default function ArtistProfile() {
                   <button 
                     className="btn-secondary" 
                     onClick={(e) => { e.stopPropagation(); togglePlay(track, top_tracks); }}
-                    style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: playingTrackId === track.provider_id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
+                    style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTrackCurrent(track) ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
                   >
-                    {playingTrackId === track.provider_id ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                    {showPauseIcon(track) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
                   </button>
 
                   <button 

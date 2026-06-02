@@ -1,7 +1,7 @@
 import asyncio
 import logging
-import os
 from pathlib import Path
+
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -27,21 +27,21 @@ async def split_audio_demucs(input_path: str, output_dir: str) -> SplitResult:
         stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
-    
+
     if process.returncode != 0:
         logger.error(f"Demucs failed with code {process.returncode}: {stderr.decode(errors='ignore')}")
         raise RuntimeError(f"Demucs failed: {stderr.decode(errors='ignore')}")
-        
+
     # demucs puts files in output_dir/htdemucs/<track_name>/
-    # track_name is input_path stem but can be mangled. 
+    # track_name is input_path stem but can be mangled.
     # The safest way is to find the files in output_dir.
     out_path = Path(output_dir)
     vocals = list(out_path.rglob("vocals.mp3"))
     no_vocals = list(out_path.rglob("no_vocals.mp3"))
-    
+
     if not vocals or not no_vocals:
         raise RuntimeError("Demucs finished but output files not found.")
-        
+
     return SplitResult(
         vocals_path=str(vocals[0]),
         instrumental_path=str(no_vocals[0])

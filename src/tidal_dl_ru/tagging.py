@@ -104,7 +104,6 @@ def _tag_mp3(
     from mutagen.id3 import (
         APIC,
         ID3,
-        ID3NoHeaderError,
         TALB,
         TDRC,
         TIT2,
@@ -112,6 +111,7 @@ def _tag_mp3(
         TPE2,
         TRCK,
         USLT,
+        ID3NoHeaderError,
     )
 
     try:

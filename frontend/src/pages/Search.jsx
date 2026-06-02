@@ -4,6 +4,7 @@ import { useOutletContext, Link } from 'react-router-dom';
 import { Search as SearchIcon, Download, Music, Disc, Mic, Play, Pause, Heart, Zap, ImagePlus, Plus, Check } from 'lucide-react';
 import { cacheAudioTrack } from '../utils/cache';
 import PlaylistModal from '../components/PlaylistModal';
+import { suggestSearchCorrection, fixKeyboardLayout } from '../utils/searchQueryFix';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const dict = {
@@ -25,7 +26,10 @@ const dict = {
     btnGenerating: 'Generating...',
     genMore: 'Generate 10 More',
     aiDesc: 'Let AI curate the perfect 10-track playlist based on your mood or prompt.',
-    saveAiPlaylist: 'Save Playlist to Library'
+    saveAiPlaylist: 'Save Playlist to Library',
+    loadMore: 'Load more',
+    didYouMean: 'Did you mean',
+    searching: 'Searching…',
   },
   ru: {
     findLossless: 'Найти',
@@ -44,7 +48,10 @@ const dict = {
     btnGenerate: 'Сгенерировать',
     btnGenerating: 'Генерация...',
     aiDesc: 'ИИ соберет идеальный плейлист из 10 треков по вашему описанию.',
-    saveAiPlaylist: 'Сохранить плейлист'
+    saveAiPlaylist: 'Сохранить плейлист',
+    loadMore: 'Ещё',
+    didYouMean: 'Возможно, вы имели в виду',
+    searching: 'Поиск…',
   }
 };
 
@@ -64,6 +71,21 @@ export default function Search() {
     return saved ? JSON.parse(saved) : null;
   });
   const [searchMode, setSearchMode] = useState(() => sessionStorage.getItem('tidal_search_mode') || 'normal');
+  const [hasMore, setHasMore] = useState(false);
+  const [searchOffset, setSearchOffset] = useState(0);
+  const [querySuggestion, setQuerySuggestion] = useState(null);
+  const loadMoreRef = useRef(null);
+  const hasMoreRef = useRef(hasMore);
+  const searchOffsetRef = useRef(searchOffset);
+  const isSearchingRef = useRef(isSearching);
+  const queryRef = useRef(query);
+  const loadingMoreRef = useRef(false);
+  const PAGE_SIZE = 50;
+
+  useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
+  useEffect(() => { searchOffsetRef.current = searchOffset; }, [searchOffset]);
+  useEffect(() => { isSearchingRef.current = isSearching; }, [isSearching]);
+  useEffect(() => { queryRef.current = query; }, [query]);
 
   useEffect(() => {
     sessionStorage.setItem('tidal_search_query', query);
@@ -85,9 +107,12 @@ export default function Search() {
     if (aiResults) sessionStorage.setItem('tidal_search_aiResults', JSON.stringify(aiResults));
   }, [aiResults]);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
-  const { togglePlay: playerContextTogglePlay, playingTrackId, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext } = useOutletContext();
+  const { togglePlay: playerContextTogglePlay, currentTrackId, isPlaying, isLoading, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext } = useOutletContext();
   
   const t = (key) => dict[lang][key] || key;
+
+  const isTrackCurrent = (track) => currentTrackId === String(track.provider_id);
+  const showPauseIcon = (track) => isTrackCurrent(track) && (isPlaying || isLoading);
 
   const toggleLike = async (track, e) => {
     e.stopPropagation();
@@ -107,28 +132,74 @@ export default function Search() {
   useEffect(() => {
     const handler = setTimeout(() => {
       if (query.trim()) {
-        performSearch(query);
+        setQuerySuggestion(suggestSearchCorrection(query.trim()));
+        performSearch(query.trim(), 0, false);
       } else {
         setRealResults(null);
+        setHasMore(false);
+        setSearchOffset(0);
+        setQuerySuggestion(null);
       }
     }, 500);
 
     return () => clearTimeout(handler);
   }, [query]);
 
-  const performSearch = async (searchQuery) => {
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasMore) return;
+    const el = loadMoreRef.current;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMoreRef.current || isSearchingRef.current || loadingMoreRef.current) return;
+        const q = queryRef.current.trim();
+        if (!q) return;
+        loadingMoreRef.current = true;
+        performSearch(q, searchOffsetRef.current, true).finally(() => {
+          loadingMoreRef.current = false;
+        });
+      },
+      { rootMargin: '200px' }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore]);
+
+  const performSearch = async (searchQuery, offset = 0, append = false) => {
     setIsSearching(true);
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: 30 })
+        body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: PAGE_SIZE, offset })
       });
       const data = await res.json();
-      if (data.tracks) setRealResults(data.tracks);
+      if (data.tracks) {
+        setRealResults((prev) => (append && prev ? [...prev, ...data.tracks] : data.tracks));
+        setHasMore(Boolean(data.has_more));
+        setSearchOffset(offset + data.tracks.length);
+        if (!append && data.tracks.length === 0) {
+          const alt = fixKeyboardLayout(searchQuery);
+          if (alt !== searchQuery) {
+            const altRes = await fetch('/api/search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+              body: JSON.stringify({ provider: 'tidal', query: alt, limit: PAGE_SIZE, offset: 0 })
+            });
+            const altData = await altRes.json();
+            if (altData.tracks?.length) {
+              setRealResults(altData.tracks);
+              setHasMore(Boolean(altData.has_more));
+              setSearchOffset(altData.tracks.length);
+              setQuery(alt);
+              setQuerySuggestion(null);
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Backend search failed, using mock data:', err);
-      setRealResults(mockResults);
+      if (!append) setRealResults(mockResults);
     }
     setIsSearching(false);
   };
@@ -457,6 +528,15 @@ export default function Search() {
           style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px' }}
         >
           <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>{t('results')}</h2>
+          {querySuggestion && (
+            <button
+              type="button"
+              onClick={() => setQuery(querySuggestion)}
+              style={{ alignSelf: 'flex-start', background: 'rgba(37,117,252,0.12)', border: '1px solid rgba(37,117,252,0.3)', color: 'var(--accent-solid)', borderRadius: '12px', padding: '8px 14px', cursor: 'pointer', marginBottom: '8px', fontSize: '0.9rem' }}
+            >
+              {t('didYouMean')}: <strong>{querySuggestion}</strong>?
+            </button>
+          )}
           {realResults.map((result, idx) => (
             <motion.div 
               key={result.provider_id || idx}
@@ -517,10 +597,12 @@ export default function Search() {
                 <button 
                   className="btn-secondary" 
                   onClick={(e) => { e.stopPropagation(); togglePlay(result, realResults); }}
-                  style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: playingTrackId === result.provider_id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
-                  title="Play Preview"
+                  data-testid={`search-play-${result.provider_id}`}
+                  data-play-state={showPauseIcon(result) ? 'pause' : 'play'}
+                  style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTrackCurrent(result) ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
+                  title={showPauseIcon(result) ? 'Pause' : 'Play Preview'}
                 >
-                  {playingTrackId === result.provider_id ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                  {showPauseIcon(result) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
                 </button>
 
                 <button 
@@ -534,6 +616,11 @@ export default function Search() {
               </div>
             </motion.div>
           ))}
+          {(hasMore || isSearching) && (
+            <div ref={loadMoreRef} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              {isSearching ? t('searching') : t('loadMore')}
+            </div>
+          )}
         </motion.div>
       )}
 
@@ -564,11 +651,11 @@ export default function Search() {
                 onClick={() => togglePlay(result, aiResults)}
               >
                 <div style={{ width: '32px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  {playingTrackId === result.provider_id ? <div className="playing-indicator"><div/><div/><div/></div> : idx + 1}
+                  {isTrackCurrent(result) ? <div className="playing-indicator"><div/><div/><div/></div> : idx + 1}
                 </div>
                 <img src={result.cover_url} alt={result.title} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', marginRight: '16px' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 600, color: playingTrackId === result.provider_id ? 'var(--accent-solid)' : 'white' }}>{result.title}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 600, color: isTrackCurrent(result) ? 'var(--accent-solid)' : 'white' }}>{result.title}</div>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                     {result.artists.join(', ')} 
                     {result.release_date && <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>• {result.release_date.split('-')[0]}</span>}
@@ -594,11 +681,11 @@ export default function Search() {
 
                   <button 
                     className="btn-secondary" 
-                    onClick={(e) => { e.stopPropagation(); togglePlay(result); }}
-                    style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: playingTrackId === result.provider_id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
+                    onClick={(e) => { e.stopPropagation(); togglePlay(result, aiResults); }}
+                    style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTrackCurrent(result) ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
                     title="Play Preview"
                   >
-                    {playingTrackId === result.provider_id ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                    {showPauseIcon(result) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
                   </button>
 
                   <button 

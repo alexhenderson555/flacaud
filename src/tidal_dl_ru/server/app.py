@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import logging
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -11,53 +13,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 """FastAPI app — REST surface over the CLI core.
 
-Endpoints (no auth in this MVP; gateway / Telegram-login arrives in Phase 2):
-  GET  /healthz
-  GET  /api/providers           — list providers
-  POST /api/search              — provider search
-  POST /api/jobs                — create a download job (queued to ARQ)
-  GET  /api/jobs/{id}           — job status + per-track progress
-  GET  /api/files/{token}       — download a finished file (signed token)
-  GET  /api/pool/health         — Tidal account pool counts (admin)
+Authenticated JSON API (JWT) + short-lived media tokens for streams/downloads.
+See /docs for the full OpenAPI surface.
 """
 
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
 from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import httpx
-from datetime import timedelta
 
-from tidal_dl_ru.database.database import create_db_and_tables
-from tidal_dl_ru.database.models import User, UserCreate, UserRead, SavedTrack, Playlist, SavedTrackBase, PlaylistBase
-from tidal_dl_ru.database.auth import get_password_hash, verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from sqlmodel import Session
-from tidal_dl_ru.database.database import get_session
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi import Depends
-from typing import List
-
-from tidal_dl_ru.core.router import all_providers, get_provider_by_name
-from tidal_dl_ru.providers.tidal import pool as tidal_pool
-from tidal_dl_ru.server import jobs as job_state
-from tidal_dl_ru.server.files import verify_file
-from tidal_dl_ru.server.schemas import (
-    JobCreate,
-    JobStatus,
-    PoolHealth,
-    ProviderInfo,
-    SearchRequest,
-    SearchResponse,
-)
-from tidal_dl_ru.server.payments import create_payment, process_webhook
+from tidal_dl_ru.database.database import check_db, create_db_and_tables
+from tidal_dl_ru.server.config_check import validate_production_config
+from tidal_dl_ru.server.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 from tidal_dl_ru.server.settings import settings
 
+validate_production_config()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -76,14 +53,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="tidal-dl-ru API", version="0.1.0", lifespan=lifespan)
-
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 def _arq(app: FastAPI) -> ArqRedis:
     return app.state.arq
 
 from tidal_dl_ru.server.routers.auth import router as auth_router
-from tidal_dl_ru.server.routers.library import router as library_router
 from tidal_dl_ru.server.routers.jobs import router as jobs_router
+from tidal_dl_ru.server.routers.library import router as library_router
 
 app.include_router(auth_router)
 app.include_router(library_router)
@@ -92,13 +70,27 @@ app.include_router(jobs_router)
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True}
-
+    redis_ok = False
+    try:
+        arq = getattr(app.state, "arq", None)
+        if arq is not None:
+            redis_ok = True
+    except Exception:
+        pass
+    db_ok = check_db()
+    ok = db_ok and (redis_ok or os.environ.get("TIDALDLRU_ENV") != "production")
+    return {
+        "ok": ok,
+        "db": db_ok,
+        "redis": redis_ok,
+        "version": app.version,
+    }
 
 
 from tidal_dl_ru.server.routers.api import router as api_router
 from tidal_dl_ru.server.routers.catalog import router as catalog_router
 from tidal_dl_ru.server.routers.media import router as media_router
+
 app.include_router(api_router)
 app.include_router(catalog_router)
 app.include_router(media_router)
@@ -109,15 +101,15 @@ app.include_router(media_router)
 frontend_dist = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
 if frontend_dist.exists():
     app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
-    
+
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
-        
+
         file_path = frontend_dist / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)
-            
+
         return FileResponse(frontend_dist / "index.html")
 

@@ -1,42 +1,25 @@
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Depends
-from fastapi.responses import FileResponse, StreamingResponse, Response
-from pydantic import BaseModel
-from pathlib import Path
-from typing import Optional
-from urllib.parse import urlparse
-import asyncio
-import collections
-import httpx
 import ipaddress
-import json
 import logging
 import os
-import random
-import socket
-import syncedlyrics
-import tempfile
 
-from tidal_dl_ru.server.schemas import SearchResponse, ProviderInfo, SearchRequest, PoolHealth
-from tidal_dl_ru.core.router import all_providers, get_provider_by_name
-from tidal_dl_ru.core.models import Track
-from tidal_dl_ru.core.recognize import recognize_audio
-from tidal_dl_ru.database.auth import get_current_user, get_media_user
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+
+from tidal_dl_ru.bot.users import Plan
+from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.models import User
-from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.providers.tidal import pool as tidal_pool
 from tidal_dl_ru.providers.tidal.auth import (
-    extract_code_from_url, pkce_exchange_code, save_tokens, AuthError,
-    load_tokens, pkce_login_url,
+    AuthError,
+    extract_code_from_url,
+    load_tokens,
+    pkce_exchange_code,
+    pkce_login_url,
+    save_tokens,
 )
-from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url
-from tidal_dl_ru.providers.tidal.download import download_track
-from tidal_dl_ru.providers.tidal.models import AudioQuality
-from tidal_dl_ru.providers.tidal.provider import _to_universal
-from tidal_dl_ru.server import jobs as job_state
-from tidal_dl_ru.server.files import verify_file
 from tidal_dl_ru.server.payments import create_payment, process_webhook
-from tidal_dl_ru.server.settings import settings
-from tidal_dl_ru.bot.users import Plan
+from tidal_dl_ru.server.schemas import PoolHealth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -44,7 +27,6 @@ router = APIRouter()
 
 @router.get("/api/logs")
 def get_app_logs():
-    import os
     if os.path.exists("app.log"):
         with open("app.log", "r", encoding="utf-8") as f:
             return {"logs": f.read()}
@@ -57,7 +39,7 @@ async def yookassa_webhook(request: Request) -> dict:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         client_ip = forwarded.split(",")[0].strip()
-        
+
     allowed_subnets = [
         ipaddress.ip_network("185.71.76.0/27"),
         ipaddress.ip_network("185.71.77.0/27"),
@@ -85,19 +67,19 @@ class PaymentCreateRequest(BaseModel):
 
 @router.post("/api/payments/create")
 async def api_create_payment(req: PaymentCreateRequest, current_user: User = Depends(get_current_user)):
-    
+
     try:
         plan_enum = Plan(req.plan.lower())
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan")
-        
+
     if not current_user.telegram_id:
         raise HTTPException(status_code=400, detail="Telegram account not linked")
     url = create_payment(current_user.telegram_id, plan_enum, return_url="http://localhost:5173/account")
-    
+
     if not url:
         raise HTTPException(status_code=501, detail="YooKassa integration is not yet fully configured")
-        
+
     return {"url": url}
 
 @router.get("/api/pool/health", response_model=PoolHealth)
@@ -128,14 +110,14 @@ class AuthCallback(BaseModel):
 
 @router.post("/api/auth/callback")
 def auth_callback(req: AuthCallback):
-    
+
     try:
         code = extract_code_from_url(req.redirect_url)
         with httpx.Client() as c:
             tokens = pkce_exchange_code(c, code, req.verifier)
             save_tokens(tokens)
         return {"ok": True}
-    except AuthError as e:
+    except AuthError:
         raise HTTPException(status_code=400, detail="Internal Server Error")
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Internal Server Error")

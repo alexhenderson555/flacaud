@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, ListMusic } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function PlaylistModal({ track, onClose }) {
+async function putPlaylistTracks(token, playlistId, tracks) {
+  return fetch(`/api/playlists/${playlistId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ tracks }),
+  });
+}
+
+export default function PlaylistModal({ track, onClose, onUpdated }) {
   const [playlists, setPlaylists] = useState([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
@@ -36,62 +44,59 @@ export default function PlaylistModal({ track, onClose }) {
 
   const createPlaylist = async () => {
     if (!newPlaylistName.trim()) return;
-    
+
     let newPlaylist = { id: Date.now().toString(), name: newPlaylistName, tracks: track ? [track] : [] };
     const token = getToken();
-    
+
     if (token) {
       try {
         const res = await fetch('/api/playlists', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ name: newPlaylistName })
+          body: JSON.stringify({ name: newPlaylistName }),
         });
         if (res.ok) {
           const dbData = await res.json();
-          newPlaylist = { ...dbData, tracks: track ? [track] : [] };
+          const tracks = track ? [track] : [];
+          newPlaylist = { ...dbData, tracks };
           if (track) {
-            await fetch(`/api/playlists/${newPlaylist.id}?tracks_json=${encodeURIComponent(JSON.stringify([track]))}`, {
-              method: 'PUT',
-              headers: { Authorization: `Bearer ${token}` }
-            });
+            await putPlaylistTracks(token, newPlaylist.id, tracks);
           }
         }
       } catch (e) { console.error(e); }
     }
-    
+
     const newList = [...playlists, newPlaylist];
     savePlaylists(newList);
     setNewPlaylistName('');
+    onUpdated?.();
     if (track) onClose();
   };
 
   const addToPlaylist = async (playlistId) => {
     if (!track) return;
-    
+
     let updatedPlaylist = null;
     const newPlaylists = playlists.map(p => {
       if (p.id === playlistId) {
-        if (!p.tracks.find(t => t.provider_id === track.provider_id)) {
+        if (!p.tracks.find(t => String(t.provider_id) === String(track.provider_id))) {
           updatedPlaylist = { ...p, tracks: [...p.tracks, track] };
           return updatedPlaylist;
         }
       }
       return p;
     });
-    
+
     savePlaylists(newPlaylists);
-    
+
     const token = getToken();
     if (token && updatedPlaylist) {
       try {
-        await fetch(`/api/playlists/${playlistId}?tracks_json=${encodeURIComponent(JSON.stringify(updatedPlaylist.tracks))}`, {
-          method: 'PUT',
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await putPlaylistTracks(token, playlistId, updatedPlaylist.tracks);
       } catch (e) { console.error(e); }
     }
-    
+
+    onUpdated?.();
     onClose();
   };
 
@@ -104,6 +109,7 @@ export default function PlaylistModal({ track, onClose }) {
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="glass-panel"
+        data-testid="playlist-modal"
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: '400px', padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--bg-surface)' }}
       >
@@ -130,6 +136,7 @@ export default function PlaylistModal({ track, onClose }) {
           <input 
             type="text" 
             placeholder="New Playlist Name..." 
+            data-testid="playlist-name-input"
             value={newPlaylistName}
             onChange={e => setNewPlaylistName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && createPlaylist()}
@@ -138,6 +145,7 @@ export default function PlaylistModal({ track, onClose }) {
           <button 
             onClick={createPlaylist}
             disabled={!newPlaylistName.trim()}
+            data-testid="playlist-create-btn"
             className="btn-primary"
             style={{ height: '48px', padding: '0 20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '8px', cursor: !newPlaylistName.trim() ? 'not-allowed' : 'pointer' }}
           >
@@ -151,6 +159,7 @@ export default function PlaylistModal({ track, onClose }) {
             {playlists.map(p => (
               <button 
                 key={p.id}
+                data-testid={`playlist-option-${p.id}`}
                 onClick={() => addToPlaylist(p.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '16px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', transition: 'background 0.2s' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-surface-hover)'}

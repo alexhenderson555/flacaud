@@ -7,15 +7,16 @@ from typing import Callable, Optional
 import httpx
 
 from tidal_dl_ru.config import API_BASE, DEFAULT_COUNTRY
-from tidal_dl_ru.providers.tidal.auth import get_valid_tokens, refresh_token as _refresh
+from tidal_dl_ru.providers.tidal.auth import get_valid_tokens
+from tidal_dl_ru.providers.tidal.auth import refresh_token as _refresh
 from tidal_dl_ru.providers.tidal.models import (
     Album,
+    Artist,
     AudioQuality,
     PlaybackManifest,
     TokenSet,
     Track,
 )
-
 
 URL_RE = re.compile(
     r"tidal\.com(?:/browse)?/(?P<kind>track|album|playlist|mix)/(?P<id>[\w-]+)",
@@ -104,12 +105,13 @@ class TidalClient:
 
     # ---- metadata ----
 
-    def search(self, query: str, limit: int = 10) -> dict:
+    def search(self, query: str, limit: int = 10, offset: int = 0) -> dict:
         return self._get(
             "/search",
             query=query,
             limit=limit,
-            types="ARTISTS,ALBUMS,TRACKS,PLAYLISTS",
+            offset=offset,
+            types="TRACKS",
         )
 
     def get_track(self, track_id: str | int) -> Track:
@@ -141,7 +143,6 @@ class TidalClient:
         return items
 
     def get_artist(self, artist_id: str | int) -> Artist:
-        from tidal_dl_ru.providers.tidal.models import Artist
         data = self._get(f"/artists/{artist_id}")
         return Artist.model_validate(data)
 

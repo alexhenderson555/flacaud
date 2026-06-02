@@ -10,12 +10,15 @@ export default function Recommendations() {
   const [error, setError] = useState(null);
   const { 
     togglePlay: playerContextTogglePlay, 
-    playingTrackId,
+    currentTrackId,
+    isPlaying,
     likedTracks,
     toggleLike,
     handleDownload,
     lang
   } = useOutletContext();
+
+  const isTrackCurrent = (track) => currentTrackId === String(track.provider_id);
 
   useEffect(() => {
     fetchRecommendations();
@@ -118,7 +121,7 @@ export default function Recommendations() {
             >
               <div style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '8px', overflow: 'hidden' }}>
                 <img src={track.cover_url} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                {playingTrackId === track.provider_id && (
+                {isTrackCurrent(track) && isPlaying && (
                   <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="playing-indicator"><div/><div/><div/></div>
                   </div>
@@ -126,7 +129,7 @@ export default function Recommendations() {
               </div>
               
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, color: playingTrackId === track.provider_id ? 'var(--accent-solid)' : 'white', marginBottom: '4px' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, color: isTrackCurrent(track) ? 'var(--accent-solid)' : 'white', marginBottom: '4px' }}>
                   {track.title}
                 </div>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>

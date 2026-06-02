@@ -11,17 +11,21 @@ services:
       retries: 3
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     restart: unless-stopped
     ports:
       - "${API_PORT:-8001}:8000"
     environment:
+      TIDALDLRU_ENV: production
       REDIS_URL: redis://redis:6379/0
       TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_JWT_SECRET: ${TIDALDLRU_JWT_SECRET:?Set TIDALDLRU_JWT_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
       TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
       TIDALDLRU_DB_PATH: /var/lib/tidal-dl-ru/db/flacaudio.db
+      DATABASE_URL: ${DATABASE_URL:-}
       TIDALDLRU_PKCE_CLIENT_ID: ${TIDALDLRU_PKCE_CLIENT_ID:-}
       TIDALDLRU_PKCE_CLIENT_SECRET: ${TIDALDLRU_PKCE_CLIENT_SECRET:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -32,12 +36,20 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
     restart: unless-stopped
-    command: ["arq", "tidal_dl_ru.server.worker.WorkerSettings"]
     environment:
+      TIDALDLRU_ENV: production
       REDIS_URL: redis://redis:6379/0
       TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
@@ -58,15 +70,18 @@ services:
         condition: service_healthy
 
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     restart: unless-stopped
     command: ["python", "-m", "tidal_dl_ru.bot.main"]
     environment:
+      TIDALDLRU_ENV: production
       TIDALDLRU_BOT_TOKEN: ${TIDALDLRU_BOT_TOKEN:?Set TIDALDLRU_BOT_TOKEN}
       TIDALDLRU_API_BASE: http://api:8000
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   redis-data:

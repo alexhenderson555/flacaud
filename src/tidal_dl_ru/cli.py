@@ -266,6 +266,7 @@ def download(
                 # Karaoke: translate LRC to Russian.
                 if karaoke and lrc:
                     import asyncio as _asyncio
+
                     from tidal_dl_ru.core.translate import translate_lrc_to_file
                     try:
                         _asyncio.run(translate_lrc_to_file(lrc, path))
@@ -310,7 +311,12 @@ def analyze(
     rekordbox: Optional[Path] = typer.Option(None, "--rekordbox", help="Export Rekordbox XML to this path"),
 ) -> None:
     """Analyze audio files: detect BPM and musical key."""
-    from tidal_dl_ru.core.dj import analyze_and_tag, detect_bpm, detect_key, camelot_key, export_rekordbox_xml
+    from tidal_dl_ru.core.dj import (
+        camelot_key,
+        detect_bpm,
+        detect_key,
+        export_rekordbox_xml,
+    )
 
     files: list[Path] = []
     if path.is_file():

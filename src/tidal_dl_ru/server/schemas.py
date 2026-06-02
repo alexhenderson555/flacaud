@@ -10,11 +10,13 @@ from tidal_dl_ru.core.models import Quality, Track
 class SearchRequest(BaseModel):
     query: str
     provider: str = "tidal"
-    limit: int = Field(default=10, ge=1, le=50)
+    limit: int = Field(default=50, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
 
 
 class SearchResponse(BaseModel):
     tracks: list[Track]
+    has_more: bool = False
 
 
 class JobCreate(BaseModel):

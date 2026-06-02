@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 import time
 from typing import Optional
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 

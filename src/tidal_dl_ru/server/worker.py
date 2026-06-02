@@ -101,6 +101,7 @@ def _download_sync(
         # Karaoke: translate LRC to Russian.
         if karaoke and lrc:
             import asyncio as _asyncio
+
             from tidal_dl_ru.core.translate import translate_lrc_to_file
             try:
                 _asyncio.run(translate_lrc_to_file(lrc, path))
@@ -177,14 +178,13 @@ async def download_url(
             job_dir = settings.jobs_dir / job_id
             job_dir.mkdir(parents=True, exist_ok=True)
             q = Quality(quality)
-            
-            import uuid
+
             from tidal_dl_ru.core.split import split_audio_demucs
-            
+
             # Download the track first
             job_state.update_track(job_id, 0, status="downloading")
             job_state.update_track(job_id, 1, status="downloading")
-            
+
             base = job_dir / _filename(track)
             try:
                 path = await asyncio.to_thread(provider.download, track, base, q)
@@ -199,14 +199,14 @@ async def download_url(
             # Split it
             try:
                 res = await split_audio_demucs(str(path), str(job_dir))
-                
+
                 # Sign and register files
                 v_path = Path(res.vocals_path)
                 i_path = Path(res.instrumental_path)
-                
+
                 v_token = sign_file(job_id, str(v_path.relative_to(job_dir)).replace("\\", "/"))
                 i_token = sign_file(job_id, str(i_path.relative_to(job_dir)).replace("\\", "/"))
-                
+
                 job_state.update_track(job_id, 0, status="done", bytes_written=v_path.stat().st_size, bytes_total=v_path.stat().st_size, file_token=v_token)
                 job_state.update_track(job_id, 1, status="done", bytes_written=i_path.stat().st_size, bytes_total=i_path.stat().st_size, file_token=i_token)
             except Exception as e:

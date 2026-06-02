@@ -223,7 +223,7 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
     if len(parts) < 2:
         await message.answer("Использование: /sync <ссылка на плейлист>")
         return
-        
+
     url = parts[1]
     url_match = _URL_RE.search(url)
     if not url_match:
@@ -245,6 +245,7 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
             karaoke=user_rec.karaoke_enabled,
             dj_analyze=user_rec.dj_enabled,
             match_tidal=True,
+            user_id=user_rec.id,
         )
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка: {e}")
@@ -253,13 +254,13 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
     await status_msg.edit_text(f"⬇️ Скачиваю... (job: <code>{job.job_id}</code>)", parse_mode="HTML")
 
     try:
-        result = await api.wait_for_job(job.job_id)
+        result = await api.wait_for_job(job.job_id, user_id=user_rec.id)
     except TimeoutError:
         await status_msg.edit_text("⏰ Таймаут — скачивание заняло слишком долго.")
         return
 
     if result.status == "failed":
-        await status_msg.edit_text(f"❌ Не удалось скачать.")
+        await status_msg.edit_text("❌ Не удалось скачать.")
         return
 
     sent = 0
@@ -278,7 +279,7 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
 
     if sent > 1:
         record_downloads(tg_user.id, sent)
-        
+
     msg = f"✅ Скачано {sent} треков."
     if len(result.tracks) > 1:
         msg += f"\n\n📦 Скачать плейлист целиком (ZIP):\nhttp://151.243.177.88/api/jobs/{job.job_id}/zip"
@@ -296,7 +297,7 @@ async def cmd_split(message: Message, api: APIClient) -> None:
     if len(parts) < 2:
         await message.answer("Использование: /split <ссылка на трек>")
         return
-        
+
     url = parts[1]
     url_match = _URL_RE.search(url)
     if not url_match:
@@ -319,19 +320,20 @@ async def cmd_split(message: Message, api: APIClient) -> None:
             dj_analyze=False,
             match_tidal=False,
             split=True,
+            user_id=user_rec.id,
         )
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка: {e}")
         return
 
     try:
-        result = await api.wait_for_job(job.job_id)
+        result = await api.wait_for_job(job.job_id, user_id=user_rec.id)
     except TimeoutError:
         await status_msg.edit_text("⏰ Таймаут — операция заняла слишком долго.")
         return
 
     if result.status == "failed":
-        await status_msg.edit_text(f"❌ Не удалось разделить трек.")
+        await status_msg.edit_text("❌ Не удалось разделить трек.")
         return
 
     sent = 0
@@ -348,7 +350,7 @@ async def cmd_split(message: Message, api: APIClient) -> None:
         except Exception:
             pass
 
-    msg = f"✅ Готово!"
+    msg = "✅ Готово!"
     await status_msg.edit_text(msg)
 
 
@@ -363,7 +365,7 @@ async def cmd_analyze(message: Message, api: APIClient) -> None:
     if len(parts) < 2:
         await message.answer("Использование: /analyze <ссылка на YouTube/SoundCloud микс>")
         return
-        
+
     url = parts[1]
     url_match = _URL_RE.search(url)
     if not url_match:
@@ -380,31 +382,31 @@ async def cmd_analyze(message: Message, api: APIClient) -> None:
     status_msg = await message.answer("🔍 Начинаю анализ сета. Это займет время...")
 
     try:
-        job = await api.create_job(url, job_type="analyze_set")
+        job = await api.create_job(url, job_type="analyze_set", user_id=user_rec.id)
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка: {e}")
         return
 
     try:
-        result = await api.wait_for_job(job.job_id)
+        result = await api.wait_for_job(job.job_id, user_id=user_rec.id)
     except TimeoutError:
         await status_msg.edit_text("⏰ Таймаут — анализ занял слишком долго.")
         return
 
     if result.status == "failed":
-        await status_msg.edit_text(f"❌ Не удалось проанализировать сет.")
+        await status_msg.edit_text("❌ Не удалось проанализировать сет.")
         return
 
     if not result.set_tracks:
         await status_msg.edit_text("🤷 Ни одного трека не распознано.")
         return
-        
+
     lines = ["📋 <b>Распознанные треки:</b>\n"]
     for t in result.set_tracks:
         lines.append(f"⏱ {t.timestamp} - <b>{t.artist}</b> — {t.title}")
         if t.matched_track:
             lines.append(f"   ✅ Найден в Tidal! (<code>/sync {t.matched_track.source_url}</code>)")
-            
+
     text = "\n".join(lines)
     if len(text) > 4000:
         text = text[:3900] + "\n... (список обрезан)"
@@ -443,6 +445,7 @@ async def handle_url(message: Message, api: APIClient) -> None:
             url,
             karaoke=user_rec.karaoke_enabled,
             dj_analyze=user_rec.dj_enabled,
+            user_id=user_rec.id,
         )
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка: {e}")
@@ -455,7 +458,7 @@ async def handle_url(message: Message, api: APIClient) -> None:
 
     # Wait for completion.
     try:
-        result = await api.wait_for_job(job.job_id)
+        result = await api.wait_for_job(job.job_id, user_id=user_rec.id)
     except TimeoutError:
         await status_msg.edit_text("⏰ Таймаут — скачивание заняло слишком долго.")
         return
@@ -499,10 +502,10 @@ async def handle_url(message: Message, api: APIClient) -> None:
     msg = f"✅ Готово! {sent} трек(ов) отправлено. Осталось сегодня: {remaining}"
     if sent != total:
         msg = f"⚠️ Отправлено {sent}/{total}. (Возможно, файлы слишком большие). Осталось сегодня: {remaining}"
-        
+
     if total > 1:
         msg += f"\n\n📦 Скачать весь альбом/плейлист (ZIP):\nhttp://151.243.177.88/api/jobs/{job.job_id}/zip"
-        
+
     await status_msg.edit_text(msg)
 
 @router.message(F.voice | F.audio)
@@ -514,7 +517,7 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
     if not tg_user:
         return
 
-    get_or_create(tg_user.id, username=tg_user.username, first_name=tg_user.first_name)
+    user_rec = get_or_create(tg_user.id, username=tg_user.username, first_name=tg_user.first_name)
     allowed, user = check_and_increment(tg_user.id)
     if not allowed:
         await message.answer(
@@ -566,6 +569,7 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
     try:
         job = await api.create_job(
             f"tidal-search://{query}",  # Special URL scheme handled below.
+            user_id=user_rec.id,
         )
     except Exception:
         # Fallback: search via regular Tidal URL won't work.
@@ -608,8 +612,8 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
 
     # Create download job.
     try:
-        job = await api.create_job(source_url)
-        final = await api.wait_for_job(job.job_id)
+        job = await api.create_job(source_url, user_id=user_rec.id)
+        final = await api.wait_for_job(job.job_id, user_id=user_rec.id)
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка скачивания: {e}")
         return
