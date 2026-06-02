@@ -6,6 +6,35 @@ from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.models import User
 import logging
 
+from fastapi import HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
+from pathlib import Path
+from tidal_dl_ru.bot.users import Plan
+from tidal_dl_ru.core.models import Track
+from tidal_dl_ru.core.recognize import recognize_audio
+from tidal_dl_ru.core.router import get_provider_by_name
+from tidal_dl_ru.database.database import get_session
+from tidal_dl_ru.providers.tidal import pool as tidal_pool
+from tidal_dl_ru.providers.tidal.auth import extract_code_from_url, pkce_exchange_code, save_tokens, AuthError
+from tidal_dl_ru.providers.tidal.auth import load_tokens
+from tidal_dl_ru.providers.tidal.auth import pkce_login_url
+from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url
+from tidal_dl_ru.providers.tidal.download import download_track
+from tidal_dl_ru.providers.tidal.models import AudioQuality
+from tidal_dl_ru.providers.tidal.provider import _to_universal
+from tidal_dl_ru.server.payments import create_payment
+from tidal_dl_ru.server.settings import settings
+from typing import Optional
+from urllib.parse import urlparse
+import asyncio
+import httpx
+import ipaddress
+import json
+import os
+import random
+import socket
+import syncedlyrics
+import tempfile
 logger = logging.getLogger(__name__)
 router = APIRouter()
 @router.get("/api/providers", response_model=list[ProviderInfo])
@@ -18,8 +47,6 @@ async def search(req: SearchRequest) -> SearchResponse:
     p = get_provider_by_name(req.provider)
     if p is None:
         raise HTTPException(status_code=400, detail=f"unknown provider: {req.provider}")
-    import asyncio
-    from tidal_dl_ru.core.models import Track
 
     try:
         tracks = await asyncio.to_thread(p.search, req.query, req.limit)
@@ -31,9 +58,6 @@ async def search(req: SearchRequest) -> SearchResponse:
 
 @router.post("/api/recognize", response_model=SearchResponse)
 async def recognize_endpoint(file: UploadFile = File(...)):
-    from tidal_dl_ru.core.recognize import recognize_audio
-    from tidal_dl_ru.core.router import get_provider_by_name
-    import asyncio
 
     audio_bytes = await file.read()
     res = await recognize_audio(audio_bytes, file.content_type)
@@ -44,7 +68,6 @@ async def recognize_endpoint(file: UploadFile = File(...)):
     p = get_provider_by_name("tidal")
     if p:
         query = f"{res.artist} {res.title}"
-        from tidal_dl_ru.core.models import Track
         try:
             tracks = await asyncio.to_thread(p.search, query, 5)
             return SearchResponse(tracks=tracks)
@@ -57,12 +80,6 @@ async def recognize_endpoint(file: UploadFile = File(...)):
 
 @router.get("/api/artist/{artist_id}")
 async def get_artist_api(artist_id: str):
-    import asyncio
-    import httpx
-    from fastapi import HTTPException
-    from tidal_dl_ru.providers.tidal import pool as tidal_pool
-    from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url
-    from tidal_dl_ru.providers.tidal.provider import _to_universal
 
     try:
         http = httpx.Client(timeout=30.0)
@@ -100,12 +117,6 @@ async def get_artist_api(artist_id: str):
 
 @router.get("/api/album/{album_id}")
 async def get_album_api(album_id: str):
-    import asyncio
-    import httpx
-    from fastapi import HTTPException
-    from tidal_dl_ru.providers.tidal import pool as tidal_pool
-    from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url
-    from tidal_dl_ru.providers.tidal.provider import _to_universal
 
     try:
         http = httpx.Client(timeout=30.0)
@@ -141,9 +152,6 @@ async def image_proxy(url: str):
     """Proxy remote images for the frontend (CORS). Hardened against SSRF:
     only http(s), and the host must resolve exclusively to public addresses
     (blocks loopback, RFC1918, link-local/metadata, reserved, etc.)."""
-    import ipaddress
-    import socket
-    from urllib.parse import urlparse
 
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
@@ -185,8 +193,6 @@ def get_file(token: str) -> FileResponse:
 
 @router.get("/api/lyrics")
 async def get_lyrics(q: str):
-    import syncedlyrics
-    import asyncio
     
     def _fetch():
         return syncedlyrics.search(q, providers=["Lrclib", "Musixmatch"])
@@ -213,7 +219,6 @@ async def get_lyrics(q: str):
 @router.post("/api/webhooks/yookassa")
 async def yookassa_webhook(request: Request) -> dict:
     """YooKassa sends payment.succeeded notifications here."""
-    import ipaddress
     client_ip = request.client.host if request.client else ""
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
@@ -244,19 +249,18 @@ async def yookassa_webhook(request: Request) -> dict:
 from pydantic import BaseModel
 class PaymentCreateRequest(BaseModel):
     plan: str
-    user_id: int = 12345
 
 @router.post("/api/payments/create")
-async def api_create_payment(req: PaymentCreateRequest):
-    from tidal_dl_ru.server.payments import create_payment
-    from tidal_dl_ru.bot.users import Plan
+async def api_create_payment(req: PaymentCreateRequest, current_user: User = Depends(get_current_user)):
     
     try:
         plan_enum = Plan(req.plan.lower())
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan")
         
-    url = create_payment(req.user_id, plan_enum, return_url="http://localhost:5173/account")
+    if not current_user.telegram_id:
+        raise HTTPException(status_code=400, detail="Telegram account not linked")
+    url = create_payment(current_user.telegram_id, plan_enum, return_url="http://localhost:5173/account")
     
     if not url:
         raise HTTPException(status_code=501, detail="YooKassa integration is not yet fully configured")
@@ -276,7 +280,6 @@ def pool_health() -> PoolHealth:
 
 @router.get("/api/auth/status")
 def auth_status():
-    from tidal_dl_ru.providers.tidal.auth import load_tokens
     t = load_tokens()
     if t and t.access_token:
         return {"logged_in": True, "user_id": t.user_id, "country": t.country_code}
@@ -285,7 +288,6 @@ def auth_status():
 
 @router.get("/api/auth/login")
 def auth_login_url():
-    from tidal_dl_ru.providers.tidal.auth import pkce_login_url
     url, verifier = pkce_login_url()
     return {"url": url, "verifier": verifier}
 
@@ -297,8 +299,6 @@ class AuthCallback(BaseModel):
 
 @router.post("/api/auth/callback")
 def auth_callback(req: AuthCallback):
-    import httpx
-    from tidal_dl_ru.providers.tidal.auth import extract_code_from_url, pkce_exchange_code, save_tokens, AuthError
     
     try:
         code = extract_code_from_url(req.redirect_url)
@@ -328,8 +328,6 @@ async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES
         raise HTTPException(status_code=400, detail="Provider not found")
         
     if provider == "tidal":
-        import asyncio
-        from tidal_dl_ru.providers.tidal.models import AudioQuality
         try:
             if quality.upper() == "HI_RES":
                 q_enum = getattr(AudioQuality, "HI_RES_LOSSLESS", AudioQuality.LOSSLESS)
@@ -363,12 +361,10 @@ async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES
 
 @router.get("/api/stream/{provider}/{track_id}")
 async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_current_user), quality: str = "LOW", bypass_registry: str = "false"):
-    from fastapi.responses import FileResponse, StreamingResponse
     if not current_user.can_download:
         raise HTTPException(status_code=403, detail="Daily limit reached.")
     
     # Increment quota
-    from tidal_dl_ru.database.database import get_session
     with next(get_session()) as s:
         db_u = s.merge(current_user)
         db_u.downloads_today += 1
@@ -376,7 +372,6 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
     if bypass_registry.lower() != "true":
         registry = job_state.get_downloaded_registry()
         if track_id in registry:
-            from tidal_dl_ru.server.settings import settings
             full_path = settings.jobs_dir / registry[track_id]
             if full_path.exists():
                 media_type = "audio/flac" if full_path.suffix.lower() == ".flac" else "audio/mp4"
@@ -387,13 +382,6 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
         raise HTTPException(status_code=400, detail="Provider not found")
         
     if provider == "tidal":
-        import asyncio
-        from pathlib import Path
-        from fastapi.responses import FileResponse, StreamingResponse
-        from tidal_dl_ru.providers.tidal.models import AudioQuality
-        from tidal_dl_ru.providers.tidal.download import download_track
-        import tempfile
-        import httpx
         
         try:
             if quality.upper() == "HI_RES":
@@ -548,19 +536,11 @@ class AIPlaylistRequest(BaseModel):
 
 @router.post("/api/ai-playlist", response_model=SearchResponse)
 async def ai_playlist(req: AIPlaylistRequest):
-    import os
-    import json
-    import asyncio
-    import httpx
-    from typing import Optional
-    from tidal_dl_ru.core.router import get_provider_by_name
-    from tidal_dl_ru.core.models import Track
     
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=400, detail="GEMINI_API_KEY is not set in the environment.")
         
-    import random
     seed = random.randint(1, 100000)
     prompt = f"""You are an expert music curator. 
 The user wants a playlist with the vibe: "{req.query}".
