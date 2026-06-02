@@ -33,7 +33,7 @@ export default function StemSplitter() {
     if (jobId && (status === 'queued' || status === 'running')) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`/api/jobs/${jobId}`);
+          const res = await fetch(`/api/jobs/${jobId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } });
           if (res.ok) {
             const data = await res.json();
             setStatus(data.status);

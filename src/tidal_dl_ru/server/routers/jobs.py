@@ -27,7 +27,7 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
 
     if req.job_type == "analyze_set":
         job_id = job_state.new_job_id()
-        job_state.create(job_id, provider="youtube", job_type="analyze_set")
+        job_state.create(job_id, provider="youtube", job_type="analyze_set", owner_id=current_user.id)
         arq_pool = getattr(request.app.state, "arq", None)
         if arq_pool is None:
             raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
@@ -44,7 +44,8 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
 
     job_id = job_state.new_job_id()
     job_state.create(
-        job_id, provider=provider.name, job_type="download", quality=req.quality.value
+        job_id, provider=provider.name, job_type="download",
+        quality=req.quality.value, owner_id=current_user.id,
     )
 
     arq_pool = getattr(request.app.state, "arq", None)
@@ -73,10 +74,15 @@ def job_status(job_id: str, current_user: User = Depends(get_current_user)) -> J
     s = job_state.load(job_id)
     if s is None:
         raise HTTPException(status_code=404, detail="job not found or expired")
+    if s.owner_id is not None and s.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your job")
     return s
 
 @router.get("/{job_id}/zip")
 def download_job_zip(job_id: str, current_user: User = Depends(get_current_user)):
+    s = job_state.load(job_id)
+    if s is not None and s.owner_id is not None and s.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your job")
     job_dir = settings.jobs_dir / job_id
     if not job_dir.exists():
         raise HTTPException(status_code=404, detail="Job not found")

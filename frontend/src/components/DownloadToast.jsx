@@ -87,7 +87,7 @@ export default function DownloadToast() {
         const jobIds = JSON.parse(saved);
         if (jobIds.length === 0) return;
         
-        const jobPromises = jobIds.map(id => fetch(`/api/jobs/${id}`).then(r => r.ok ? r.json() : null));
+        const jobPromises = jobIds.map(id => fetch(`/api/jobs/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } }).then(r => r.ok ? r.json() : null));
         const results = await Promise.all(jobPromises);
         
         const newItems = [];

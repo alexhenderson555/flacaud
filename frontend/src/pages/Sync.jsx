@@ -62,7 +62,7 @@ export default function Sync() {
   const pollJob = (id) => {
     const iv = setInterval(async () => {
       try {
-        const res = await fetch(`/api/jobs/${id}`);
+        const res = await fetch(`/api/jobs/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } });
         const data = await res.json();
         
         if (data.status === 'done') {

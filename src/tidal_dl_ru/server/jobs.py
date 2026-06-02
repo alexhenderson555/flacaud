@@ -37,10 +37,12 @@ def create(
     provider: Optional[str] = None,
     job_type: str = "download",
     quality: Optional[str] = None,
+    owner_id: Optional[int] = None,
 ) -> JobStatus:
     now = time.time()
     status = JobStatus(
         job_id=job_id,
+        owner_id=owner_id,
         job_type=job_type,
         status="queued",
         provider=provider,

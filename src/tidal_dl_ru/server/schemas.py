@@ -46,6 +46,7 @@ class SetTrackInfo(BaseModel):
 
 class JobStatus(BaseModel):
     job_id: str
+    owner_id: Optional[int] = None  # web user id that created the job (ownership guard)
     job_type: str = "download"
     status: str  # "queued" | "running" | "done" | "failed"
     provider: Optional[str] = None
