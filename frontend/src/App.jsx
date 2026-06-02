@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AudioVisualizer from './components/AudioVisualizer';
 import KaraokeMode from './components/KaraokeMode';
 import DJMode from './components/DJMode';
+import PlayerBar from './components/PlayerBar';
 import LyricsView from './components/LyricsView';
 import PlaybackQueue from './components/PlaybackQueue';
 import Equalizer from './components/Equalizer';
@@ -875,6 +876,39 @@ function App() {
         {isPlaylistModalOpenPlayer && <PlaylistModal track={currentTrack} onClose={() => setIsPlaylistModalOpenPlayer(false)} />}
       </AnimatePresence>
 
+      <PlayerBar 
+        t={t}
+        currentTrack={currentTrack}
+        actualQuality={actualQuality}
+        isLoading={isLoading}
+        isPlaying={isPlaying}
+        progress={progress}
+        trackDuration={trackDuration}
+        volume={volume}
+        playbackQuality={playbackQuality}
+        likedTracks={likedTracks}
+        isKaraokeOpen={isKaraokeOpen}
+        isDJOpen={isDJOpen}
+        isEQOpen={isEQOpen}
+        isQueueOpen={isQueueOpen}
+        playlist={playlist}
+        currentTrackIndex={currentTrackIndex}
+        togglePlay={togglePlay}
+        playPrevious={playPrevious}
+        playNext={playNext}
+        handleSeek={handleSeek}
+        changeQuality={changeQuality}
+        toggleLike={toggleLike}
+        setIsPlaylistModalOpenPlayer={setIsPlaylistModalOpenPlayer}
+        handleDownloadPlayer={handleDownloadPlayer}
+        toggleOverlay={toggleOverlay}
+        setVolume={setVolume}
+        timeSpanRef={timeSpanRef}
+        progressRef={progressRef}
+      />
+      
+      {/* Hiding old code temporarily to not cause parsing errors */}
+      {false && (
       <div className="player-bar glass-panel" style={{ borderBottom: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
           <div style={{ width: '56px', height: '56px', borderRadius: '8px', background: 'var(--bg-surface-hover)', overflow: 'hidden' }}>
@@ -1082,8 +1116,9 @@ function App() {
            >
              <div style={{ width: `${volume * 100}%`, height: '100%', background: 'var(--text-primary)', borderRadius: '2px', transition: 'width 0.1s' }}></div>
            </div>
-        </div>
+         </div>
       </div>
+      )}
       
       <ToastContainer />
       <DownloadToast />

@@ -357,6 +357,10 @@ def job_status(job_id: str) -> JobStatus:
 @app.get("/api/image-proxy")
 async def image_proxy(url: str):
     """Securely proxy images to bypass CORS restrictions on the frontend."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.hostname in ("localhost", "127.0.0.1", "::1") or (parsed.hostname and parsed.hostname.startswith("169.254")):
+        raise HTTPException(status_code=400, detail="Invalid URL")
     async with httpx.AsyncClient() as client:
         r = await client.get(url)
         headers = {
