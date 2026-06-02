@@ -84,3 +84,16 @@ class TestMediaToken:
     def test_zip_rejects_bad_media_token(self):
         # get_media_user must reject an invalid ?mt= rather than fall through.
         assert client.get("/api/jobs/whatever/zip?mt=garbage").status_code == 401
+
+
+class TestRouterSplitRegressions:
+    def test_files_endpoint_wired(self):
+        """/api/files used verify_file without importing it after the app.py->api.py
+        refactor (NameError -> 500). A bad token must now be a clean 404."""
+        assert client.get("/api/files/not-a-valid-token").status_code == 404
+
+    def test_providers_endpoint_after_split(self):
+        # Moved to catalog.py — make sure it's still registered and works.
+        r = client.get("/api/providers")
+        assert r.status_code == 200
+        assert isinstance(r.json(), list)
