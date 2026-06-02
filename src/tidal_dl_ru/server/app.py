@@ -71,98 +71,13 @@ app = FastAPI(title="tidal-dl-ru API", version="0.1.0", lifespan=lifespan)
 def _arq(app: FastAPI) -> ArqRedis:
     return app.state.arq
 
-# ==========================================
-# AUTH ENDPOINTS
-# ==========================================
+from tidal_dl_ru.server.routers.auth import router as auth_router
+from tidal_dl_ru.server.routers.library import router as library_router
+from tidal_dl_ru.server.routers.jobs import router as jobs_router
 
-@app.post("/api/auth/register", response_model=UserRead)
-def register_user(user: UserCreate, session: Session = Depends(get_session)):
-    db_user = session.query(User).filter((User.email == user.email) | (User.username == user.username)).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email or username already registered")
-    
-    hashed_password = get_password_hash(user.password)
-    new_user = User(
-        email=user.email,
-        username=user.username,
-        hashed_password=hashed_password
-    )
-    session.add(new_user)
-    session.commit()
-    session.refresh(new_user)
-    return new_user
-
-@app.post("/api/auth/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
-    user = session.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer", "username": user.username}
-
-@app.get("/api/auth/me", response_model=UserRead)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
-
-# ==========================================
-# LIBRARY & PLAYLIST ENDPOINTS
-# ==========================================
-
-@app.get("/api/library", response_model=List[SavedTrack])
-def get_library(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    return current_user.saved_tracks
-
-@app.post("/api/library", response_model=SavedTrack)
-def add_to_library(track: SavedTrackBase, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    db_track = SavedTrack(**track.model_dump(), user_id=current_user.id)
-    session.add(db_track)
-    session.commit()
-    session.refresh(db_track)
-    return db_track
-
-@app.delete("/api/library/{track_id}")
-def remove_from_library(track_id: int, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    track = session.query(SavedTrack).filter(SavedTrack.id == track_id, SavedTrack.user_id == current_user.id).first()
-    if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
-    session.delete(track)
-    session.commit()
-    return {"ok": True}
-
-@app.get("/api/playlists", response_model=List[Playlist])
-def get_playlists(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    return current_user.playlists
-
-@app.post("/api/playlists", response_model=Playlist)
-def create_playlist(playlist: PlaylistBase, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    db_playlist = Playlist(name=playlist.name, user_id=current_user.id)
-    session.add(db_playlist)
-    session.commit()
-    session.refresh(db_playlist)
-    return db_playlist
-
-@app.put("/api/playlists/{playlist_id}")
-def update_playlist(playlist_id: int, tracks_json: str, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    playlist = session.query(Playlist).filter(Playlist.id == playlist_id, Playlist.user_id == current_user.id).first()
-    if not playlist:
-        raise HTTPException(status_code=404, detail="Playlist not found")
-    playlist.tracks_json = tracks_json
-    session.commit()
-    session.refresh(playlist)
-    return playlist
-
-@app.delete("/api/playlists/{playlist_id}")
-def delete_playlist(playlist_id: int, current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    playlist = session.query(Playlist).filter(Playlist.id == playlist_id, Playlist.user_id == current_user.id).first()
-    if not playlist:
-        raise HTTPException(status_code=404, detail="Playlist not found")
-    session.delete(playlist)
-    session.commit()
-    return {"ok": True}
+app.include_router(auth_router)
+app.include_router(library_router)
+app.include_router(jobs_router)
 
 
 @app.get("/healthz")
@@ -298,62 +213,6 @@ async def get_album_api(album_id: str):
         print(f"Error fetching album {album_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/jobs", response_model=JobStatus)
-async def create_job(req: JobCreate) -> JobStatus:
-    from tidal_dl_ru.core.router import find_provider
-
-    if req.job_type == "analyze_set":
-        job_id = job_state.new_job_id()
-        job_state.create(job_id, provider="youtube", job_type="analyze_set")
-        arq_pool = _arq(app)
-        if arq_pool is None:
-            raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
-            
-        await arq_pool.enqueue_job("analyze_set", job_id, req.url, _job_id=job_id)
-        
-        status = job_state.load(job_id)
-        assert status is not None
-        return status
-
-    provider = find_provider(req.url)
-    if provider is None:
-        raise HTTPException(status_code=400, detail="no provider matches URL")
-
-    job_id = job_state.new_job_id()
-    job_state.create(
-        job_id, provider=provider.name, job_type="download", quality=req.quality.value
-    )
-
-    arq_pool = _arq(app)
-    if arq_pool is None:
-        raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
-        
-    await arq_pool.enqueue_job(
-        "download_url",
-        job_id,
-        req.url,
-        req.quality.value,
-        req.lyrics,
-        req.karaoke,
-        req.dj_analyze,
-        req.match_tidal,
-        req.split,
-        _job_id=job_id,
-    )
-        
-    status = job_state.load(job_id)
-    assert status is not None
-    return status
-
-
-@app.get("/api/jobs/{job_id}", response_model=JobStatus)
-def job_status(job_id: str) -> JobStatus:
-    s = job_state.load(job_id)
-    if s is None:
-        raise HTTPException(status_code=404, detail="job not found or expired")
-    return s
-
-
 @app.get("/api/image-proxy")
 async def image_proxy(url: str):
     """Securely proxy images to bypass CORS restrictions on the frontend."""
@@ -376,31 +235,6 @@ def get_file(token: str) -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="file not found or token expired")
     return FileResponse(path, filename=path.name)
-
-@app.get("/api/jobs/{job_id}/zip")
-def download_job_zip(job_id: str):
-    import zipfile
-    import os
-    from fastapi.responses import FileResponse
-    
-    job_dir = settings.jobs_dir / job_id
-    if not job_dir.exists():
-        raise HTTPException(status_code=404, detail="Job not found")
-        
-    zip_path = settings.jobs_dir / f"{job_id}.zip"
-    if not zip_path.exists():
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for root, dirs, files in os.walk(job_dir):
-                for file in files:
-                    if file.endswith('.flac') or file.endswith('.lrc') or file.endswith('.xml'):
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, job_dir)
-                        zf.write(file_path, arcname)
-                        
-    if not zip_path.exists():
-        raise HTTPException(status_code=404, detail="Failed to create zip")
-        
-    return FileResponse(zip_path, media_type="application/zip", filename=f"{job_id}.zip")
 
 @app.get("/api/lyrics")
 async def get_lyrics(q: str):
@@ -432,6 +266,30 @@ async def get_lyrics(q: str):
 @app.post("/api/webhooks/yookassa")
 async def yookassa_webhook(request: Request) -> dict:
     """YooKassa sends payment.succeeded notifications here."""
+    import ipaddress
+    client_ip = request.client.host if request.client else ""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+        
+    allowed_subnets = [
+        ipaddress.ip_network("185.71.76.0/27"),
+        ipaddress.ip_network("185.71.77.0/27"),
+        ipaddress.ip_network("77.75.153.0/25"),
+        ipaddress.ip_network("77.75.156.11/32"),
+        ipaddress.ip_network("77.75.156.35/32"),
+        ipaddress.ip_network("77.75.154.128/25"),
+        ipaddress.ip_network("2a02:5180::/32")
+    ]
+    try:
+        ip_obj = ipaddress.ip_address(client_ip)
+        if not any(ip_obj in subnet for subnet in allowed_subnets):
+            # Accept locally for testing only
+            if str(ip_obj) not in ("127.0.0.1", "::1"):
+                raise HTTPException(status_code=403, detail="Invalid IP")
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Invalid IP format")
+
     body = await request.json()
     ok = process_webhook(body)
     return {"ok": ok}
