@@ -11,8 +11,22 @@ class User(UserBase, table=True):
     hashed_password: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
+    telegram_id: Optional[int] = Field(default=None, unique=True, index=True)
+    plan: str = Field(default="free")
+    downloads_today: int = Field(default=0)
+    quota_reset_at: Optional[datetime] = Field(default=None)
+
     saved_tracks: List["SavedTrack"] = Relationship(back_populates="user")
     playlists: List["Playlist"] = Relationship(back_populates="user")
+
+    @property
+    def daily_limit(self) -> int:
+        limits = {"free": 3, "basic": 50, "pro": 200, "lifetime": 200}
+        return limits.get(self.plan.lower(), 3)
+
+    @property
+    def can_download(self) -> bool:
+        return self.downloads_today < self.daily_limit
 
 class UserCreate(UserBase):
     password: str

@@ -16,6 +16,17 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     
+    if not current_user.can_download:
+        raise HTTPException(status_code=403, detail="Daily limit reached.")
+
+    # Increment quota (optimistic, proper way is in worker, but good enough for MVP)
+    from tidal_dl_ru.database.database import get_session
+    from sqlalchemy.orm import Session
+    with next(get_session()) as s:
+        db_u = s.merge(current_user)
+        db_u.downloads_today += 1
+        s.commit()
+
     if req.job_type == "analyze_set":
         job_id = job_state.new_job_id()
         job_state.create(job_id, provider="youtube", job_type="analyze_set")
@@ -60,14 +71,14 @@ async def create_job(req: JobCreate, request: Request, current_user: User = Depe
     return status
 
 @router.get("/{job_id}", response_model=JobStatus)
-def job_status(job_id: str) -> JobStatus:
+def job_status(job_id: str, current_user: User = Depends(get_current_user)) -> JobStatus:
     s = job_state.load(job_id)
     if s is None:
         raise HTTPException(status_code=404, detail="job not found or expired")
     return s
 
 @router.get("/{job_id}/zip")
-def download_job_zip(job_id: str):
+def download_job_zip(job_id: str, current_user: User = Depends(get_current_user)):
     job_dir = settings.jobs_dir / job_id
     if not job_dir.exists():
         raise HTTPException(status_code=404, detail="Job not found")
