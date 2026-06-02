@@ -20,7 +20,23 @@ Advanced high-fidelity DJ and Music Player Web Engine, supporting seamless libra
 For frontend development with hot reload: `cd frontend && npm run dev` (Vite dev server on `http://localhost:5173`, proxying `/api` to the backend).
 
 ## Tech Stack
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy / SQLModel (SQLite), Redis + ARQ (job queue), aiogram (Telegram bot).
+- **Backend**: Python 3.12, FastAPI (split into modular `APIRouter` architecture), SQLAlchemy / SQLModel (SQLite), Redis + ARQ (job queue), aiogram (Telegram bot).
 - **Audio**: own Tidal client (FLAC/Hi-Res), yt-dlp, demucs (stem split), syncedlyrics.
 - **Frontend**: React + Vite + Tauri (PWA), Framer Motion, Web Audio API.
 - **Payments**: YooKassa (server-verified webhooks).
+- **Testing**: `pytest` coverage for critical API flows (`test_api_coverage_new.py`, etc.).
+
+## Architecture & Security
+- **Unified Users**: User quotas are unified. Web accounts have a daily download limit based on their subscription plan. Quotas are enforced securely on the backend (`Depends(get_current_user)`).
+- **API Modularity**: `app.py` serves as a clean initialization script, while business logic is separated into `src/tidal_dl_ru/server/routers/` (`api.py`, `auth.py`, `jobs.py`, `library.py`).
+- **Security**: Raw errors are safely obscured behind `Internal Server Error`, JWTs are mandated for secure actions, and SSRF protections are present on image proxying.
+
+## Testing
+Run local tests with:
+```bash
+pytest tests/
+```
+To test end-to-end flow with the live server:
+```bash
+python scratch/test_remote_flow.py
+```
