@@ -1,0 +1,72 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8001}:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:-change-me-in-production}
+      TIDALDLRU_JWT_SECRET: ${TIDALDLRU_JWT_SECRET:-change-me-in-production}
+      TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
+      TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
+      TIDALDLRU_DB_PATH: /var/lib/tidal-dl-ru/db/flacaudio.db
+      TIDALDLRU_PKCE_CLIENT_ID: ${TIDALDLRU_PKCE_CLIENT_ID:-}
+      TIDALDLRU_PKCE_CLIENT_SECRET: ${TIDALDLRU_PKCE_CLIENT_SECRET:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - jobs-data:/var/lib/tidal-dl-ru/jobs
+      - db-data:/var/lib/tidal-dl-ru/db
+      - pool-data:/root/.config/tidal-dl-ru
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["arq", "tidal_dl_ru.server.worker.WorkerSettings"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:-change-me-in-production}
+      TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
+      TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
+      TIDALDLRU_ARQ_MAX_JOBS: ${TIDALDLRU_ARQ_MAX_JOBS:-4}
+      TIDALDLRU_PKCE_CLIENT_ID: ${TIDALDLRU_PKCE_CLIENT_ID:-}
+      TIDALDLRU_PKCE_CLIENT_SECRET: ${TIDALDLRU_PKCE_CLIENT_SECRET:-}
+      TIDALDLRU_AUDD_TOKEN: ${TIDALDLRU_AUDD_TOKEN:-}
+      TIDALDLRU_DEEPL_KEY: ${TIDALDLRU_DEEPL_KEY:-}
+    volumes:
+      - jobs-data:/var/lib/tidal-dl-ru/jobs
+      - pool-data:/root/.config/tidal-dl-ru
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  bot:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "tidal_dl_ru.bot.main"]
+    environment:
+      TIDALDLRU_BOT_TOKEN: ${TIDALDLRU_BOT_TOKEN:?Set TIDALDLRU_BOT_TOKEN}
+      TIDALDLRU_API_BASE: http://api:8000
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  redis-data:
+  jobs-data:
+  db-data:
+  pool-data:

@@ -1,0 +1,20 @@
+{
+  "short_name": "FlacAudio",
+  "name": "FlacAudio DJ Player",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0a0a10",
+  "background_color": "#0a0a10"
+}
