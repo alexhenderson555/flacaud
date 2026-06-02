@@ -30,7 +30,7 @@ class Settings:
     )
     signing_secret: str = os.environ.get(
         "TIDALDLRU_SIGNING_SECRET",
-        "DEV-INSECURE-CHANGE-ME-IN-PRODUCTION-9f8e7d6c5b4a",
+        os.urandom(24).hex()
     )
     file_url_ttl_seconds: int = int(os.environ.get("TIDALDLRU_FILE_TTL", "86400"))
     job_ttl_seconds: int = int(os.environ.get("TIDALDLRU_JOB_TTL", "86400"))
