@@ -53,7 +53,7 @@ async def search(req: SearchRequest) -> SearchResponse:
         return SearchResponse(tracks=tracks)
     except Exception as e:
         logger.info(f"Tidal search failed: {e}")
-        raise HTTPException(status_code=401, detail=f"Search failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Search failed")
 
 
 @router.post("/api/recognize", response_model=SearchResponse)
@@ -73,7 +73,7 @@ async def recognize_endpoint(file: UploadFile = File(...)):
             return SearchResponse(tracks=tracks)
         except Exception as e:
             logger.info(f"Tidal search failed: {e}")
-            raise HTTPException(status_code=401, detail=f"Search failed: {str(e)}")
+            raise HTTPException(status_code=401, detail="Search failed")
         
     return SearchResponse(tracks=[])
 
