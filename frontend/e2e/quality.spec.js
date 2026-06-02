@@ -37,6 +37,17 @@ test('quality selector shows actual MAX badge for HI_RES', async ({ page }) => {
   await page.route('**/api/auth/media-token', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'mtok' }) });
   });
+  await page.route('**/api/quality/tidal/*/available', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        available: ['LOW', 'HIGH', 'LOSSLESS', 'HI_RES'],
+        max_quality: 'HI_RES',
+        actual: { HI_RES: 'HI_RES_LOSSLESS', LOSSLESS: 'LOSSLESS', HIGH: 'HIGH', LOW: 'LOW' },
+      }),
+    });
+  });
   await page.route('**/api/quality/**', async (route) => {
     await route.fulfill({
       status: 200,

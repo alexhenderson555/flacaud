@@ -26,6 +26,44 @@ router = APIRouter()
 
 stream_locks = collections.defaultdict(asyncio.Lock)
 
+# UI quality id -> Tidal AudioQuality probe order (highest first)
+_QUALITY_PROBE = (
+    (AudioQuality.HI_RES_LOSSLESS, "HI_RES"),
+    (AudioQuality.LOSSLESS, "LOSSLESS"),
+    (AudioQuality.HIGH, "HIGH"),
+    (AudioQuality.LOW, "LOW"),
+)
+_UI_QUALITY_ORDER = ("LOW", "HIGH", "LOSSLESS", "HI_RES")
+
+
+def _qname(q) -> str:
+    return getattr(q, "name", str(q)).upper()
+
+
+def _probe_tidal_qualities(client, track_id: str) -> dict:
+    """Return available UI qualities and actual Tidal manifest quality per level."""
+    available: list[str] = []
+    actual: dict[str, str] = {}
+    for enum_q, ui_q in _QUALITY_PROBE:
+        try:
+            manifest = client.get_playback_manifest(track_id, enum_q)
+            if ui_q not in available:
+                available.append(ui_q)
+            actual[ui_q] = _qname(manifest.audio_quality)
+        except Exception:
+            continue
+    available.sort(key=lambda q: _UI_QUALITY_ORDER.index(q) if q in _UI_QUALITY_ORDER else 0)
+    max_quality = "LOW"
+    for _, ui_q in _QUALITY_PROBE:
+        if ui_q in available:
+            max_quality = ui_q
+            break
+    return {
+        "available": available or ["LOW"],
+        "max_quality": max_quality,
+        "actual": actual,
+    }
+
 @router.get("/api/image-proxy")
 async def image_proxy(url: str):
     """Proxy remote images for the frontend (CORS). Hardened against SSRF:
@@ -149,6 +187,23 @@ async def get_lyrics(
 def get_downloads() -> dict[str, str]:
     return job_state.get_downloaded_registry()
 
+@router.get("/api/quality/{provider}/{track_id}/available")
+async def get_available_qualities(provider: str, track_id: str):
+    """Probe Tidal for every quality tier; used to enable/disable the player switcher."""
+    p = get_provider_by_name(provider)
+    if not p:
+        raise HTTPException(status_code=400, detail="Provider not found")
+
+    if provider == "tidal":
+        def _probe():
+            with p._client() as c:
+                return _probe_tidal_qualities(c, track_id)
+
+        return await asyncio.to_thread(_probe)
+
+    return {"available": list(_UI_QUALITY_ORDER), "max_quality": "LOSSLESS", "actual": {}}
+
+
 @router.get("/api/quality/{provider}/{track_id}")
 async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES"):
     p = get_provider_by_name(provider)
@@ -166,25 +221,21 @@ async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES
 
         def _get_q():
             with p._client() as c:
-                qualities_to_try = [q_enum]
-                if q_enum == getattr(AudioQuality, "HI_RES_LOSSLESS", None):
-                    qualities_to_try += [AudioQuality.LOSSLESS, AudioQuality.HIGH, AudioQuality.LOW]
-                elif q_enum == AudioQuality.LOSSLESS:
-                    qualities_to_try += [AudioQuality.HIGH, AudioQuality.LOW]
-                elif q_enum == AudioQuality.HIGH:
-                    qualities_to_try += [AudioQuality.LOW]
-
-                for q in qualities_to_try:
-                    try:
-                        manifest = c.get_playback_manifest(track_id, q)
-                        return manifest.audio_quality
-                    except Exception:
-                        continue
-                return AudioQuality.LOW.name
+                probe = _probe_tidal_qualities(c, track_id)
+                ui = quality.upper()
+                if ui in probe["actual"]:
+                    return probe["actual"][ui]
+                if ui == "HI_RES" and "HI_RES" in probe["available"]:
+                    return probe["actual"].get("HI_RES", probe["max_quality"])
+                # Fallback: best at or below requested tier
+                req_idx = _UI_QUALITY_ORDER.index(ui) if ui in _UI_QUALITY_ORDER else 0
+                for q in reversed(_UI_QUALITY_ORDER[: req_idx + 1]):
+                    if q in probe["actual"]:
+                        return probe["actual"][q]
+                return probe["actual"].get(probe["max_quality"], AudioQuality.LOW.name)
 
         actual_q = await asyncio.to_thread(_get_q)
-        qname = getattr(actual_q, "name", str(actual_q))
-        return {"quality": qname}
+        return {"quality": _qname(actual_q) if not isinstance(actual_q, str) else actual_q.upper()}
 
     return {"quality": quality}
 

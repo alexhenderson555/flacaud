@@ -13,6 +13,8 @@ export default function PlayerBar({
   trackDuration,
   volume,
   playbackQuality,
+  availableQualities = ['LOW', 'HIGH', 'LOSSLESS', 'HI_RES'],
+  maxTrackQuality,
   likedTracks,
   isKaraokeOpen,
   isDJOpen,
@@ -160,12 +162,14 @@ export default function PlayerBar({
                { id: 'LOSSLESS', label: 'FLAC', color: '#2575fc', level: 2 },
                { id: 'HI_RES', label: 'MAX', color: '#ffb703', level: 3 }
              ].map(q => {
-               const isDisabled = false;
+               const isDisabled = !availableQualities.includes(q.id);
 
                return (
                  <div 
                    key={q.id}
                    onClick={() => !isDisabled && changeQuality(q.id)}
+                   data-testid={`quality-${q.id}`}
+                   data-available={!isDisabled}
                    style={{
                      padding: '4px 10px',
                      fontSize: '0.65rem',
@@ -180,7 +184,7 @@ export default function PlayerBar({
                      textTransform: 'uppercase',
                      letterSpacing: '0.5px'
                    }}
-                   title={isDisabled ? `Track not available in ${q.label}` : q.label}
+                   title={isDisabled ? `${q.label} — not available for this track` : (maxTrackQuality === q.id ? `${q.label} (max)` : q.label)}
                  >
                    {q.label}
                  </div>

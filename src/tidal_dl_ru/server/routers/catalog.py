@@ -163,7 +163,19 @@ async def _tidal_fallback_playlist(query: str, limit: int) -> list:
     if not p:
         return []
     search_q = _normalize_ai_query(query)
-    tracks = await asyncio.to_thread(p.search, search_q, min(limit, 50))
+    ql = search_q.lower()
+
+    async def _search(term: str, n: int) -> list:
+        return await asyncio.to_thread(p.search, term, min(n, 50))
+
+    # Generic vibe / trending prompts → concrete Tidal queries that always return hits
+    if any(k in ql for k in ("trend", "popular", "hit", "chart", "тренд", "популяр", "хит")):
+        for term in ("top hits", "pop hits", "chart hits", "viral hits", "new releases"):
+            tracks = await _search(term, limit)
+            if tracks:
+                return tracks[:limit]
+
+    tracks = await _search(search_q, limit)
     seen = {t.provider_id for t in tracks}
     if len(tracks) < limit:
         for term in search_q.split()[:6]:
@@ -261,16 +273,20 @@ Format:
     try:
         tracks = await _gemini_tracks()
     except Exception as e:
-        logger.info("Gemini generation failed:", e)
+        logger.info("Gemini generation failed: %s", e)
         tracks = []
 
     if not tracks:
-        tracks = await _tidal_fallback_playlist(req.query, req.limit)
+        try:
+            tracks = await _tidal_fallback_playlist(req.query, req.limit)
+        except Exception as e:
+            logger.info("Tidal fallback playlist failed: %s", e)
+            tracks = []
 
     if not tracks:
         raise HTTPException(
             status_code=503,
-            detail="Could not build playlist. Set GEMINI_API_KEY or try a simpler query.",
+            detail="Could not build playlist. Try a simpler query or check Tidal credentials.",
         )
 
     return SearchResponse(tracks=tracks)

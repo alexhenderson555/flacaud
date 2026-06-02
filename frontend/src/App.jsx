@@ -110,6 +110,9 @@ function App() {
   const [currentAudioSrc, setCurrentAudioSrc] = useState('');
   const [preloadAudioSrc, setPreloadAudioSrc] = useState('');
   const [actualQuality, setActualQuality] = useState('');
+  const [availableQualities, setAvailableQualities] = useState(['LOW', 'HIGH', 'LOSSLESS', 'HI_RES']);
+  const [maxTrackQuality, setMaxTrackQuality] = useState('LOW');
+  const qualityActualRef = useRef({});
   const [theme, setTheme] = useState(localStorage.getItem('tidal-theme') || 'default');
   const [visualizerEnabled, setVisualizerEnabled] = useState(localStorage.getItem('tidal-vis') === 'true');
   const [lang, setLang] = useState(localStorage.getItem('tidal-lang') || 'en');
@@ -328,6 +331,46 @@ function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (!currentTrack?.provider_id) {
+      setAvailableQualities(['LOW', 'HIGH', 'LOSSLESS', 'HI_RES']);
+      setMaxTrackQuality('LOW');
+      qualityActualRef.current = {};
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}/available`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.available?.length) return;
+        setAvailableQualities(data.available);
+        setMaxTrackQuality(data.max_quality || data.available[data.available.length - 1]);
+        qualityActualRef.current = data.actual || {};
+        const actual = data.actual?.[playbackQuality] || data.actual?.[data.max_quality];
+        if (actual) setActualQuality(actual);
+        if (!data.available.includes(playbackQuality)) {
+          const order = ['HI_RES', 'LOSSLESS', 'HIGH', 'LOW'];
+          const fallback = order.find((q) => data.available.includes(q)) || 'LOW';
+          setPlaybackQuality(fallback);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentTrack?.provider_id, currentTrack?.provider]);
+
+  useEffect(() => {
+    if (!currentTrack?.provider_id) return;
+    const actual = qualityActualRef.current[playbackQuality];
+    if (actual) {
+      setActualQuality(actual);
+      return;
+    }
+    fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}`)
+      .then((qRes) => (qRes.ok ? qRes.json() : null))
+      .then((qData) => setActualQuality(qData?.quality || playbackQuality))
+      .catch(() => setActualQuality(playbackQuality));
+  }, [playbackQuality, currentTrack?.provider_id, currentTrack?.provider]);
+
+  useEffect(() => {
     const updateAudioSrc = async () => {
       if (!currentTrack) {
         setCurrentAudioSrc('');
@@ -339,15 +382,9 @@ function App() {
         const bypass = isDownloaded ? 'false' : 'true';
         const mt = await getMediaToken();
         url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${mt}`;
-        // Start buffering immediately; resolve actual quality in parallel (don't block playback).
         setCurrentAudioSrc(url);
-        fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}`)
-          .then((qRes) => (qRes.ok ? qRes.json() : null))
-          .then((qData) => setActualQuality(qData?.quality || playbackQuality))
-          .catch(() => setActualQuality(playbackQuality));
         return;
       }
-      setActualQuality(playbackQuality);
       setCurrentAudioSrc(url);
     };
     updateAudioSrc();
@@ -1096,6 +1133,8 @@ function App() {
         trackDuration={trackDuration}
         volume={volume}
         playbackQuality={playbackQuality}
+        availableQualities={availableQualities}
+        maxTrackQuality={maxTrackQuality}
         likedTracks={likedTracks}
         isKaraokeOpen={isKaraokeOpen}
         isDJOpen={isDJOpen}
