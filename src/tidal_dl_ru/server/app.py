@@ -215,12 +215,36 @@ async def get_album_api(album_id: str):
 
 @app.get("/api/image-proxy")
 async def image_proxy(url: str):
-    """Securely proxy images to bypass CORS restrictions on the frontend."""
+    """Proxy remote images for the frontend (CORS). Hardened against SSRF:
+    only http(s), and the host must resolve exclusively to public addresses
+    (blocks loopback, RFC1918, link-local/metadata, reserved, etc.)."""
+    import ipaddress
+    import socket
     from urllib.parse import urlparse
+
     parsed = urlparse(url)
-    if parsed.hostname in ("localhost", "127.0.0.1", "::1") or (parsed.hostname and parsed.hostname.startswith("169.254")):
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise HTTPException(status_code=400, detail="Invalid URL")
-    async with httpx.AsyncClient() as client:
+
+    # Resolve the host and reject if ANY resolved address is non-public.
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Cannot resolve host")
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Blocked address")
+        if (
+            ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+        ):
+            raise HTTPException(status_code=400, detail="Blocked address")
+
+    # follow_redirects stays off so a 30x can't bounce us to an internal host.
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
         r = await client.get(url)
         headers = {
             "Access-Control-Allow-Origin": "*",

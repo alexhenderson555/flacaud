@@ -1,5 +1,7 @@
 import os
-from datetime import datetime, timedelta
+import secrets
+import warnings
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
@@ -9,12 +11,21 @@ from sqlmodel import Session
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import User
 
-# Load from env in production. Changing this invalidates all issued JWTs, so keep
-# it stable across restarts (set TIDALDLRU_JWT_SECRET) — otherwise users get
-# silently logged out on every redeploy.
-SECRET_KEY = os.environ.get(
-    "TIDALDLRU_JWT_SECRET", "your-secret-key-very-secure-flacaudio-jwt"
-)
+# JWT signing secret. MUST be set via TIDALDLRU_JWT_SECRET in production and kept
+# stable across restarts — otherwise issued tokens silently stop validating.
+# We never ship a hardcoded default: a known secret means anyone can forge a
+# login token. If the env var is missing we generate a random per-process key
+# (secure, but tokens won't survive a restart) and warn loudly.
+SECRET_KEY = os.environ.get("TIDALDLRU_JWT_SECRET")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_urlsafe(48)
+    warnings.warn(
+        "TIDALDLRU_JWT_SECRET is not set — using an ephemeral random key. "
+        "Tokens will be invalidated on restart and won't work across the "
+        "api/worker containers. Set TIDALDLRU_JWT_SECRET in production.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
@@ -34,9 +45,9 @@ def get_password_hash(password: str):
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

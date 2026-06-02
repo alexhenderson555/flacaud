@@ -121,7 +121,7 @@ export default function Search() {
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: 10 })
       });
       const data = await res.json();
@@ -208,7 +208,7 @@ export default function Search() {
     try {
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({
           url: url,
           quality: 'LOSSLESS',
@@ -244,7 +244,7 @@ export default function Search() {
     try {
       const res = await fetch('/api/ai-playlist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ query: aiQuery, imageBase64: aiImageBase64, limit: 10 })
       });
       const data = await res.json();
@@ -268,7 +268,7 @@ export default function Search() {
       // We send a request asking for more tracks, avoiding the ones we already have
       const res = await fetch('/api/ai-playlist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ 
           query: aiQuery + ` (Do NOT include these: ${existingTitles})`, 
           limit: 10 

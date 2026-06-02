@@ -1,4 +1,9 @@
-"""Tests for server.payments — webhook processing."""
+"""Tests for server.payments — webhook processing.
+
+Webhooks are now verified server-side: `process_webhook` re-fetches the payment
+from YooKassa via `_fetch_payment`. Tests monkeypatch that call so they stay
+offline while still exercising the real verification logic.
+"""
 
 import pytest
 
@@ -16,72 +21,90 @@ def _isolated_db(tmp_path, monkeypatch):
     users_mod._SessionLocal = None
 
 
+def _verified(plan: str, telegram_id: str = "12345", value: str | None = None):
+    """Build a fake authoritative YooKassa payment response."""
+    from tidal_dl_ru.server import payments as pmod
+    from tidal_dl_ru.bot.users import Plan
+
+    if value is None:
+        value = pmod.PLAN_PRICE.get(Plan(plan), "0.00")
+    return {
+        "status": "succeeded",
+        "paid": True,
+        "amount": {"value": value, "currency": "RUB"},
+        "metadata": {"telegram_id": telegram_id, "plan": plan},
+    }
+
+
 class TestProcessWebhook:
-    def test_successful_payment(self):
+    def test_successful_payment(self, monkeypatch):
         from tidal_dl_ru.bot.users import Plan, get_or_create
-        from tidal_dl_ru.server.payments import process_webhook
+        from tidal_dl_ru.server import payments as pmod
 
         get_or_create(12345)
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: _verified("pro"))
 
-        body = {
-            "event": "payment.succeeded",
-            "object": {
-                "status": "succeeded",
-                "metadata": {
-                    "telegram_id": "12345",
-                    "plan": "pro",
-                },
-            },
-        }
-        result = process_webhook(body)
-        assert result is True
+        body = {"event": "payment.succeeded", "object": {"id": "pay_1", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is True
 
         user = get_or_create(12345)
         assert user.plan == Plan.PRO.value
         assert user.subscription_expires_at is not None
 
+    def test_lifetime_plan(self, monkeypatch):
+        from tidal_dl_ru.bot.users import Plan, get_or_create
+        from tidal_dl_ru.server import payments as pmod
+
+        get_or_create(12345)
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: _verified("lifetime"))
+
+        body = {"event": "payment.succeeded", "object": {"id": "pay_2", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is True
+        assert get_or_create(12345).plan == Plan.LIFETIME.value
+
     def test_wrong_event_ignored(self):
         from tidal_dl_ru.server.payments import process_webhook
 
-        body = {"event": "payment.canceled", "object": {}}
-        assert process_webhook(body) is False
+        assert process_webhook({"event": "payment.canceled", "object": {}}) is False
 
-    def test_missing_metadata(self):
+    def test_missing_payment_id(self):
         from tidal_dl_ru.server.payments import process_webhook
 
-        body = {
-            "event": "payment.succeeded",
-            "object": {"status": "succeeded", "metadata": {}},
-        }
+        body = {"event": "payment.succeeded", "object": {"status": "succeeded"}}
         assert process_webhook(body) is False
 
-    def test_invalid_plan(self):
-        from tidal_dl_ru.server.payments import process_webhook
+    def test_unverifiable_payment_rejected(self, monkeypatch):
+        """If YooKassa can't confirm the payment, never grant the plan —
+        this is what blocks spoofed webhook bodies."""
+        from tidal_dl_ru.server import payments as pmod
 
-        body = {
-            "event": "payment.succeeded",
-            "object": {
-                "status": "succeeded",
-                "metadata": {"telegram_id": "12345", "plan": "invalid"},
-            },
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: None)
+        body = {"event": "payment.succeeded", "object": {"id": "forged", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is False
+
+    def test_amount_mismatch_rejected(self, monkeypatch):
+        """A verified payment whose amount doesn't match the plan price is rejected."""
+        from tidal_dl_ru.server import payments as pmod
+
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: _verified("pro", value="1.00"))
+        body = {"event": "payment.succeeded", "object": {"id": "pay_3", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is False
+
+    def test_missing_metadata(self, monkeypatch):
+        from tidal_dl_ru.server import payments as pmod
+
+        verified = {"status": "succeeded", "paid": True, "amount": {"value": "399.00"}, "metadata": {}}
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: verified)
+        body = {"event": "payment.succeeded", "object": {"id": "pay_4", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is False
+
+    def test_invalid_plan(self, monkeypatch):
+        from tidal_dl_ru.server import payments as pmod
+
+        verified = {
+            "status": "succeeded", "paid": True, "amount": {"value": "399.00"},
+            "metadata": {"telegram_id": "12345", "plan": "invalid"},
         }
-        assert process_webhook(body) is False
-
-    def test_lifetime_plan(self):
-        from tidal_dl_ru.bot.users import Plan, get_or_create
-        from tidal_dl_ru.server.payments import PLAN_DURATION_DAYS, process_webhook
-
-        get_or_create(12345)
-
-        body = {
-            "event": "payment.succeeded",
-            "object": {
-                "status": "succeeded",
-                "metadata": {"telegram_id": "12345", "plan": "lifetime"},
-            },
-        }
-        result = process_webhook(body)
-        assert result is True
-
-        user = get_or_create(12345)
-        assert user.plan == Plan.LIFETIME.value
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: verified)
+        body = {"event": "payment.succeeded", "object": {"id": "pay_5", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is False

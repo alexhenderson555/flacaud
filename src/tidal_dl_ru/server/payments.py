@@ -6,8 +6,6 @@ Docs: https://yookassa.ru/developers/api
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -76,20 +74,54 @@ def create_payment(
     return data.get("confirmation", {}).get("confirmation_url")
 
 
+def _fetch_payment(payment_id: str) -> Optional[dict]:
+    """Re-fetch a payment from YooKassa's API — the only authoritative source.
+
+    Webhook bodies are attacker-spoofable (anyone can POST JSON); the IP
+    allowlist in the route is bypassable via X-Forwarded-For. So we never trust
+    the body: we pull the payment straight from YooKassa with our secret key and
+    act only on what *they* report. Returns None if it can't be verified.
+    """
+    if not SHOP_ID or not SECRET_KEY:
+        return None
+    try:
+        resp = httpx.get(
+            f"{YOOKASSA_API}/payments/{payment_id}",
+            auth=(SHOP_ID, SECRET_KEY),
+            timeout=15.0,
+        )
+    except httpx.HTTPError:
+        return None
+    if resp.status_code != 200:
+        return None
+    return resp.json()
+
+
 def process_webhook(body: dict) -> bool:
-    """Process a YooKassa webhook notification. Returns True if subscription updated."""
-    event = body.get("event", "")
-    if event != "payment.succeeded":
+    """Process a YooKassa webhook. Returns True only if a *verified* payment
+    succeeded and the subscription was updated.
+
+    The webhook body is treated as an untrusted hint: we take the payment id
+    from it, then re-fetch the payment server-side and trust only that response.
+    """
+    if body.get("event", "") != "payment.succeeded":
         return False
 
-    obj = body.get("object", {})
-    if obj.get("status") != "succeeded":
+    obj = body.get("object", {}) or {}
+    payment_id = obj.get("id")
+    if not payment_id:
         return False
 
-    metadata = obj.get("metadata", {})
+    # Authoritative server-side verification — never trust the body alone.
+    verified = _fetch_payment(str(payment_id))
+    if not verified:
+        return False
+    if verified.get("status") != "succeeded" or not verified.get("paid", False):
+        return False
+
+    metadata = verified.get("metadata", {}) or {}
     telegram_id_str = metadata.get("telegram_id")
     plan_str = metadata.get("plan")
-
     if not telegram_id_str or not plan_str:
         return False
 
@@ -99,12 +131,15 @@ def process_webhook(body: dict) -> bool:
     except (ValueError, KeyError):
         return False
 
-    # Ensure user exists.
-    get_or_create(telegram_id)
+    # Guard against tampered/mismatched amounts.
+    expected_price = PLAN_PRICE.get(plan)
+    paid_value = (verified.get("amount") or {}).get("value")
+    if expected_price and paid_value and str(paid_value) != str(expected_price):
+        return False
 
-    # Calculate expiration.
+    # Ensure user exists, then grant the plan.
+    get_or_create(telegram_id)
     days = PLAN_DURATION_DAYS.get(plan, 30)
     expires_at = datetime.now(timezone.utc) + timedelta(days=days)
-
     set_plan(telegram_id, plan, expires_at=expires_at)
     return True

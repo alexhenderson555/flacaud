@@ -31,7 +31,7 @@ export default function SetAnalyzer() {
       setError(null);
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ url, job_type: 'analyze_set' })
       });
       if (!res.ok) throw new Error('Failed to start analysis');
@@ -70,7 +70,7 @@ export default function SetAnalyzer() {
       if (trackInfo.matched_track) {
         const res = await fetch('/api/jobs', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
           body: JSON.stringify({ url: trackInfo.matched_track.source_url, job_type: 'download' })
         });
         if (res.ok) {
@@ -142,7 +142,7 @@ export default function SetAnalyzer() {
           onClick={async () => {
             const res = await fetch('/api/jobs', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
               body: JSON.stringify({ url: url, job_type: 'download', quality: 'LOSSLESS' })
             });
             if (res.ok) {
@@ -256,7 +256,7 @@ export default function SetAnalyzer() {
                           e.stopPropagation();
                           const res = await fetch('/api/jobs', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
                             body: JSON.stringify({ url: track.matched_track.source_url, job_type: 'download' })
                           });
                           if (res.ok) {

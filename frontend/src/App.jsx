@@ -610,7 +610,7 @@ function App() {
     try {
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({
           provider: currentTrack.provider,
           url: `https://tidal.com/track/${currentTrack.provider_id}`,

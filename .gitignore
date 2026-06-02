@@ -12,5 +12,18 @@ downloads/
 *.flac
 *.m4a
 *.mp3
-tokens.json
 .env
+
+# Databases & secrets — NEVER commit (hold tokens / PII / the pool Fernet key)
+*.db
+*.sqlite3
+pool.key
+tokens.json
+tidal_auth.json
+
+# Throwaway ops/debug scripts & build artifacts
+scratch/
+*.tar.gz
+alex.txt
+*_output.txt
+tidal_login_url.txt

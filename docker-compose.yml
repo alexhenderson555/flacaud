@@ -17,8 +17,8 @@ services:
       - "${API_PORT:-8001}:8000"
     environment:
       REDIS_URL: redis://redis:6379/0
-      TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:-change-me-in-production}
-      TIDALDLRU_JWT_SECRET: ${TIDALDLRU_JWT_SECRET:-change-me-in-production}
+      TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
+      TIDALDLRU_JWT_SECRET: ${TIDALDLRU_JWT_SECRET:?Set TIDALDLRU_JWT_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
       TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
       TIDALDLRU_DB_PATH: /var/lib/tidal-dl-ru/db/flacaudio.db
@@ -39,7 +39,7 @@ services:
     command: ["arq", "tidal_dl_ru.server.worker.WorkerSettings"]
     environment:
       REDIS_URL: redis://redis:6379/0
-      TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:-change-me-in-production}
+      TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
       TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
       TIDALDLRU_ARQ_MAX_JOBS: ${TIDALDLRU_ARQ_MAX_JOBS:-4}

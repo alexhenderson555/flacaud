@@ -16,7 +16,7 @@ with SCPClient(ssh.get_transport()) as scp:
     scp.put("app.tar.gz", remote_path="/opt/tidal-dl-ru/")
 
 print("Extracting and building...")
-cmd = "cd /opt/tidal-dl-ru && tar -xzf app.tar.gz && docker compose down && docker compose build api worker bot && docker compose up -d --remove-orphans"
+cmd = "cd /opt/tidal-dl-ru && tar -xzf app.tar.gz && docker compose down || true && docker rm -f tidal-dl-ru-api-1 tidal-dl-ru-worker-1 tidal-dl-ru-bot-1 || true && docker compose build api worker bot && docker compose up -d --remove-orphans"
 stdin, stdout, stderr = ssh.exec_command(cmd)
 
 for line in iter(stdout.readline, ""):

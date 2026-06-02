@@ -137,7 +137,7 @@ export default function Library() {
     try {
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ url: track.source_url, quality: 'LOSSLESS' })
       });
       if (res.ok) {
@@ -444,7 +444,7 @@ export default function Library() {
                       try {
                         const res = await fetch('/api/jobs', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
                           body: JSON.stringify({ url: track.source_url, quality: 'LOSSLESS' })
                         });
                         if (res.ok) {

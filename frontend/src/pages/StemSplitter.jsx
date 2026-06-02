@@ -16,7 +16,7 @@ export default function StemSplitter() {
       setError(null);
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ url, job_type: 'download', quality: 'LOSSLESS', split: true })
       });
       if (!res.ok) throw new Error('Failed to start stem splitting');
