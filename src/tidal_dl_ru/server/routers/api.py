@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Depends
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from tidal_dl_ru.server.schemas import SearchResponse, ProviderInfo, SearchRequest, PoolHealth
 from tidal_dl_ru.core.router import all_providers, get_provider_by_name
-from tidal_dl_ru.database.auth import get_current_user
+from tidal_dl_ru.database.auth import get_current_user, get_media_user
 from tidal_dl_ru.database.models import User
 import logging
 
@@ -370,7 +370,7 @@ async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES
     return {"quality": quality}
 
 @router.get("/api/stream/{provider}/{track_id}")
-async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_current_user), quality: str = "LOW", bypass_registry: str = "false"):
+async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_media_user), quality: str = "LOW", bypass_registry: str = "false"):
     if bypass_registry.lower() != "true":
         registry = job_state.get_downloaded_registry()
         if track_id in registry:

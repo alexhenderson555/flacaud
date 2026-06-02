@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, CheckCircle2, Loader2, X } from 'lucide-react';
 import { getCachedAudioUrl } from '../utils/cache';
+import { getMediaToken } from '../utils/mediaToken';
 
 const qualityLabel = (q) => (q === 'HI_RES' ? 'MAX' : q);
 
@@ -17,7 +18,7 @@ export default function DownloadToast() {
     } else if (job.provider_id) {
       url = await getCachedAudioUrl({ provider: job.provider, provider_id: job.provider_id }, job.quality);
       if (!url) {
-        url = `/api/stream/${job.provider}/${job.provider_id}?quality=${job.quality}&token=${localStorage.getItem('tidal-token') || ''}`;
+        url = `/api/stream/${job.provider}/${job.provider_id}?quality=${job.quality}&mt=${await getMediaToken()}`;
       }
     }
     

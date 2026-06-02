@@ -53,32 +53,85 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 from fastapi import Request
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from tidal_dl_ru.database.database import engine
 
-def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
+# ── Short-lived media tokens ────────────────────────────────────────────────
+# Browser media contexts (<audio src>, <a href> downloads) can't send an
+# Authorization header. Rather than leaking the 7-day session JWT in the URL
+# (it lands in access logs / history), we mint a 1-hour signed token that only
+# grants media/file access.
+MEDIA_TOKEN_TTL = 3600  # seconds
+
+
+def _media_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(SECRET_KEY, salt="tidaldl-media-v1")
+
+
+def sign_media_token(user_id: int) -> str:
+    return _media_serializer().dumps({"uid": user_id})
+
+
+def verify_media_token(token: str) -> Optional[int]:
+    try:
+        data = _media_serializer().loads(token, max_age=MEDIA_TOKEN_TTL)
+    except (BadSignature, SignatureExpired):
+        return None
+    uid = data.get("uid")
+    return int(uid) if uid is not None else None
+
+
+def _creds_exc() -> HTTPException:
+    return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if not token:
-        # Fallback for browser contexts that can't send an Authorization header
-        # (<audio src>, <a href> downloads, EventSource). Query-param tokens can
-        # land in access logs, so this is only a fallback, not the primary path.
-        token = request.query_params.get("token")
-    if not token:
-        raise credentials_exception
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
 
+
+def _user_from_username(username: Optional[str]) -> User:
+    if not username:
+        raise _creds_exc()
     with Session(engine) as session:
         user = session.exec(select(User).where(User.username == username)).first()
         if user is None:
-            raise credentials_exception
+            raise _creds_exc()
         session.expunge(user)
         return user
+
+
+def _user_from_jwt(token: str) -> User:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise _creds_exc()
+    return _user_from_username(payload.get("sub"))
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    """Header-only auth (Authorization: Bearer <jwt>) for the JSON API.
+
+    Query-param tokens are intentionally NOT accepted here — only media
+    endpoints take a (short-lived) query token, via get_media_user."""
+    if not token:
+        raise _creds_exc()
+    return _user_from_jwt(token)
+
+
+def get_media_user(request: Request, token: str = Depends(oauth2_scheme)) -> User:
+    """Auth for media/file GETs reachable from <audio src>/<a href>: accepts a
+    short-lived ?mt= media token, falling back to the Authorization header."""
+    mt = request.query_params.get("mt")
+    if mt:
+        uid = verify_media_token(mt)
+        if uid is None:
+            raise _creds_exc()
+        with Session(engine) as session:
+            user = session.get(User, uid)
+            if user is None:
+                raise _creds_exc()
+            session.expunge(user)
+            return user
+    if not token:
+        raise _creds_exc()
+    return _user_from_jwt(token)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from tidal_dl_ru.server.schemas import JobCreate, JobStatus
 from tidal_dl_ru.database.models import User
-from tidal_dl_ru.database.auth import get_current_user
+from tidal_dl_ru.database.auth import get_current_user, get_media_user
 from tidal_dl_ru.server import jobs as job_state
 from tidal_dl_ru.server.settings import settings
 from tidal_dl_ru.core.router import find_provider
@@ -79,7 +79,7 @@ def job_status(job_id: str, current_user: User = Depends(get_current_user)) -> J
     return s
 
 @router.get("/{job_id}/zip")
-def download_job_zip(job_id: str, current_user: User = Depends(get_current_user)):
+def download_job_zip(job_id: str, current_user: User = Depends(get_media_user)):
     s = job_state.load(job_id)
     if s is not None and s.owner_id is not None and s.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your job")

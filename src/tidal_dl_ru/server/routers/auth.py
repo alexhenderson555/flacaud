@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import User, UserCreate, UserRead
-from tidal_dl_ru.database.auth import get_password_hash, verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
+from tidal_dl_ru.database.auth import get_password_hash, verify_password, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, sign_media_token, MEDIA_TOKEN_TTL
 from tidal_dl_ru.providers.tidal.auth import load_tokens, pkce_login_url, extract_code_from_url, pkce_exchange_code, save_tokens, AuthError
 import httpx
 from pydantic import BaseModel
@@ -47,6 +47,13 @@ def get_me(current_user: User = Depends(get_current_user)):
     data["effective_plan"] = current_user.effective_plan
     data["daily_limit"] = current_user.daily_limit
     return data
+
+
+@router.get("/media-token")
+def media_token(current_user: User = Depends(get_current_user)):
+    """Mint a short-lived token for <audio src>/<a href> media URLs, so the
+    long-lived session JWT never has to ride in a query string."""
+    return {"token": sign_media_token(current_user.id), "expires_in": MEDIA_TOKEN_TTL}
 
 @router.get("/status")
 def auth_status():

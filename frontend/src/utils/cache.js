@@ -1,4 +1,5 @@
 import localforage from 'localforage';
+import { getMediaToken } from './mediaToken';
 
 localforage.config({
   name: 'FlacAudio',
@@ -12,7 +13,7 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
     const existing = await localforage.getItem(cacheKey);
     if (existing) return true; // Already cached
 
-    let resource = `/api/stream/${track.provider}/${track.provider_id}?quality=${quality}&token=${localStorage.getItem('tidal-token') || ''}`;
+    let resource = `/api/stream/${track.provider}/${track.provider_id}?quality=${quality}&mt=${await getMediaToken()}`;
     if (window.__TAURI__) {
       resource = 'http://localhost:8000' + resource;
     }

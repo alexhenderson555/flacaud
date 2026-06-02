@@ -65,3 +65,22 @@ class TestJobOwnership:
         _stub_job(monkeypatch, owner_id=None)
         app.dependency_overrides[get_current_user] = lambda: _user(99)
         assert client.get("/api/jobs/abc").status_code == 200
+
+
+class TestMediaToken:
+    def test_sign_verify_roundtrip(self):
+        from tidal_dl_ru.database.auth import sign_media_token, verify_media_token
+
+        assert verify_media_token(sign_media_token(42)) == 42
+
+    def test_garbage_token_rejected(self):
+        from tidal_dl_ru.database.auth import verify_media_token
+
+        assert verify_media_token("not-a-real-token") is None
+
+    def test_media_token_endpoint_requires_auth(self):
+        assert client.get("/api/auth/media-token").status_code == 401
+
+    def test_zip_rejects_bad_media_token(self):
+        # get_media_user must reject an invalid ?mt= rather than fall through.
+        assert client.get("/api/jobs/whatever/zip?mt=garbage").status_code == 401

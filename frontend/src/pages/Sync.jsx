@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getMediaToken } from '../utils/mediaToken';
 import { motion } from 'framer-motion';
 import { Repeat, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -9,6 +10,7 @@ export default function Sync() {
   const [syncStatus, setSyncStatus] = useState(null);
   const [jobId, setJobId] = useState(null);
   const [downloadReady, setDownloadReady] = useState(false);
+  const [zipToken, setZipToken] = useState('');
 
   const platforms = [
     { id: 'spotify', name: 'Spotify', color: '#1DB954', logo: 'https://cdn.simpleicons.org/spotify/1DB954' },
@@ -69,6 +71,7 @@ export default function Sync() {
           clearInterval(iv);
           setSyncStatus(`Done! Successfully synced ${data.tracks.length} tracks.`);
           setDownloadReady(true);
+          getMediaToken().then(setZipToken);
           setIsSyncing(false);
         } else if (data.status === 'failed') {
           clearInterval(iv);
@@ -177,7 +180,7 @@ export default function Sync() {
 
                 {downloadReady ? (
                   <a
-                    href={`/api/jobs/${jobId}/zip?token=${localStorage.getItem('tidal-token') || ''}`}
+                    href={`/api/jobs/${jobId}/zip?mt=${zipToken}`}
                     download
                     className="btn-primary"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '16px', textDecoration: 'none', background: 'var(--success)' }}

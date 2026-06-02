@@ -17,6 +17,7 @@ import CommandPalette from './components/CommandPalette';
 import PlaylistModal from './components/PlaylistModal';
 import { FastAverageColor } from 'fast-average-color';
 import { getCachedAudioUrl } from './utils/cache';
+import { getMediaToken } from './utils/mediaToken';
 import { Navigate } from 'react-router-dom';
 
 const dict = {
@@ -278,7 +279,7 @@ function App() {
       if (!url) {
         const isDownloaded = downloadedTracksRef.current.has(currentTrack.provider_id);
         const bypass = isDownloaded ? 'false' : 'true';
-        url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&token=${localStorage.getItem('tidal-token') || ''}`;
+        url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${await getMediaToken()}`;
         try {
           const qRes = await fetch(`/api/quality/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}`);
           if (qRes.ok) {
@@ -306,7 +307,7 @@ function App() {
         if (!url) {
           const isDownloaded = downloadedTracksRef.current.has(nextTrack.provider_id);
           const bypass = isDownloaded ? 'false' : 'true';
-          url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&token=${localStorage.getItem('tidal-token') || ''}`;
+          url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${await getMediaToken()}`;
         }
         setPreloadAudioSrc(url);
       } else {
