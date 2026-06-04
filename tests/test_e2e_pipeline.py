@@ -27,9 +27,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import arq.worker as arq_worker_mod
 import httpx
 import pytest
-import arq.worker as arq_worker_mod
 from arq.connections import ArqRedis
 from arq.worker import Worker
 from fakeredis import FakeServer, FakeStrictRedis
@@ -247,10 +247,11 @@ def live_auth(tmp_path, monkeypatch):
     auth.py binds ``engine`` at import, so both it and database.engine must be
     pointed at the temp DB for the route's user lookup to see our test user.
     """
+    from sqlmodel import SQLModel, create_engine
+
     import tidal_dl_ru.database.auth as auth_mod
     import tidal_dl_ru.database.database as db_mod
     import tidal_dl_ru.database.models  # noqa: F401 — register tables
-    from sqlmodel import SQLModel, create_engine
 
     engine = create_engine(
         f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",

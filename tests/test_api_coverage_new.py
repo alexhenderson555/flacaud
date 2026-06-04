@@ -1,7 +1,9 @@
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
+
 from tidal_dl_ru.server.app import app
-from unittest.mock import patch
 
 client = TestClient(app)
 

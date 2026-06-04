@@ -7,6 +7,29 @@ from tidal_dl_ru.core.router import get_provider_by_name
 from tidal_dl_ru.server import jobs as job_state
 
 
+def _download_progress_hook(job_id: str):
+    last_label = [""]
+
+    def hook(data: dict) -> None:
+        status = data.get("status")
+        if status == "downloading":
+            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+            downloaded = data.get("downloaded_bytes") or 0
+            if total > 0:
+                pct = min(99, int(downloaded * 100 / total))
+                label = f"Downloading Set… {pct}%"
+            else:
+                mb = downloaded / (1024 * 1024)
+                label = f"Downloading Set… {mb:.1f} MB"
+            if label != last_label[0]:
+                last_label[0] = label
+                job_state.mark_running(job_id, 1, [label])
+        elif status == "finished":
+            job_state.mark_running(job_id, 1, ["Processing audio…"])
+
+    return hook
+
+
 async def analyze_set_task(
     job_id: str,
     url: str,
@@ -20,17 +43,22 @@ async def analyze_set_task(
     results = []
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        audio_file = os.path.join(temp_dir, "set_audio.mp3")
+        audio_base = os.path.join(temp_dir, "set_audio")
+        audio_file = f"{audio_base}.mp3"
 
         ydl_opts = {
             'format': 'bestaudio/best',
-            'outtmpl': audio_file.replace('.mp3', '.%(ext)s'),
+            'outtmpl': f'{audio_base}.%(ext)s',
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
             'quiet': True,
             'no_warnings': True,
+            'socket_timeout': 30,
+            'retries': 3,
+            'fragment_retries': 5,
+            'progress_hooks': [_download_progress_hook(job_id)],
         }
 
-        job_state.mark_running(job_id, 1, ["Downloading Set Audio"])
+        job_state.mark_running(job_id, 1, ["Downloading Set… 0%"])
 
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -43,8 +71,17 @@ async def analyze_set_task(
             return {"ok": False, "error": str(e)}
 
         if not os.path.exists(audio_file):
-            job_state.mark_failed(job_id, "Audio file was not created.")
-            return {"ok": False, "error": "No audio file"}
+            # yt-dlp may leave intermediate ext before ffmpeg
+            candidates = [
+                p for p in os.listdir(temp_dir)
+                if p.startswith("set_audio") and not p.endswith(".part")
+            ]
+            mp3 = next((p for p in candidates if p.endswith(".mp3")), None)
+            if mp3:
+                audio_file = os.path.join(temp_dir, mp3)
+            else:
+                job_state.mark_failed(job_id, "Audio file was not created.")
+                return {"ok": False, "error": "No audio file"}
 
         job_state.mark_running(job_id, 1, ["Analyzing Audio"])
 
@@ -93,7 +130,6 @@ async def analyze_set_task(
                 if current_track == last_confirmed:
                     pass
                 elif current_track == pending_track:
-                    # Confirmed track! Add it.
                     track_info = {
                         "artist": current_artist or "Unknown",
                         "title": current_title or pending_track,
@@ -118,10 +154,25 @@ async def analyze_set_task(
                 else:
                     pending_track = current_track
                     pending_timestamp = timestamp
-                    current_artist_pending = current_artist
-                    current_title_pending = current_title
             else:
                 pending_track = None
+
+        if pending_track and pending_track != last_confirmed:
+            track_info = {
+                "artist": "Unknown",
+                "title": pending_track,
+                "timestamp": pending_timestamp,
+                "matched_track": None,
+            }
+            if provider:
+                try:
+                    tidal_tracks = await asyncio.to_thread(provider.search, pending_track, 1)
+                    if tidal_tracks:
+                        track_info["matched_track"] = tidal_tracks[0].model_dump()
+                except Exception:
+                    pass
+            results.append(track_info)
+            job_state.update_set_tracks(job_id, results)
 
         job_state.mark_done(job_id)
         return {"ok": True, "count": len(results)}

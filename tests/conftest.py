@@ -19,6 +19,9 @@ def _fresh_db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    import tidal_dl_ru.database.models  # noqa: F401
+    import tidal_dl_ru.server.activation_codes  # noqa: F401
+
     SQLModel.metadata.create_all(engine)
     original = db_mod.engine
     db_mod.engine = engine

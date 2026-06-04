@@ -1,6 +1,7 @@
 """Tests for providers — URL parsing, manifest handling, auth helpers."""
 
 import re
+
 import pytest
 
 

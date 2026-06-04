@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+
 from tidal_dl_ru.server.app import app
 
 client = TestClient(app)

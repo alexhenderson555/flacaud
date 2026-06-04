@@ -12,8 +12,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
+from sqlmodel import Session
 
-from tidal_dl_ru.bot.users import Plan, get_or_create, set_plan
+from tidal_dl_ru.bot.users import Plan, get_or_create, set_plan, set_plan_for_user_id
+from tidal_dl_ru.database import database as db_mod
+from tidal_dl_ru.database.models import User
 
 YOOKASSA_API = "https://api.yookassa.ru/v3"
 
@@ -36,28 +39,37 @@ PLAN_DURATION_DAYS = {
 
 
 def create_payment(
-    telegram_id: int,
     plan: Plan,
     return_url: str = "https://t.me/tidal_dl_ru_bot",
+    *,
+    telegram_id: Optional[int] = None,
+    user_id: Optional[int] = None,
 ) -> Optional[str]:
     """Create a YooKassa payment and return the confirmation URL."""
     if not SHOP_ID or not SECRET_KEY:
+        return None
+    if not telegram_id and not user_id:
         return None
 
     price = PLAN_PRICE.get(plan)
     if not price:
         return None
 
+    metadata = {"plan": plan.value}
+    if telegram_id:
+        metadata["telegram_id"] = str(telegram_id)
+        desc = f"tidal-dl-ru {plan.value.upper()} — Telegram {telegram_id}"
+    else:
+        metadata["user_id"] = str(user_id)
+        desc = f"tidal-dl-ru {plan.value.upper()} — Web user {user_id}"
+
     idempotency_key = str(uuid.uuid4())
     payload = {
         "amount": {"value": price, "currency": "RUB"},
         "confirmation": {"type": "redirect", "return_url": return_url},
         "capture": True,
-        "description": f"tidal-dl-ru {plan.value.upper()} — Telegram {telegram_id}",
-        "metadata": {
-            "telegram_id": str(telegram_id),
-            "plan": plan.value,
-        },
+        "description": desc,
+        "metadata": metadata,
     }
 
     resp = httpx.post(
@@ -120,26 +132,45 @@ def process_webhook(body: dict) -> bool:
         return False
 
     metadata = verified.get("metadata", {}) or {}
-    telegram_id_str = metadata.get("telegram_id")
     plan_str = metadata.get("plan")
-    if not telegram_id_str or not plan_str:
+    if not plan_str:
         return False
 
     try:
-        telegram_id = int(telegram_id_str)
         plan = Plan(plan_str)
     except (ValueError, KeyError):
         return False
 
-    # Guard against tampered/mismatched amounts.
     expected_price = PLAN_PRICE.get(plan)
     paid_value = (verified.get("amount") or {}).get("value")
     if expected_price and paid_value and str(paid_value) != str(expected_price):
         return False
 
-    # Ensure user exists, then grant the plan.
-    get_or_create(telegram_id)
     days = PLAN_DURATION_DAYS.get(plan, 30)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
-    set_plan(telegram_id, plan, expires_at=expires_at)
-    return True
+    expires_at = None if plan == Plan.LIFETIME else datetime.now(timezone.utc) + timedelta(days=days)
+
+    telegram_id_str = metadata.get("telegram_id")
+    user_id_str = metadata.get("user_id")
+
+    if telegram_id_str:
+        try:
+            telegram_id = int(telegram_id_str)
+        except ValueError:
+            return False
+        get_or_create(telegram_id)
+        set_plan(telegram_id, plan, expires_at=expires_at)
+        return True
+
+    if user_id_str:
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            return False
+        set_plan_for_user_id(user_id, plan, expires_at=expires_at)
+        with Session(db_mod.engine) as session:
+            user = session.get(User, user_id)
+            if user and user.telegram_id:
+                set_plan(user.telegram_id, plan, expires_at=expires_at)
+        return True
+
+    return False

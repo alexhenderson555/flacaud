@@ -61,10 +61,10 @@ class TestTranslateTexts:
     @pytest.mark.asyncio
     async def test_no_key_raises(self):
         """Without DEEPL_KEY, translate_texts should raise TranslationError."""
-        from tidal_dl_ru.core.translate import TranslationError, translate_texts
-
         # Only test if key is not set (CI/dev environment).
         import os
+
+        from tidal_dl_ru.core.translate import TranslationError, translate_texts
         if os.environ.get("TIDALDLRU_DEEPL_KEY"):
             pytest.skip("DEEPL_KEY is set, skipping error test")
 
@@ -74,9 +74,9 @@ class TestTranslateTexts:
     @pytest.mark.asyncio
     async def test_empty_input(self):
         """Empty list should return empty list without API call."""
-        from tidal_dl_ru.core.translate import translate_texts
-
         import os
+
+        from tidal_dl_ru.core.translate import translate_texts
         if not os.environ.get("TIDALDLRU_DEEPL_KEY"):
             pytest.skip("Need DEEPL_KEY for this test")
 

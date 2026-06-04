@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -20,12 +19,9 @@ from aiogram.client.default import DefaultBotProperties
 from tidal_dl_ru.bot.api_client import APIClient
 from tidal_dl_ru.bot.handlers import router
 from tidal_dl_ru.bot.settings import bot_settings
+from tidal_dl_ru.logging_config import configure_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    stream=sys.stderr,
-)
+configure_logging("bot")
 log = logging.getLogger(__name__)
 
 
@@ -38,7 +34,6 @@ async def main() -> None:
         )
         while True:
             await asyncio.sleep(3600)
-        sys.exit(1)
 
     bot = Bot(
         token=bot_settings.token,

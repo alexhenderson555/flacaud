@@ -11,14 +11,16 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):
     """Use a temporary database for each test."""
-    import tidal_dl_ru.database.database as db_mod
     from sqlmodel import SQLModel
+
+    import tidal_dl_ru.database.database as db_mod
     test_db = tmp_path / "test_users.db"
     monkeypatch.setattr(db_mod, "_db_path", test_db)
     from sqlmodel import create_engine
     db_mod.engine = create_engine(f"sqlite:///{test_db.as_posix()}", connect_args={"check_same_thread": False})
-    import tidal_dl_ru.database.models
     from sqlmodel import SQLModel
+
+    import tidal_dl_ru.database.models
     SQLModel.metadata.create_all(db_mod.engine)
     yield
     db_mod.engine = None
@@ -27,8 +29,8 @@ def _isolated_db(tmp_path, monkeypatch):
 
 def _verified(plan: str, telegram_id: str = "12345", value: str | None = None):
     """Build a fake authoritative YooKassa payment response."""
-    from tidal_dl_ru.server import payments as pmod
     from tidal_dl_ru.bot.users import Plan
+    from tidal_dl_ru.server import payments as pmod
 
     if value is None:
         value = pmod.PLAN_PRICE.get(Plan(plan), "0.00")

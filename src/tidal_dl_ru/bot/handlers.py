@@ -24,6 +24,11 @@ from tidal_dl_ru.server.payments import create_payment
 
 router = Router()
 
+
+def _job_zip_url(job_id: str) -> str:
+    return f"{bot_settings.public_api_base}/api/jobs/{job_id}/zip"
+
+
 # Matches URLs from any supported provider.
 _URL_RE = re.compile(
     r"https?://(?:"
@@ -172,6 +177,35 @@ async def cmd_dj(message: Message) -> None:
         )
 
 
+@router.message(Command("gencode"))
+async def cmd_gencode(message: Message) -> None:
+    """Admin: generate activation code. Usage: /gencode pro [note]"""
+    import os
+
+    tg_user = message.from_user
+    if not tg_user:
+        return
+    admin_ids = {int(x) for x in os.environ.get("TELEGRAM_ADMIN_IDS", "").split(",") if x.strip().isdigit()}
+    if admin_ids and tg_user.id not in admin_ids:
+        await message.answer("Недостаточно прав.")
+        return
+
+    args = (message.text or "").split(maxsplit=2)
+    plan_name = args[1].lower() if len(args) > 1 else "pro"
+    note = args[2] if len(args) > 2 else None
+    if plan_name not in ("basic", "pro", "lifetime"):
+        await message.answer("Тариф: basic, pro или lifetime")
+        return
+
+    from tidal_dl_ru.server.activation_codes import generate_code
+
+    code = generate_code(plan=plan_name, note=note)
+    await message.answer(
+        f"Код для <b>{plan_name}</b>:\n<code>{code}</code>\n\nПередай покупателю — активация в профиле.",
+        parse_mode="HTML",
+    )
+
+
 @router.message(Command("pay"))
 async def cmd_pay(message: Message) -> None:
     """Create a YooKassa payment link."""
@@ -197,7 +231,7 @@ async def cmd_pay(message: Message) -> None:
         return
 
     get_or_create(tg_user.id, username=tg_user.username, first_name=tg_user.first_name)
-    url = create_payment(tg_user.id, plan)
+    url = create_payment(plan, telegram_id=tg_user.id)
     if url is None:
         await message.answer(
             "⚠️ Оплата временно недоступна. Попробуйте позже.",
@@ -282,7 +316,7 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
 
     msg = f"✅ Скачано {sent} треков."
     if len(result.tracks) > 1:
-        msg += f"\n\n📦 Скачать плейлист целиком (ZIP):\nhttp://151.243.177.88/api/jobs/{job.job_id}/zip"
+        msg += f"\n\n📦 Скачать плейлист целиком (ZIP):\n{_job_zip_url(job.job_id)}"
     await status_msg.edit_text(msg)
 
 
@@ -504,7 +538,7 @@ async def handle_url(message: Message, api: APIClient) -> None:
         msg = f"⚠️ Отправлено {sent}/{total}. (Возможно, файлы слишком большие). Осталось сегодня: {remaining}"
 
     if total > 1:
-        msg += f"\n\n📦 Скачать весь альбом/плейлист (ZIP):\nhttp://151.243.177.88/api/jobs/{job.job_id}/zip"
+        msg += f"\n\n📦 Скачать весь альбом/плейлист (ZIP):\n{_job_zip_url(job.job_id)}"
 
     await status_msg.edit_text(msg)
 

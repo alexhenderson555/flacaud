@@ -18,6 +18,7 @@ from tidal_dl_ru.providers.tidal.auth import (
     pkce_login_url,
     save_tokens,
 )
+from tidal_dl_ru.server.activation_codes import redeem_code
 from tidal_dl_ru.server.payments import create_payment, process_webhook
 from tidal_dl_ru.server.schemas import PoolHealth
 
@@ -65,6 +66,22 @@ async def yookassa_webhook(request: Request) -> dict:
 class PaymentCreateRequest(BaseModel):
     plan: str
 
+
+class RedeemCodeRequest(BaseModel):
+    code: str
+
+
+@router.post("/api/activation/redeem")
+def api_redeem_code(req: RedeemCodeRequest, current_user: User = Depends(get_current_user)):
+    ok, message = redeem_code(
+        req.code,
+        user_id=current_user.id,
+        telegram_id=current_user.telegram_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {"ok": True, "message": message}
+
 @router.post("/api/payments/create")
 async def api_create_payment(req: PaymentCreateRequest, current_user: User = Depends(get_current_user)):
 
@@ -73,9 +90,19 @@ async def api_create_payment(req: PaymentCreateRequest, current_user: User = Dep
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan")
 
-    if not current_user.telegram_id:
-        raise HTTPException(status_code=400, detail="Telegram account not linked")
-    url = create_payment(current_user.telegram_id, plan_enum, return_url="http://localhost:5173/account")
+    return_url = os.environ.get("TIDALDLRU_PAYMENT_RETURN_URL", "http://localhost:5173/account")
+    if current_user.telegram_id:
+        url = create_payment(
+            plan_enum,
+            return_url=return_url,
+            telegram_id=current_user.telegram_id,
+        )
+    else:
+        url = create_payment(
+            plan_enum,
+            return_url=return_url,
+            user_id=current_user.id,
+        )
 
     if not url:
         raise HTTPException(status_code=501, detail="YooKassa integration is not yet fully configured")

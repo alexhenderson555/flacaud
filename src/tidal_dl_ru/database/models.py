@@ -64,6 +64,7 @@ class UserRead(UserBase):
     total_downloads: int
     effective_plan: str
     daily_limit: int
+    subscription_expires_at: Optional[datetime] = None
 
 class SavedTrackBase(SQLModel):
     provider: str

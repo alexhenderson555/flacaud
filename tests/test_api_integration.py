@@ -7,10 +7,10 @@ neither Redis nor a database — they exercise the real routing + guards.
 import pytest
 from fastapi.testclient import TestClient
 
-from tidal_dl_ru.server.app import app
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.models import User
 from tidal_dl_ru.server import jobs as job_state
+from tidal_dl_ru.server.app import app
 from tidal_dl_ru.server.schemas import JobStatus
 
 client = TestClient(app)

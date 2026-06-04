@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("app.log", encoding="utf-8")
-    ]
-)
-logger = logging.getLogger(__name__)
 """FastAPI app — REST surface over the CLI core.
 
 Authenticated JSON API (JWT) + short-lived media tokens for streams/downloads.
 See /docs for the full OpenAPI surface.
 """
 
+from tidal_dl_ru.logging_config import configure_logging
 
+configure_logging("api")
+
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -32,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from tidal_dl_ru.database.database import check_db, create_db_and_tables
 from tidal_dl_ru.server.config_check import validate_production_config
 from tidal_dl_ru.server.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
+from tidal_dl_ru.server.request_logging import RequestLoggingMiddleware
 from tidal_dl_ru.server.settings import settings
 
 validate_production_config()
@@ -53,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="tidal-dl-ru API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 

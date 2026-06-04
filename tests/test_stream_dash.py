@@ -1,4 +1,4 @@
-"""DASH stream should start before the full track is buffered."""
+"""DASH stream should cache to disk and support HTTP Range (seek)."""
 
 import base64
 import tempfile
@@ -59,7 +59,7 @@ def _dash_manifest():
     )
 
 
-async def _fake_to_thread(fn):
+async def _fake_to_thread(fn, *args, **kwargs):
     return {
         "type": "dash_stream",
         "manifest": _dash_manifest(),
@@ -67,30 +67,13 @@ async def _fake_to_thread(fn):
     }
 
 
-def test_dash_stream_yields_before_all_segments_fetched(client, monkeypatch):
-    segment_calls: list[str] = []
+async def _fake_ensure(urls, tmp_path, final_path, min_bytes=65536):
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    final_path.write_bytes(b"\x00" * max(min_bytes, 65536))
+    return final_path
 
-    class StreamCM:
-        def __init__(self, url):
-            segment_calls.append(url)
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return False
-
-        def raise_for_status(self):
-            return None
-
-        async def aiter_bytes(self, chunk_size=65536):
-            yield b"\x00" * 32
-
-    mock_client_instance = MagicMock()
-    mock_client_instance.stream = lambda method, url, headers=None: StreamCM(url)
-    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-
+def test_dash_stream_supports_range_requests(client, monkeypatch):
     monkeypatch.setattr(
         "tidal_dl_ru.providers.tidal.download._stream_urls_from_dash",
         lambda decoded: (["https://cdn.example/init.mp4", "https://cdn.example/seg-1.m4s"], "mp4a.40.2"),
@@ -101,14 +84,12 @@ def test_dash_stream_yields_before_all_segments_fetched(client, monkeypatch):
     )
     monkeypatch.setattr("tidal_dl_ru.server.routers.media.asyncio.to_thread", _fake_to_thread)
     monkeypatch.setattr(
-        "tidal_dl_ru.server.routers.media.httpx.AsyncClient",
-        lambda *a, **k: mock_client_instance,
+        "tidal_dl_ru.server.routers.media._ensure_dash_cache",
+        _fake_ensure,
     )
 
-    with client.stream("GET", f"/api/stream/tidal/{TRACK_ID}?quality=LOW&bypass_registry=true") as resp:
-        assert resp.status_code == 200
-        first = next(resp.iter_bytes())
-        assert first
-
-    assert segment_calls
-    assert "init.mp4" in segment_calls[0]
+    url = f"/api/stream/tidal/{TRACK_ID}?quality=LOW&bypass_registry=true"
+    resp = client.get(url, headers={"Range": "bytes=0-1023"})
+    assert resp.status_code == 206
+    assert resp.headers.get("accept-ranges") == "bytes"
+    assert len(resp.content) == 1024

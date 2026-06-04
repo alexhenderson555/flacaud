@@ -63,6 +63,7 @@ def _migrate_sqlite_columns():
 
 def create_db_and_tables():
     import tidal_dl_ru.database.models  # noqa: F401
+    import tidal_dl_ru.server.activation_codes  # noqa: F401 — ActivationCode table
 
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite_columns()

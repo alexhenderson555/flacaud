@@ -9,9 +9,15 @@ can run concurrently (bounded by Settings.arq_max_jobs).
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from pathlib import Path
 from typing import Optional
+
+from tidal_dl_ru.logging_config import configure_logging
+
+configure_logging("worker")
+log = logging.getLogger(__name__)
 
 import httpx
 from arq.connections import RedisSettings
@@ -143,6 +149,14 @@ async def download_url(
     split: bool = False,
 ) -> dict:
     """ARQ task: fetch URL → produce files. Updates job state in Redis as it goes."""
+    log.info(
+        "job_start job_id=%s quality=%s split=%s url=%s",
+        job_id,
+        quality,
+        split,
+        url[:200],
+        extra={"event": "job_start", "job_id": job_id},
+    )
     try:
         provider = find_provider(url)
         if provider is None:
@@ -231,13 +245,16 @@ async def download_url(
                 )
 
             job_state.mark_done(job_id)
+            log.info("job_done job_id=%s tracks=%s", job_id, len(tracks), extra={"event": "job_done", "job_id": job_id})
             return {"ok": True, "count": len(tracks)}
     except Exception as e:  # noqa: BLE001
+        log.exception("job_failed job_id=%s error=%s", job_id, e, extra={"event": "job_failed", "job_id": job_id})
         job_state.mark_failed(job_id, f"{type(e).__name__}: {e}")
         raise
 
 
 async def analyze_set(ctx: dict, job_id: str, url: str) -> dict:
+    log.info("analyze_set_start job_id=%s", job_id, extra={"event": "analyze_set_start", "job_id": job_id})
     from tidal_dl_ru.core.set_analyzer import analyze_set_task
     return await analyze_set_task(job_id, url)
 

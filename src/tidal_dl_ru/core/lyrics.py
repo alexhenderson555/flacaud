@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from pathlib import Path
 from typing import Optional
 
@@ -13,10 +14,11 @@ from tidal_dl_ru.core.models import Track
 
 logger = logging.getLogger(__name__)
 
-LRCLIB_BASE = "https://lrclib.net/api"
+_LRCLIB_BASE = "https://lrclib.net/api"
 _LRC_CACHE: dict[str, tuple[float, Optional[str]]] = {}
 _CACHE_TTL_S = 3600
-_SYNCED_TIMEOUT_S = 8.0
+_SYNCED_TIMEOUT_S = 12.0
+_LYRICS_PROVIDERS = ["Lrclib", "NetEase", "Musixmatch", "Megalobix"]
 
 
 def _cache_key(
@@ -89,10 +91,16 @@ def _set_cached(key: str, lrc: Optional[str]) -> None:
 
 def _lrclib_synced(client: httpx.Client, path: str, params: dict | None = None) -> Optional[str]:
     try:
-        r = client.get(f"{LRCLIB_BASE}/{path}", params=params, timeout=10.0)
+        r = client.get(f"{_LRCLIB_BASE}/{path}", params=params, timeout=10.0)
         if r.status_code != 200:
             return None
         data = r.json()
+        if isinstance(data, list):
+            for item in data:
+                synced = item.get("syncedLyrics")
+                if synced:
+                    return synced
+            return None
         synced = data.get("syncedLyrics")
         return synced or None
     except Exception as exc:
@@ -100,9 +108,31 @@ def _lrclib_synced(client: httpx.Client, path: str, params: dict | None = None) 
         return None
 
 
-def _syncedlyrics_search(query: str, providers: list[str]) -> Optional[str]:
+def _lrclib_search(client: httpx.Client, artist: str, title: str) -> Optional[str]:
+    try:
+        r = client.get(
+            f"{_LRCLIB_BASE}/search",
+            params={"artist_name": artist, "track_name": title},
+            timeout=10.0,
+        )
+        if r.status_code != 200:
+            return None
+        items = r.json()
+        if not isinstance(items, list):
+            return None
+        for item in items:
+            synced = item.get("syncedLyrics")
+            if synced:
+                return synced
+        return None
+    except Exception as exc:
+        logger.debug("LRCLIB search failed: %s", exc)
+        return None
+
+
+def _syncedlyrics_search(query: str, providers: list[str], *, synced_only: bool = True) -> Optional[str]:
     def _run() -> Optional[str]:
-        return syncedlyrics.search(query, synced_only=True, providers=providers)
+        return syncedlyrics.search(query, synced_only=synced_only, providers=providers)
 
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -111,6 +141,34 @@ def _syncedlyrics_search(query: str, providers: list[str]) -> Optional[str]:
     except (FuturesTimeout, Exception) as exc:
         logger.debug("syncedlyrics timeout/error for %r: %s", query, exc)
         return None
+
+
+def _plain_lyrics_to_lines(text: str) -> list[dict]:
+    lines: list[dict] = []
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped:
+            lines.append({"time": 0.0, "text": stripped})
+    return lines
+
+
+def _search_queries(artist: str, title: str, album: Optional[str]) -> list[str]:
+    queries = []
+    if artist and title:
+        queries.append(f"{artist} - {title}")
+        queries.append(f"{artist} {title}")
+    if title:
+        queries.append(title)
+    if artist and album:
+        queries.append(f"{artist} {album}")
+    seen: set[str] = set()
+    out: list[str] = []
+    for q in queries:
+        q = q.strip()
+        if q and q not in seen:
+            seen.add(q)
+            out.append(q)
+    return out
 
 
 def fetch_synced_lrc_text(
@@ -143,14 +201,21 @@ def fetch_synced_lrc_text(
                 params["duration"] = int(duration)
             lrc = _lrclib_synced(client, "get", params)
 
+        if not lrc and artist and track_title:
+            lrc = _lrclib_search(client, artist, track_title)
+
+    queries = _search_queries(artist, track_title, album)
     if not lrc:
-        query = f"{artist} {track_title}"
-        if album:
-            query += f" {album}"
-        lrc = _syncedlyrics_search(
-            query,
-            providers or ["Lrclib", "NetEase", "Musixmatch"],
-        )
+        for q in queries:
+            lrc = _syncedlyrics_search(q, _LYRICS_PROVIDERS, synced_only=True)
+            if lrc:
+                break
+
+    if not lrc:
+        for q in queries:
+            lrc = _syncedlyrics_search(q, _LYRICS_PROVIDERS, synced_only=False)
+            if lrc:
+                break
 
     _set_cached(key, lrc or "")
     return lrc or None
@@ -189,10 +254,15 @@ def fetch_lyrics_lines(
         version=version,
     )
     if not lrc and query:
-        lrc = _syncedlyrics_search(query, ["Lrclib", "Musixmatch"])
+        lrc = _syncedlyrics_search(query, _LYRICS_PROVIDERS, synced_only=True)
+    if not lrc and query:
+        lrc = _syncedlyrics_search(query, _LYRICS_PROVIDERS, synced_only=False)
     if not lrc:
         return []
-    return parse_lrc_lines(lrc)
+    parsed = parse_lrc_lines(lrc)
+    if parsed:
+        return parsed
+    return _plain_lyrics_to_lines(lrc)
 
 
 def write_sidecar(lrc_text: str, audio_path: Path) -> Path:

@@ -6,11 +6,15 @@ import random
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlmodel import Session, select
 
 from tidal_dl_ru.core.recognize import recognize_audio
 from tidal_dl_ru.core.router import all_providers, get_provider_by_name
+from tidal_dl_ru.database.auth import _user_from_jwt, oauth2_scheme
+from tidal_dl_ru.database.database import get_session
+from tidal_dl_ru.database.models import SavedTrack, User
 from tidal_dl_ru.providers.tidal import pool as tidal_pool
 from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url
 from tidal_dl_ru.providers.tidal.provider import _to_universal
@@ -19,10 +23,169 @@ from tidal_dl_ru.server.schemas import ProviderInfo, SearchRequest, SearchRespon
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+_GEMINI_MODELS = ("gemini-2.0-flash", "gemini-1.5-flash")
+# Fallback seeds — artist names whose top tracks are a sane default palette
+_SEED_ARTISTS = (
+    "The Weeknd", "Radiohead", "Daft Punk", "Kendrick Lamar", "Arctic Monkeys",
+    "Billie Eilish", "Fred again..", "Disclosure", "Bon Iver", "Tyler, The Creator",
+)
+
+
+def _optional_user(token: str = Depends(oauth2_scheme)) -> User | None:
+    if not token:
+        return None
+    try:
+        return _user_from_jwt(token)
+    except HTTPException:
+        return None
+
+
+def _track_ok(track) -> bool:
+    dur = getattr(track, "duration_s", None) or getattr(track, "duration", None) or 0
+    if dur and dur < 45:
+        return False
+    return bool(getattr(track, "cover_url", None))
+
+
+
+async def _artist_top_tracks(client: TidalClient, artist_id: str, limit: int = 15) -> list:
+    try:
+        top = await asyncio.to_thread(client.get_artist_top_tracks, artist_id)
+        return top[:limit]
+    except Exception:
+        return []
+
+
+async def _resolve_artist_id(p, artist_name: str) -> str | None:
+    try:
+        results = await asyncio.to_thread(p.search, artist_name, 3)
+    except Exception:
+        return None
+    for t in results:
+        if getattr(t, "artist_ids", None):
+            return str(t.artist_ids[0])
+    return None
+
+
+async def _build_recommendations(limit: int, user: User | None, session: Session | None) -> list:
+    p = get_provider_by_name("tidal")
+    if not p:
+        return []
+
+    seen: set[str] = set()
+    tracks: list = []
+    artist_names: list[str] = []
+
+    if user and session:
+        saved = list(
+            session.exec(
+                select(SavedTrack)
+                .where(SavedTrack.user_id == user.id)
+                .order_by(SavedTrack.added_at.desc())
+                .limit(50)
+            ).all()
+        )
+        seen.update(str(t.provider_id) for t in saved)
+        for item in saved:
+            try:
+                artists = json.loads(item.artists_json or "[]")
+            except json.JSONDecodeError:
+                artists = []
+            if artists:
+                artist_names.append(artists[0])
+
+    # Personalize from library artists — top tracks from same artists (similar style)
+    for artist in list(dict.fromkeys(artist_names))[:10]:
+        artist_id = await _resolve_artist_id(p, artist)
+        if not artist_id:
+            continue
+        try:
+            http = httpx.Client(timeout=30.0)
+            try:
+                acc, tokens = tidal_pool.acquire(http)
+                client = TidalClient(http=http, tokens=tokens)
+            except tidal_pool.NoAccountAvailable:
+                client = TidalClient(http=http)
+            for t in await _artist_top_tracks(client, artist_id, 12):
+                u = _to_universal(t)
+                pid = str(u.provider_id)
+                if pid in seen or not _track_ok(u):
+                    continue
+                tracks.append(u)
+                seen.add(pid)
+                if len(tracks) >= limit:
+                    return tracks[:limit]
+        except Exception as e:
+            logger.info("Recommendations for artist %s failed: %s", artist, e)
+
+    # Cold start: curated artists' top tracks (not random search terms)
+    seeds = list(_SEED_ARTISTS)
+    random.shuffle(seeds)
+    for artist in seeds:
+        if len(tracks) >= limit:
+            break
+        artist_id = await _resolve_artist_id(p, artist)
+        if not artist_id:
+            continue
+        try:
+            http = httpx.Client(timeout=30.0)
+            try:
+                acc, tokens = tidal_pool.acquire(http)
+                client = TidalClient(http=http, tokens=tokens)
+            except tidal_pool.NoAccountAvailable:
+                client = TidalClient(http=http)
+            for t in await _artist_top_tracks(client, artist_id, 5):
+                u = _to_universal(t)
+                pid = str(u.provider_id)
+                if pid in seen or not _track_ok(u):
+                    continue
+                tracks.append(u)
+                seen.add(pid)
+                if len(tracks) >= limit:
+                    return tracks[:limit]
+        except Exception as e:
+            logger.info("Seed recommendations for %s failed: %s", artist, e)
+
+    return tracks[:limit]
+
+
+@router.get("/api/recommendations", response_model=SearchResponse)
+async def recommendations(
+    limit: int = 20,
+    user: User | None = Depends(_optional_user),
+    session: Session = Depends(get_session),
+):
+    limit = max(1, min(limit, 50))
+    tracks = await _build_recommendations(limit, user, session)
+    if not tracks:
+        raise HTTPException(status_code=503, detail="Could not load recommendations")
+    return SearchResponse(tracks=tracks)
+
 
 @router.get("/api/providers", response_model=list[ProviderInfo])
 def providers() -> list[ProviderInfo]:
     return [ProviderInfo(name=p.name, display_name=p.display_name) for p in all_providers()]
+
+
+@router.get("/api/track/{provider}/{track_id}")
+async def track_meta(provider: str, track_id: str):
+    """Lightweight metadata (cover, duration) for player enrichment."""
+    p = get_provider_by_name(provider)
+    if p is None:
+        raise HTTPException(status_code=400, detail=f"unknown provider: {provider}")
+    if provider != "tidal":
+        raise HTTPException(status_code=400, detail="unsupported provider")
+
+    def _fetch():
+        with p._client() as c:
+            return _to_universal(c.get_track(track_id))
+
+    try:
+        track = await asyncio.to_thread(_fetch)
+    except Exception as e:
+        logger.info("track_meta %s/%s failed: %s", provider, track_id, e)
+        raise HTTPException(status_code=404, detail="track not found") from e
+    return track.model_dump()
 
 @router.post("/api/search", response_model=SearchResponse)
 async def search(req: SearchRequest) -> SearchResponse:
@@ -40,7 +203,7 @@ async def search(req: SearchRequest) -> SearchResponse:
         return SearchResponse(tracks=tracks, has_more=len(tracks) >= req.limit)
     except Exception as e:
         logger.info(f"Tidal search failed: {e}")
-        raise HTTPException(status_code=401, detail="Search failed")
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
 
 @router.post("/api/recognize", response_model=SearchResponse)
 async def recognize_endpoint(file: UploadFile = File(...)):
@@ -59,7 +222,7 @@ async def recognize_endpoint(file: UploadFile = File(...)):
             return SearchResponse(tracks=tracks)
         except Exception as e:
             logger.info(f"Tidal search failed: {e}")
-            raise HTTPException(status_code=401, detail="Search failed")
+            raise HTTPException(status_code=503, detail="Search temporarily unavailable")
 
     return SearchResponse(tracks=[])
 
@@ -215,7 +378,6 @@ Format:
   ...
 ]"""
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         parts = [{"text": prompt}]
         if req.imageBase64:
             try:
@@ -232,18 +394,33 @@ Format:
 
         payload = {
             "contents": [{"parts": parts}],
-            "generationConfig": {"temperature": 1.0}
+            "generationConfig": {"temperature": 1.0},
         }
 
+        text = ""
         async with httpx.AsyncClient() as client:
-            res = await client.post(url, json=payload, timeout=15.0)
+            for model in _GEMINI_MODELS:
+                url = (
+                    f"https://generativelanguage.googleapis.com/v1beta/models/"
+                    f"{model}:generateContent?key={api_key}"
+                )
+                res = await client.post(url, json=payload, timeout=30.0)
+                if res.status_code != 200:
+                    logger.info("Gemini API Error (%s): %s", model, res.text)
+                    continue
+                data = res.json()
+                candidates = data.get("candidates") or []
+                if not candidates:
+                    continue
+                parts_out = candidates[0].get("content", {}).get("parts") or []
+                if not parts_out:
+                    continue
+                text = (parts_out[0].get("text") or "").strip()
+                if text:
+                    break
 
-        if res.status_code != 200:
-            logger.info("Gemini API Error:", res.text)
+        if not text:
             return []
-
-        data = res.json()
-        text = data['candidates'][0]['content']['parts'][0]['text'].strip()
 
         if text.startswith("```json"):
             text = text[7:]
@@ -258,13 +435,17 @@ Format:
             return []
 
         async def search_song(song):
-            try:
-                q = f"{song['artist']} {song['title']}"
-                res = await asyncio.to_thread(p.search, q, 1)
-                if res and len(res) > 0:
-                    return res[0]
-            except Exception:
-                pass
+            title = (song.get("title") or "").strip()
+            artist = (song.get("artist") or "").strip()
+            for q in (f"{artist} {title}".strip(), title, artist):
+                if len(q) < 2:
+                    continue
+                try:
+                    res = await asyncio.to_thread(p.search, q, 3)
+                    if res:
+                        return res[0]
+                except Exception:
+                    continue
             return None
 
         results = await asyncio.gather(*(search_song(s) for s in songs))

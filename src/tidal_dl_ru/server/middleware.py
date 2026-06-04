@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Callable
@@ -10,6 +11,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # Per-IP limits (window seconds, max requests)
+logger = logging.getLogger(__name__)
+
 RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/api/auth/login": (300, 20),
     "/api/auth/register": (3600, 10),
@@ -84,6 +87,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             allowed = _memory_check(key, window, limit)
 
         if not allowed:
+            logger.warning(
+                "rate_limit path=%s client_ip=%s",
+                path,
+                client_ip,
+                extra={"event": "rate_limit", "path": path, "client_ip": client_ip},
+            )
             return Response(
                 content='{"detail":"Too many requests. Try again later."}',
                 status_code=429,

@@ -190,6 +190,23 @@ def set_plan(
         return user
 
 
+def set_plan_for_user_id(
+    user_id: int,
+    plan: Plan,
+    expires_at: Optional[datetime] = None,
+) -> Optional[User]:
+    """Grant plan to a web user (no Telegram required)."""
+    with _session() as s:
+        user = s.get(User, user_id)
+        if user is None:
+            return None
+        user.plan = plan.value
+        user.subscription_expires_at = expires_at
+        s.commit()
+        s.refresh(user)
+        return user
+
+
 def toggle_karaoke(telegram_id: int) -> bool:
     """Toggle karaoke mode. Returns new state."""
     with _session() as s:
