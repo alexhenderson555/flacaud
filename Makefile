@@ -22,4 +22,4 @@ down:
 	docker compose down
 
 deploy:
-	python scripts/deploy.py
+	python scripts/deploy_tidal.py

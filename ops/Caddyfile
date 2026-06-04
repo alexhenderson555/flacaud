@@ -1,11 +1,45 @@
 {
 	email {$ACME_EMAIL}
+	# Keep cert automation on (so `tls internal` actually issues the self-signed
+	# cert on :443) but suppress HTTP->HTTPS redirects, so Cloudflare Full can
+	# reach the origin without a 308 loop. `auto_https off` would ALSO disable
+	# the internal cert, breaking TLS to origin -> CF 525.
+	auto_https disable_redirects
 }
 
-{$DOMAIN} {
+(site) {
 	encode gzip zstd
 	header {
 		-Server
 	}
-	reverse_proxy api:8000
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /healthz {
+		reverse_proxy api:8000
+	}
+
+	handle /assets/* {
+		root * /srv/frontend
+		file_server
+	}
+
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# Cloudflare Flexible → origin HTTP :80 (no redirect)
+http://{$DOMAIN} {
+	import site
+}
+
+# Cloudflare Full → origin HTTPS :443 (self-signed; not strict)
+https://{$DOMAIN} {
+	tls internal
+	import site
 }

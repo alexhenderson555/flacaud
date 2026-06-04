@@ -12,6 +12,7 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:-admin@${DOMAIN}}
     volumes:
       - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/srv/frontend:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
@@ -19,7 +20,11 @@ services:
         condition: service_started
 
   api:
-    ports: []  # only exposed via Caddy
+    # No host ports — only Caddy reaches api:8000 on the Docker network.
+    # `!reset` is required: Compose *concatenates* port lists when merging files,
+    # so a plain `ports: []` would NOT drop the base `${API_PORT}:8000` mapping —
+    # api would still grab the host port and collide with Caddy on :80.
+    ports: !reset []
 
 volumes:
   caddy-data:

@@ -19,6 +19,8 @@ services:
       - "${API_PORT:-8001}:8000"
     environment:
       TIDALDLRU_ENV: production
+      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-INFO}
+      TIDALDLRU_LOG_FORMAT: ${TIDALDLRU_LOG_FORMAT:-json}
       REDIS_URL: redis://redis:6379/0
       TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_JWT_SECRET: ${TIDALDLRU_JWT_SECRET:?Set TIDALDLRU_JWT_SECRET in .env}
@@ -50,6 +52,8 @@ services:
     restart: unless-stopped
     environment:
       TIDALDLRU_ENV: production
+      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-INFO}
+      TIDALDLRU_LOG_FORMAT: ${TIDALDLRU_LOG_FORMAT:-json}
       REDIS_URL: redis://redis:6379/0
       TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
@@ -79,6 +83,9 @@ services:
       TIDALDLRU_ENV: production
       TIDALDLRU_BOT_TOKEN: ${TIDALDLRU_BOT_TOKEN:?Set TIDALDLRU_BOT_TOKEN}
       TIDALDLRU_API_BASE: http://api:8000
+      TIDALDLRU_PUBLIC_API_BASE: ${TIDALDLRU_PUBLIC_API_BASE:-https://proshli.ru}
+      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-INFO}
+      TIDALDLRU_LOG_FORMAT: ${TIDALDLRU_LOG_FORMAT:-json}
     depends_on:
       api:
         condition: service_healthy

@@ -48,6 +48,30 @@ bash ops/backup-db.sh
 3. `docker compose up -d --force-recreate api worker bot`
 4. Users must re-login (JWT rotation).
 
+## Logs
+
+All services log to **stdout** (JSON in production if `TIDALDLRU_LOG_FORMAT=json`).
+
+```bash
+cd /opt/tidal-dl-ru
+docker compose logs -f api --tail 200
+docker compose logs -f worker --tail 200
+docker compose logs -f bot --tail 100
+```
+
+Useful grep patterns:
+
+```bash
+docker compose logs api --tail 500 | grep auth_login
+docker compose logs api --tail 500 | grep '"status": 401'
+docker compose logs api --tail 500 | grep rate_limit
+docker compose logs worker --tail 200 | grep job_
+```
+
+Each HTTP response includes `X-Request-Id` — search logs with the same id.
+
+Set `TIDALDLRU_LOG_LEVEL=DEBUG` in `.env` and `docker compose up -d --force-recreate api` for auth troubleshooting.
+
 ## Incident: API 502 after deploy
 
 Wait ~30s for healthcheck. Check logs:
