@@ -1,13 +1,25 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, CheckCircle2, X, AlertCircle, RotateCcw } from 'lucide-react';
 import { getCachedAudioUrl } from '../utils/cache';
 import { getMediaToken } from '../utils/mediaToken';
-import { removeDownloadJob, retryDownloadJob } from '../utils/downloadJobs';
+import { removeDownloadJob, retryDownloadJob, isSessionJob, wasJobSaved, markJobSaved } from '../utils/downloadJobs';
+import { isBackgroundPaused } from '../utils/authBusy';
 
-const qualityLabel = (q) => (q === 'HI_RES' ? 'MAX' : q);
 const STUCK_MS = 8 * 60 * 1000;
 const DONE_HIDE_MS = 6000;
+const POLL_ACTIVE_MS = 2000;
+const POLL_IDLE_MS = 8000;
+
+function jobsSnapshotEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x.id !== y.id || x.progress !== y.progress || x.status !== y.status || x.failed !== y.failed) return false;
+  }
+  return true;
+}
 
 export default function DownloadToast() {
   const [activeJobs, setActiveJobs] = useState([]);
@@ -17,6 +29,8 @@ export default function DownloadToast() {
   const hideAfterRef = useRef({});
   const progressHistoryRef = useRef({});
   const dismissedRef = useRef(new Set());
+  const activeJobsRef = useRef([]);
+  const pollDelayRef = useRef(POLL_IDLE_MS);
 
   const setBrowserProgress = useCallback((jobId, value) => {
     browserProgressRef.current[jobId] = value;
@@ -32,7 +46,11 @@ export default function DownloadToast() {
     delete browserProgressRef.current[jobId];
     delete hideAfterRef.current[jobId];
     delete progressHistoryRef.current[jobId];
-    setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setActiveJobs((prev) => {
+      const next = prev.filter((j) => j.id !== jobId);
+      activeJobsRef.current = next;
+      return next;
+    });
     setBrowserProgressMap({ ...browserProgressRef.current });
   }, []);
 
@@ -107,12 +125,44 @@ export default function DownloadToast() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    let timerId;
+
+    const schedule = (delay) => {
+      pollDelayRef.current = delay;
+      clearTimeout(timerId);
+      timerId = setTimeout(() => { fetchJobs(); }, delay);
+    };
+
     const fetchJobs = async () => {
+      if (cancelled) return;
+      if (!localStorage.getItem('tidal-token')) {
+        schedule(60_000);
+        return;
+      }
+      if (document.visibilityState === 'hidden' || isBackgroundPaused()) {
+        schedule(isBackgroundPaused() ? 15_000 : 60_000);
+        return;
+      }
       const saved = localStorage.getItem('tidal-queue-jobs');
-      if (!saved) return;
+      if (!saved) {
+        if (activeJobsRef.current.length) {
+          activeJobsRef.current = [];
+          setActiveJobs([]);
+        }
+        schedule(POLL_IDLE_MS);
+        return;
+      }
       try {
         const jobIds = JSON.parse(saved).filter((id) => !dismissedRef.current.has(id));
-        if (jobIds.length === 0) return;
+        if (jobIds.length === 0) {
+          if (activeJobsRef.current.length) {
+            activeJobsRef.current = [];
+            setActiveJobs([]);
+          }
+          schedule(POLL_IDLE_MS);
+          return;
+        }
 
         const token = localStorage.getItem('tidal-token') || '';
         const results = await Promise.all(
@@ -130,6 +180,7 @@ export default function DownloadToast() {
         results.forEach((job) => {
           if (!job) return;
           if (job.job_type === 'analyze_set') return;
+          if (dismissedRef.current.has(job.job_id)) return;
 
           keepIds.push(job.job_id);
 
@@ -166,13 +217,25 @@ export default function DownloadToast() {
             url: trackProgress?.source_url || null,
           };
 
-          if (isDone && jobObj.file_token && !autoDownloadedRef.current.has(job.job_id) && !window.__E2E_DISABLE_AUTOSAVE__) {
+          // Auto-save to PC only for downloads started in THIS browser session, and
+          // never the same job twice (persisted across reloads/logins). Without this,
+          // every finished job still in the queue re-downloaded on the next login —
+          // the "all my earlier downloads replay before login" race.
+          if (
+            isDone &&
+            jobObj.file_token &&
+            !autoDownloadedRef.current.has(job.job_id) &&
+            !window.__E2E_DISABLE_AUTOSAVE__ &&
+            isSessionJob(job.job_id) &&
+            !wasJobSaved(job.job_id)
+          ) {
             autoDownloadedRef.current.add(job.job_id);
+            markJobSaved(job.job_id);
             setBrowserProgress(job.job_id, 0);
             handleSaveToPC(jobObj);
           }
 
-          if (isDone && !jobObj.file_token && !hideAfterRef.current[job.job_id]) {
+          if (isDone && !hideAfterRef.current[job.job_id]) {
             hideAfterRef.current[job.job_id] = now + DONE_HIDE_MS;
           }
 
@@ -189,8 +252,9 @@ export default function DownloadToast() {
 
           if (visible) {
             newItems.push(jobObj);
-          } else if (hideAfter && now >= hideAfter) {
-            keepIds.splice(keepIds.indexOf(job.job_id), 1);
+          } else {
+            const idx = keepIds.indexOf(job.job_id);
+            if (idx !== -1) keepIds.splice(idx, 1);
           }
         });
 
@@ -198,15 +262,24 @@ export default function DownloadToast() {
           localStorage.setItem('tidal-queue-jobs', JSON.stringify(keepIds));
         }
 
-        setActiveJobs(newItems);
+        if (!jobsSnapshotEqual(activeJobsRef.current, newItems)) {
+          activeJobsRef.current = newItems;
+          setActiveJobs(newItems);
+        }
+
+        const hasRunning = newItems.some((j) => !j.failed && j.progress < 100);
+        schedule(hasRunning ? POLL_ACTIVE_MS : POLL_IDLE_MS);
       } catch (err) {
         console.error(err);
+        schedule(POLL_IDLE_MS);
       }
     };
 
     fetchJobs();
-    const interval = setInterval(fetchJobs, 1000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
   }, [setBrowserProgress]);
 
   const handleRetry = async (job) => {
@@ -219,8 +292,8 @@ export default function DownloadToast() {
   };
 
   return (
-    <div style={{ position: 'fixed', bottom: '100px', right: '24px', zIndex: 10000, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <AnimatePresence>
+    <div className="download-toast-stack" aria-live="polite">
+      <AnimatePresence mode="popLayout">
         {activeJobs.map((job) => {
           const bp = browserProgressMap[job.id];
           const isFailed = job.failed || bp === -1;
@@ -264,7 +337,7 @@ export default function DownloadToast() {
                       <RotateCcw size={16} />
                     </button>
                   )}
-                  <button type="button" data-testid="download-dismiss-btn" onClick={() => dismissJob(job.id)} title="Dismiss" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+                  <button type="button" data-testid="download-dismiss-btn" onClick={(e) => { e.stopPropagation(); dismissJob(job.id); }} title="Dismiss" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
                     <X size={16} />
                   </button>
                 </div>

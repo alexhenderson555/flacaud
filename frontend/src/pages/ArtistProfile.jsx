@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Play, Pause, ChevronLeft, Disc, Heart, Download } from 'lucide-react';
+import { Play, Pause, ChevronLeft, Disc, Download } from 'lucide-react';
 
 export default function ArtistProfile() {
   const { id } = useParams();
@@ -9,7 +8,7 @@ export default function ArtistProfile() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [bio, setBio] = useState('');
-  const [bioLoading, setBioLoading] = useState(false);
+  const [, setBioLoading] = useState(false);
   
   const { togglePlay, currentTrackId, isPlaying, handleDownload } = useOutletContext();
 
@@ -74,7 +73,7 @@ export default function ArtistProfile() {
   return (
     <div style={{ padding: '0 20px', paddingBottom: '40px', overflowY: 'auto', height: '100%' }} className="hide-scrollbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px', marginTop: '16px' }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '50%', background: 'var(--bg-surface)' }}>
+        <button onClick={() => navigate(-1)} style={{ border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '50%', background: 'var(--bg-surface)' }}>
           <ChevronLeft size={24} />
         </button>
       </div>
@@ -125,11 +124,6 @@ export default function ArtistProfile() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-solid)', fontSize: '0.85rem', fontWeight: 600, background: 'rgba(37, 117, 252, 0.1)', padding: '6px 12px', borderRadius: '12px' }}>
-                    <Disc size={14} />
-                    {track.quality || 'LOSSLESS'}
-                  </div>
-                  
                   <button 
                     className="btn-secondary" 
                     onClick={(e) => { e.stopPropagation(); togglePlay(track, top_tracks); }}

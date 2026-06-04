@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { routeAuthMe } from './helpers.js';
 
 const TOP = {
   provider: 'tidal',
@@ -11,6 +12,8 @@ const TOP = {
 };
 
 test('artist page shows top tracks and play state', async ({ page }) => {
+  await routeAuthMe(page);
+
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-artist');
     window.__E2E_DISABLE_AUTOSAVE__ = true;

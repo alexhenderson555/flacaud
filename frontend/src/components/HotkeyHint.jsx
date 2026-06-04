@@ -1,8 +1,7 @@
-import React from 'react';
 
 const hints = {
-  en: 'Space play · ←/→ track · ↑/↓ vol · M mute · K karaoke · D DJ · Q queue · L lyrics · F fullscreen · Ctrl+K palette',
-  ru: 'Space play · ←/→ трек · ↑/↓ громк · M mute · K караоке · D DJ · Q очередь · L текст · F fullscreen · Ctrl+K команды',
+  en: 'Space play · ←/→ track · Shift+←/→ seek · [ ] ±5s · M mute · E EQ · Q queue · L lyrics · / Ctrl+K · Esc',
+  ru: 'Space play · ←/→ трек · Shift+←/→ seek · [ ] ±5с · M mute · E EQ · Q очередь · L текст · / Ctrl+K · Esc',
 };
 
 export default function HotkeyHint({ lang = 'en' }) {

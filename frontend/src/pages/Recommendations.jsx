@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { showToast } from '../utils/toast';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Flame, Play, Heart, Download, Disc, Loader2 } from 'lucide-react';
+import { Flame, Play, Heart, Download, Loader2 } from 'lucide-react';
 
 export default function Recommendations() {
   const [recommendedTracks, setRecommendedTracks] = useState([]);
@@ -29,37 +28,16 @@ export default function Recommendations() {
     setError(null);
     try {
       const token = localStorage.getItem('tidal-token');
-      let vibeQuery = lang === 'ru' ? "Что сейчас в тренде и популярно" : "Trending hits and popular music right now";
-      
-      if (token) {
-        const libRes = await fetch('/api/library', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (libRes.ok) {
-          const lib = await libRes.json();
-          if (lib.length > 0) {
-            const shuffled = [...lib].sort(() => 0.5 - Math.random());
-            const selected = shuffled.slice(0, 3).map(t => `${t.title} by ${t.artists?.[0] || 'Unknown'}`);
-            vibeQuery = lang === 'ru' 
-              ? `Порекомендуй отличные треки, похожие на: ${selected.join('; ')}.` 
-              : `Recommend me great tracks similar to: ${selected.join('; ')}.`;
-          }
-        }
-      }
-
-      const res = await fetch('/api/ai-playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: vibeQuery, limit: 20 })
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/recommendations?limit=20', { headers });
       const data = await res.json();
       
-      if (res.ok && data.tracks && data.tracks.length > 0) {
+      if (res.ok && data.tracks?.length > 0) {
         setRecommendedTracks(data.tracks);
       } else {
         setError(lang === 'ru' ? "Не удалось загрузить рекомендации." : "Could not load recommendations.");
       }
-    } catch (err) {
+    } catch {
       setError(lang === 'ru' ? "Ошибка сети при получении рекомендаций." : "Network error fetching recommendations.");
     }
     setIsLoading(false);
@@ -80,7 +58,7 @@ export default function Recommendations() {
             {lang === 'ru' ? 'Рекомендации' : 'Recommendations'}
           </h1>
           <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '1.1rem' }}>
-            {lang === 'ru' ? 'Специально подобранные треки для вас' : 'Specially curated tracks for you'}
+            {lang === 'ru' ? 'Подборка на основе вашей медиатеки и актуальных хитов' : 'Based on your library and current hits'}
           </p>
         </div>
         {recommendedTracks.length > 0 && (
@@ -138,11 +116,6 @@ export default function Recommendations() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-solid)', fontSize: '0.85rem', fontWeight: 600, background: 'rgba(37, 117, 252, 0.1)', padding: '6px 12px', borderRadius: '12px' }}>
-                  <Disc size={14} />
-                  {track.quality || 'LOSSLESS'}
-                </div>
-                
                 <button onClick={(e) => toggleLike(track, e)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                   <Heart size={20} color={likedTracks.has(String(track.provider_id)) ? "var(--accent-solid)" : "var(--text-muted)"} fill={likedTracks.has(String(track.provider_id)) ? "var(--accent-solid)" : "none"} />
                 </button>

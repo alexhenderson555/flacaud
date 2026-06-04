@@ -1,61 +1,198 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Search, Music, Heart, Settings, User, Download, FileAudio } from 'lucide-react';
+import {
+  Search, Music, Heart, User, Download, Radio, Sparkles,
+  ListMusic, Mic2, Sliders, Disc, ListOrdered, Play, Pause, Wand2, Scissors,
+} from 'lucide-react';
 
-export default function CommandPalette({ isOpen, onClose }) {
+const NAV = [
+  { id: 'nav-search', title: 'Search & Shazam', keywords: 'find music', icon: Search, path: '/search' },
+  { id: 'nav-library', title: 'My Library', keywords: 'liked saved', icon: Heart, path: '/library' },
+  { id: 'nav-recs', title: 'Recommendations', keywords: 'discover for you', icon: Sparkles, path: '/recommendations' },
+  { id: 'nav-radio', title: 'Track Radio', keywords: 'similar stations', icon: Radio, path: '/radio' },
+  { id: 'nav-analyzer', title: 'Set Analyzer', keywords: 'dj mix youtube', icon: Wand2, path: '/analyzer' },
+  { id: 'nav-stems', title: 'Stem Splitter', keywords: 'vocals isolate', icon: Scissors, path: '/splitter' },
+  { id: 'nav-sync', title: 'Transfer Music', keywords: 'import playlist', icon: Download, path: '/sync' },
+  { id: 'nav-account', title: 'Account Settings', keywords: 'profile quality theme', icon: User, path: '/account' },
+];
+
+function buildCommands({
+  lang,
+  navigate,
+  onClose,
+  onToggleQueue,
+  onToggleLyrics,
+  onToggleEq,
+  onToggleDj,
+  onToggleKaraoke,
+  currentTrack,
+  isPlaying,
+  onTogglePlay,
+}) {
+  const t = (en, ru) => (lang === 'ru' ? ru : en);
+  const wrap = (fn) => () => { fn(); onClose(); };
+
+  const playback = [];
+  if (currentTrack) {
+    playback.push({
+      id: 'play-toggle',
+      title: isPlaying ? t('Pause', 'Пауза') : t('Play', 'Воспроизвести'),
+      subtitle: `${currentTrack.artists?.[0] || ''} — ${currentTrack.title}`,
+      icon: isPlaying ? Pause : Play,
+      action: wrap(onTogglePlay),
+    });
+  }
+
+  const panels = [
+    { id: 'toggle-queue', title: t('Toggle Queue', 'Очередь'), keywords: 'q up next', icon: ListOrdered, action: wrap(onToggleQueue) },
+    { id: 'toggle-lyrics', title: t('Toggle Lyrics', 'Текст песни'), keywords: 'l karaoke sing', icon: Music, action: wrap(onToggleLyrics) },
+    { id: 'toggle-eq', title: t('Toggle Equalizer', 'Эквалайзер'), keywords: 'e audio', icon: Sliders, action: wrap(onToggleEq) },
+    { id: 'toggle-dj', title: t('Toggle DJ Tools', 'DJ-панель'), keywords: 'd bpm key', icon: Disc, action: wrap(onToggleDj) },
+    { id: 'toggle-karaoke', title: t('Toggle Karaoke', 'Караоке'), keywords: 'k fullscreen', icon: Mic2, action: wrap(onToggleKaraoke) },
+  ];
+
+  const nav = NAV.map((n) => ({
+    id: n.id,
+    title: n.title,
+    keywords: n.keywords,
+    icon: n.icon,
+    action: wrap(() => navigate(n.path)),
+  }));
+
+  return { playback, panels, nav };
+}
+
+export default function CommandPalette({
+  isOpen,
+  onClose,
+  lang = 'en',
+  currentTrack,
+  isPlaying = false,
+  onTogglePlay,
+  onToggleQueue,
+  onToggleLyrics,
+  onToggleEq,
+  onToggleDj,
+  onToggleKaraoke,
+  onPlayTrack,
+}) {
   const [query, setQuery] = useState('');
   const [library, setLibrary] = useState([]);
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => inputRef.current?.focus(), 80);
       const saved = localStorage.getItem('tidal-library');
       if (saved) {
-        try { setLibrary(JSON.parse(saved)); } catch (e) {}
+        try { setLibrary(JSON.parse(saved)); } catch { /* ignore */ }
       }
+      setSelectedIdx(0);
     } else {
       setQuery('');
+      setSelectedIdx(0);
     }
   }, [isOpen]);
 
-  // Handle escape to close
+  const commands = useMemo(
+    () => buildCommands({
+      lang,
+      navigate,
+      onClose,
+      onToggleQueue,
+      onToggleLyrics,
+      onToggleEq,
+      onToggleDj,
+      onToggleKaraoke,
+      onPlayTrack,
+      currentTrack,
+      isPlaying,
+      onTogglePlay: onTogglePlay || (() => {}),
+    }),
+    [
+      lang, navigate, onClose, onToggleQueue, onToggleLyrics, onToggleEq,
+      onToggleDj, onToggleKaraoke, onPlayTrack, currentTrack, isPlaying, onTogglePlay,
+    ],
+  );
+
+  const libraryResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return library
+      .filter((t) => {
+        const title = (t.title || '').toLowerCase();
+        const artists = (t.artists || []).join(' ').toLowerCase();
+        return title.includes(q) || artists.includes(q);
+      })
+      .slice(0, 8)
+      .map((t) => ({
+        id: `lib-${t.provider_id}`,
+        title: `${(t.artists || []).join(', ')} — ${t.title}`,
+        subtitle: t.album || '',
+        icon: ListMusic,
+        action: () => {
+          onPlayTrack?.(t, library);
+          onClose();
+        },
+      }));
+  }, [library, query, onPlayTrack, onClose]);
+
+  const filteredNav = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return commands.nav;
+    return commands.nav.filter(
+      (n) => n.title.toLowerCase().includes(q) || (n.keywords || '').includes(q),
+    );
+  }, [commands.nav, query]);
+
+  const filteredPanels = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return commands.panels;
+    return commands.panels.filter(
+      (p) => p.title.toLowerCase().includes(q) || (p.keywords || '').includes(q),
+    );
+  }, [commands.panels, query]);
+
+  const results = useMemo(() => {
+    if (!query.trim()) {
+      return [...commands.playback, ...commands.panels, ...commands.nav];
+    }
+    return [...commands.playback, ...filteredPanels, ...filteredNav, ...libraryResults];
+  }, [query, commands, filteredPanels, filteredNav, libraryResults]);
+
   useEffect(() => {
+    setSelectedIdx(0);
+  }, [query, results.length]);
+
+  const runSelected = useCallback(() => {
+    const item = results[selectedIdx];
+    if (item?.action) item.action();
+  }, [results, selectedIdx]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
         onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIdx((i) => Math.min(results.length - 1, i + 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIdx((i) => Math.max(0, i - 1));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  const navigationOptions = [
-    { id: 'nav-search', title: 'Search & Shazam', icon: <Search size={18} />, action: () => navigate('/search') },
-    { id: 'nav-library', title: 'My Library', icon: <Heart size={18} />, action: () => navigate('/library') },
-    { id: 'nav-account', title: 'Account Settings', icon: <User size={18} />, action: () => navigate('/account') },
-    { id: 'nav-sync', title: 'Transfer Music', icon: <Download size={18} />, action: () => navigate('/sync') },
-  ];
-
-  const libraryResults = library
-    .filter(t => t.title.toLowerCase().includes(query.toLowerCase()) || t.artists.some(a => a.toLowerCase().includes(query.toLowerCase())))
-    .slice(0, 5)
-    .map(t => ({
-      id: `lib-${t.provider_id}`,
-      title: `${t.artists.join(', ')} - ${t.title}`,
-      icon: <Music size={18} />,
-      action: () => {
-        // Play track logic could go here, or navigate to track details
-        // For now, just navigate to library
-        navigate('/library');
-      }
-    }));
-
-  const filteredNav = navigationOptions.filter(n => n.title.toLowerCase().includes(query.toLowerCase()));
-  
-  const results = query ? [...filteredNav, ...libraryResults] : navigationOptions;
+  }, [isOpen, onClose, results.length]);
 
   if (!isOpen) return null;
 
@@ -66,99 +203,107 @@ export default function CommandPalette({ isOpen, onClose }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
+        data-testid="command-palette-overlay"
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(5px)',
+          inset: 0,
+          background: 'rgba(0,0,0,0.55)',
+          backdropFilter: 'blur(8px)',
           zIndex: 10000,
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'center',
-          paddingTop: '10vh'
+          paddingTop: '10vh',
         }}
       >
         <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: -20 }}
+          initial={{ scale: 0.96, opacity: 0, y: -16 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: -20 }}
-          onClick={e => e.stopPropagation()}
+          exit={{ scale: 0.96, opacity: 0, y: -16 }}
+          onClick={(e) => e.stopPropagation()}
           className="glass-panel"
+          data-testid="command-palette"
           style={{
             width: '100%',
-            maxWidth: '600px',
+            maxWidth: '640px',
             borderRadius: '16px',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-            border: '1px solid rgba(255,255,255,0.1)'
+            boxShadow: '0 24px 48px rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.12)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <Search size={20} color="var(--text-muted)" />
             <input
               ref={inputRef}
               type="text"
-              placeholder="Type a command or search library..."
+              data-testid="command-palette-input"
+              placeholder={lang === 'ru' ? 'Команда или поиск в библиотеке…' : 'Type a command or search library…'}
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               style={{
                 flex: 1,
                 background: 'transparent',
                 border: 'none',
                 color: 'white',
-                fontSize: '1.2rem',
+                fontSize: '1.15rem',
                 outline: 'none',
-                padding: '0 16px',
-                fontFamily: 'inherit'
+                padding: '0 14px',
+                fontFamily: 'inherit',
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && results.length > 0) {
-                  results[0].action();
-                  onClose();
+                  e.preventDefault();
+                  runSelected();
                 }
               }}
             />
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>ESC</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.08)', padding: '4px 8px', borderRadius: '6px' }}>ESC</div>
           </div>
 
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <div style={{ maxHeight: '420px', overflowY: 'auto', padding: '8px' }}>
             {results.length > 0 ? (
-              <div style={{ padding: '8px' }}>
-                {results.map((res, i) => (
+              results.map((res, i) => {
+                const Icon = res.icon;
+                const selected = i === selectedIdx;
+                return (
                   <div
                     key={res.id}
-                    className="command-item"
-                    onClick={() => {
-                      res.action();
-                      onClose();
-                    }}
+                    data-testid={`command-item-${res.id}`}
+                    onClick={() => res.action()}
+                    onMouseEnter={() => setSelectedIdx(i)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px',
-                      padding: '12px 16px',
-                      borderRadius: '8px',
+                      padding: '11px 14px',
+                      borderRadius: '10px',
                       cursor: 'pointer',
                       color: 'var(--text-primary)',
-                      transition: 'all 0.2s'
+                      background: selected ? 'rgba(255,255,255,0.12)' : 'transparent',
+                      transition: 'background 0.15s',
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <div style={{ color: 'var(--text-muted)' }}>{res.icon}</div>
-                    <div style={{ flex: 1, fontWeight: 500 }}>{res.title}</div>
-                    {i === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ENTER</div>}
+                    <div style={{ color: selected ? 'var(--accent-solid)' : 'var(--text-muted)', display: 'flex' }}>
+                      <Icon size={18} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{res.title}</div>
+                      {res.subtitle && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {res.subtitle}
+                        </div>
+                      )}
+                    </div>
+                    {selected && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>↵</div>}
                   </div>
-                ))}
-              </div>
+                );
+              })
             ) : (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                No results found for "{query}"
+              <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                {lang === 'ru' ? `Ничего не найдено: «${query}»` : `No results for "${query}"`}
               </div>
             )}
           </div>

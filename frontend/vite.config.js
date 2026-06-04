@@ -8,6 +8,24 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        navigateFallback: '/index.html',
+        runtimeCaching: [
+          {
+            urlPattern: /^https?:\/\/.*\/api\/.*/i,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-pages',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 },
+            },
+          },
+        ],
+      },
       manifest: {
         name: 'FlacAudio DJ Player',
         short_name: 'FlacAudio',
@@ -30,6 +48,10 @@ export default defineConfig({
       }
     })
   ],
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.js'],
+  },
   server: {
     proxy: {
       '/api': {

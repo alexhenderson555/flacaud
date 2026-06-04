@@ -1,8 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { apiFetch, parseJsonSafe, messageForApiError } from '../utils/apiClient';
+import {
+  loginWithPassword,
+  registerUser,
+  userDataFromLogin,
+  persistEffectivePlan,
+} from '../utils/authSession';
+import { isQualityAllowedForPlan, clampQualityToPlan } from '../utils/qualityPrefs';
+import { pauseBackgroundRequests, resumeBackgroundRequests } from '../utils/authBusy';
+import { primeMediaToken } from '../utils/mediaToken';
 import { useOutletContext } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, User, HardDrive, Shield, Zap, Palette, Activity, History, LogIn, Mail, Globe } from 'lucide-react';
+import { Settings, Shield, Palette, Activity, History, LogIn, Globe } from 'lucide-react';
 import UpgradeModal from '../components/UpgradeModal';
+import { planDisplayName } from '../constants/plans';
 
 const dict = {
   en: {
@@ -22,14 +33,14 @@ const dict = {
     dlDesc: 'View your previously requested tracks',
     bgVis: 'Background Visualizer',
     bgDesc: 'Classic EQ bars reacting to music',
-    bgDesc: 'Classic EQ bars reacting to music',
     appearance: 'Appearance',
     appDesc: 'Choose your visual aesthetic',
     langTitle: 'Language',
     langDesc: 'Choose your interface language',
     volNorm: 'Volume Normalization',
     volDesc: 'Auto Gain Control (keeps all tracks at same loudness)',
-    billingDate: 'June 30, 2026',
+    planStatus: 'Status',
+    noBilling: '—',
     themeOcean: 'Ocean Blue',
     themePurple: 'Cyber Purple',
     themeCrimson: 'Crimson Red',
@@ -52,14 +63,14 @@ const dict = {
     dlDesc: 'Посмотреть ранее скачанные треки',
     bgVis: 'Визуализатор',
     bgDesc: 'Классический EQ, реагирующий на музыку',
-    bgDesc: 'Классический EQ, реагирующий на музыку',
     appearance: 'Оформление',
     appDesc: 'Выберите визуальный стиль',
     langTitle: 'Язык',
     langDesc: 'Выберите язык интерфейса',
     volNorm: 'Нормализация громкости',
     volDesc: 'Автоматически выравнивает громкость всех треков (Auto Gain Control)',
-    billingDate: '30 Июня 2026',
+    planStatus: 'Статус',
+    noBilling: '—',
     themeOcean: 'Океанский Синий',
     themePurple: 'Кибер-Пурпур',
     themeCrimson: 'Багровый',
@@ -68,9 +79,12 @@ const dict = {
 };
 
 export default function Account() {
-  const { theme, setTheme, visualizerEnabled, setVisualizerEnabled, playbackQuality, setPlaybackQuality, lang, setLang } = useOutletContext();
+  const {
+    theme, setTheme, visualizerEnabled, setVisualizerEnabled,
+    defaultPlaybackQuality, setDefaultPlaybackQuality, lang, setLang,
+  } = useOutletContext();
   const t = (key) => dict[lang][key] || key;
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('tidal-token'));
   const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -78,6 +92,9 @@ export default function Account() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState('');
   const [userData, setUserData] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authSlow, setAuthSlow] = useState(false);
+  const authInFlightRef = useRef(false);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('tidal-token');
@@ -86,79 +103,85 @@ export default function Account() {
       return;
     }
     try {
-      const res = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await apiFetch('/api/auth/me', { auth: true, timeoutMs: 20000, retries: 1 });
       if (res.ok) {
-        const data = await res.json();
+        const data = await parseJsonSafe(res);
+        if (data?.effective_plan) persistEffectivePlan(data.effective_plan);
         setUserData(data);
         setIsLoggedIn(true);
       } else if (res.status === 401) {
         setIsLoggedIn(false);
+        setUserData(null);
         localStorage.removeItem('tidal-token');
+        localStorage.removeItem('tidal-user');
+      } else {
+        setUserData(null);
+        setIsLoggedIn(false);
       }
-    } catch (e) {
-      // Network error, assume logged in if we have a token
-      setIsLoggedIn(true);
+    } catch {
+      setIsLoggedIn(!!token);
+      setUserData(null);
     }
   };
 
   useEffect(() => {
+    if (!localStorage.getItem('tidal-token')) {
+      setIsLoggedIn(false);
+      return;
+    }
     checkAuth();
   }, []);
 
   const handleAuth = async () => {
+    if (authInFlightRef.current) return;
     setAuthError('');
     if (!username || !password || (isRegistering && !email)) {
-      setAuthError('Please fill in all fields');
+      setAuthError(lang === 'ru' ? 'Заполните все поля' : 'Please fill in all fields');
       return;
     }
-    
+
+    authInFlightRef.current = true;
+    setAuthLoading(true);
+    setAuthSlow(false);
+    const slowTimer = setTimeout(() => setAuthSlow(true), 4000);
+    pauseBackgroundRequests();
     try {
       if (isRegistering) {
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, username, password })
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          setAuthError(data.detail || 'Registration failed');
-          return;
-        }
+        await registerUser({ email, username, password });
       }
-      
-      const formData = new URLSearchParams();
-      formData.append('username', username);
-      formData.append('password', password);
-      
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        setAuthError(errData.detail || 'Invalid credentials');
-        return;
-      }
-
-      const data = await res.json();
+      const data = await loginWithPassword(username, password);
       localStorage.setItem('tidal-token', data.access_token);
-      localStorage.setItem('tidal-user', data.username);
+      localStorage.setItem('tidal-user', data.username || username);
+      setUserData(userDataFromLogin(data, username));
       setIsLoggedIn(true);
-      
+      await primeMediaToken();
+      window.dispatchEvent(new CustomEvent('tidal-auth-login'));
+      checkAuth().catch(() => { /* refresh profile in background */ });
     } catch (err) {
-      setAuthError('Network error');
+      setAuthError(messageForApiError(err, lang));
+    } finally {
+      clearTimeout(slowTimer);
+      setAuthSlow(false);
+      resumeBackgroundRequests();
+      authInFlightRef.current = false;
+      setAuthLoading(false);
     }
   };
   
   const handleLogout = () => {
     localStorage.removeItem('tidal-token');
     localStorage.removeItem('tidal-user');
+    localStorage.removeItem('tidal-effective-plan');
     setIsLoggedIn(false);
+    setUserData(null);
+    window.dispatchEvent(new CustomEvent('tidal-auth-expired'));
   };
+
+  useEffect(() => {
+    if (!userData?.effective_plan) return;
+    const capped = clampQualityToPlan(defaultPlaybackQuality, userData.effective_plan);
+    if (capped !== defaultPlaybackQuality) setDefaultPlaybackQuality(capped);
+  }, [userData?.effective_plan, defaultPlaybackQuality, setDefaultPlaybackQuality]);
 
   const emojis = ['😎', '👽', '🦊', '🎧', '🚀', '👾', '🔥', '🥷'];
   const [avatar, setAvatar] = useState('😎');
@@ -167,7 +190,13 @@ export default function Account() {
   return (
     <div style={{ paddingBottom: '40px' }}>
       <AnimatePresence>
-        {isUpgradeOpen && <UpgradeModal onClose={() => setIsUpgradeOpen(false)} lang={lang} />}
+        {isUpgradeOpen && (
+          <UpgradeModal
+            onClose={() => setIsUpgradeOpen(false)}
+            lang={lang}
+            onPlanUpdated={checkAuth}
+          />
+        )}
       </AnimatePresence>
       
       <motion.div 
@@ -207,7 +236,7 @@ export default function Account() {
                   <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{userData?.username || localStorage.getItem('tidal-user') || 'User'}</h2>
                   <div style={{ color: 'var(--accent-solid)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase' }}>
                     <Shield size={16} />
-                    {userData?.effective_plan || 'FREE'} Plan
+                    {planDisplayName(userData?.effective_plan, lang)} {lang === 'ru' ? 'тариф' : 'Plan'}
                   </div>
                 </div>
               </div>
@@ -215,11 +244,17 @@ export default function Account() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>{t('downloads')}</span>
-                  <span style={{ fontWeight: 600 }}>{userData?.downloads_today || 0} <span style={{ color: 'var(--text-muted)' }}>/ {userData?.daily_limit || 3}</span></span>
+                  <span style={{ fontWeight: 600 }}>{userData?.downloads_today ?? 0} <span style={{ color: 'var(--text-muted)' }}>/ {userData?.daily_limit ?? 3}</span></span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>{t('nextBilling')}</span>
-                  <span style={{ fontWeight: 600 }}>{t('billingDate')}</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {userData?.effective_plan === 'lifetime'
+                      ? (lang === 'ru' ? 'Навсегда' : 'Lifetime')
+                      : userData?.subscription_expires_at
+                        ? new Date(userData.subscription_expires_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US')
+                        : t('noBilling')}
+                  </span>
                 </div>
               </div>
 
@@ -263,8 +298,18 @@ export default function Account() {
                   onChange={e => setPassword(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', color: 'white' }}
                 />
-                <button className="btn-primary" onClick={handleAuth} style={{ width: '100%', padding: '12px', marginTop: '8px' }}>
-                  {isRegistering ? 'Sign Up' : 'Log In'}
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleAuth}
+                  disabled={authLoading}
+                  style={{ width: '100%', padding: '12px', marginTop: '8px', opacity: authLoading ? 0.7 : 1 }}
+                >
+                  {authLoading
+                    ? (authSlow
+                      ? (lang === 'ru' ? 'Подключение к серверу…' : 'Connecting to server…')
+                      : (lang === 'ru' ? 'Подождите…' : 'Please wait…'))
+                    : (isRegistering ? (lang === 'ru' ? 'Регистрация' : 'Sign Up') : (lang === 'ru' ? 'Войти' : 'Log In'))}
                 </button>
                 <div onClick={() => setIsRegistering(!isRegistering)} style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', cursor: 'pointer', marginTop: '8px' }}>
                   {isRegistering ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
@@ -286,26 +331,38 @@ export default function Account() {
                   { id: 'HIGH', label: 'High', desc: '320kbps AAC', icon: '🎧' },
                   { id: 'LOSSLESS', label: 'Lossless', desc: 'FLAC 16-bit', icon: '💿' },
                   { id: 'HI_RES', label: 'Max', desc: 'FLAC 24-bit', icon: '✨' }
-                ].map(q => (
+                ].map(q => {
+                  const allowed = isQualityAllowedForPlan(q.id, userData?.effective_plan || 'free');
+                  return (
                   <div
                     key={q.id}
-                    onClick={() => setPlaybackQuality(q.id)}
+                    onClick={() => {
+                      if (!allowed) {
+                        setAuthError(lang === 'ru' ? 'Это качество доступно на платном тарифе' : 'This quality requires a paid plan');
+                        return;
+                      }
+                      setAuthError('');
+                      setDefaultPlaybackQuality(q.id);
+                    }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '12px',
                       padding: '12px 16px', borderRadius: '12px',
-                      background: playbackQuality === q.id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)',
-                      border: playbackQuality === q.id ? '1px solid var(--accent-solid)' : '1px solid var(--border-subtle)',
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      boxShadow: playbackQuality === q.id ? '0 0 12px var(--accent-glow)' : 'none'
+                      background: defaultPlaybackQuality === q.id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)',
+                      border: defaultPlaybackQuality === q.id ? '1px solid var(--accent-solid)' : '1px solid var(--border-subtle)',
+                      cursor: allowed ? 'pointer' : 'not-allowed',
+                      opacity: allowed ? 1 : 0.45,
+                      transition: 'all 0.2s ease',
+                      boxShadow: defaultPlaybackQuality === q.id ? '0 0 12px var(--accent-glow)' : 'none'
                     }}
                   >
                     <span style={{ fontSize: '1.5rem' }}>{q.icon}</span>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ fontWeight: playbackQuality === q.id ? 700 : 500, color: playbackQuality === q.id ? 'white' : 'var(--text-primary)' }}>{q.label}</div>
-                      <div style={{ fontSize: '0.75rem', marginTop: '2px', color: playbackQuality === q.id ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)' }}>{q.desc}</div>
+                      <div style={{ fontWeight: defaultPlaybackQuality === q.id ? 700 : 500, color: defaultPlaybackQuality === q.id ? 'white' : 'var(--text-primary)' }}>{q.label}</div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '2px', color: defaultPlaybackQuality === q.id ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)' }}>{q.desc}</div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

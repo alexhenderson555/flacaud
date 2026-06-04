@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
-export default function AudioVisualizer({ audioRef }) {
+export default function AudioVisualizer({ audioRef, isPlaying = false }) {
   const canvasRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -28,55 +28,49 @@ export default function AudioVisualizer({ audioRef }) {
     const ctx = canvas.getContext('2d');
 
     const draw = () => {
-      reqRef.current = requestAnimationFrame(draw);
-      
-      const width = canvas.width;
-      const height = canvas.height;
-      
-      ctx.clearRect(0, 0, width, height);
-      
-      if (!analyserRef.current) return;
-      
-      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-      
-      const rootStyle = getComputedStyle(document.documentElement);
-      let accent = rootStyle.getPropertyValue('--accent-solid').trim() || '#2575fc';
-      let transparentAccent = `${accent}40`;
-      
-      if (accent.startsWith('rgb(')) {
-        transparentAccent = accent.replace('rgb(', 'rgba(').replace(')', ', 0.25)');
-      }
-      
-      const bufferLength = analyserRef.current.frequencyBinCount;
-      const drawBins = Math.floor(bufferLength * 0.75); 
-      const barWidth = (width / drawBins);
-      
-      ctx.shadowBlur = 30;
-      ctx.shadowColor = accent;
-      
-      let x = 0;
-      for (let i = 0; i < drawBins; i++) {
-        const val = dataArrayRef.current[i];
-        const barHeight = (val / 255) * (height * 0.6);
-        
-        const grad = ctx.createLinearGradient(0, height, 0, height - barHeight);
-        grad.addColorStop(0, transparentAccent);
-        grad.addColorStop(1, accent);
-        
-        ctx.fillStyle = grad;
-        // Draw from the bottom up, leaving a small gap between bars
-        ctx.fillRect(x, height - barHeight, barWidth - 4, barHeight);
-        
-        x += barWidth;
+      if (document.visibilityState !== 'hidden' && isPlaying) {
+        const width = canvas.width;
+        const height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+        if (analyserRef.current) {
+          analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+          const rootStyle = getComputedStyle(document.documentElement);
+          let accent = rootStyle.getPropertyValue('--accent-solid').trim() || '#2575fc';
+          let transparentAccent = `${accent}40`;
+          if (accent.startsWith('rgb(')) {
+            transparentAccent = accent.replace('rgb(', 'rgba(').replace(')', ', 0.25)');
+          }
+          const bufferLength = analyserRef.current.frequencyBinCount;
+          const drawBins = Math.floor(bufferLength * 0.75);
+          const barWidth = width / drawBins;
+          ctx.shadowBlur = 30;
+          ctx.shadowColor = accent;
+          let x = 0;
+          for (let i = 0; i < drawBins; i++) {
+            const val = dataArrayRef.current[i];
+            const barHeight = (val / 255) * (height * 0.6);
+            const grad = ctx.createLinearGradient(0, height, 0, height - barHeight);
+            grad.addColorStop(0, transparentAccent);
+            grad.addColorStop(1, accent);
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, height - barHeight, barWidth - 4, barHeight);
+            x += barWidth;
+          }
+        }
+        reqRef.current = requestAnimationFrame(draw);
       }
     };
 
-    draw();
+    const kick = () => draw();
+    kick();
+    document.addEventListener('visibilitychange', kick);
 
     return () => {
+      document.removeEventListener('visibilitychange', kick);
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
+      audioRef.current?.removeEventListener('play', initVisualizer);
     };
-  }, [audioRef]);
+  }, [audioRef, isPlaying]);
 
   return (
     <canvas 

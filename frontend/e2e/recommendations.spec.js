@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { routeAuthMe } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',
@@ -9,16 +10,15 @@ const TRACK = {
   quality: 'LOSSLESS',
 };
 
-test('recommendations page loads tracks from ai-playlist', async ({ page }) => {
+test('recommendations page loads tracks from recommendations API', async ({ page }) => {
+  await routeAuthMe(page);
+
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-rec');
     window.__E2E_DISABLE_AUTOSAVE__ = true;
   });
 
-  await page.route('**/api/library', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/ai-playlist', async (route) => {
+  await page.route('**/api/recommendations**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

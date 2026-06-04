@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { getMediaToken } from '../utils/mediaToken';
 import { motion } from 'framer-motion';
 import { Repeat, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';

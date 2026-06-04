@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { installE2EAuth, installApiStubs, SEARCH_INPUT } from './helpers.js';
 
 const page1 = Array.from({ length: 50 }, (_, i) => ({
   provider: 'tidal',
@@ -19,17 +20,8 @@ const page2 = Array.from({ length: 10 }, (_, i) => ({
 }));
 
 test('search loads more results on scroll', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-scroll');
-    window.__E2E_DISABLE_AUTOSAVE__ = true;
-  });
-
-  await page.route('**/api/library', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/downloads', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await installE2EAuth(page, { token: 'e2e-scroll' });
+  await installApiStubs(page);
 
   await page.route('**/api/search', async (route) => {
     const body = route.request().postDataJSON();
@@ -50,7 +42,7 @@ test('search loads more results on scroll', async ({ page }) => {
   });
 
   await page.goto('/search');
-  await page.getByPlaceholder(/search|поиск/i).fill('scroll test');
+  await page.getByPlaceholder(SEARCH_INPUT).fill('scroll test');
   await page.waitForTimeout(800);
 
   await expect(page.getByText('Track 1', { exact: true })).toBeVisible({ timeout: 10000 });

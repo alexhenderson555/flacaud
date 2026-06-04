@@ -61,7 +61,7 @@ export const isTrackInLibrary = (trackId) => {
   try {
     const lib = JSON.parse(saved);
     return !!lib.find(t => t.provider_id === trackId);
-  } catch (e) {
+  } catch {
     return false;
   }
 };

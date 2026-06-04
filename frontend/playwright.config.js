@@ -16,5 +16,10 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
+    // The PWA service worker uses a NetworkOnly handler for /api/*, and
+    // service-worker-initiated requests bypass page.route() mocks (Playwright
+    // limitation) — they leak to the real backend and 502. Block SW so every
+    // /api request is interceptable by the specs' route mocks.
+    serviceWorkers: 'block',
   },
 });

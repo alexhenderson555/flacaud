@@ -1,4 +1,6 @@
-import React from 'react';
+import { Fragment } from 'react';
+import { qualityBadgeLabel, isQualityAllowedForPlan } from '../utils/qualityPrefs';
+import { proxiedCoverUrl } from '../utils/coverUrl';
 import { Link } from 'react-router-dom';
 import { Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders, ListMusic, Volume2, Waves, Radio } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -13,7 +15,9 @@ export default function PlayerBar({
   trackDuration,
   volume,
   playbackQuality,
+  effectivePlan = 'free',
   availableQualities = ['LOW', 'HIGH', 'LOSSLESS', 'HI_RES'],
+  qualitiesReady = true,
   maxTrackQuality,
   likedTracks,
   isKaraokeOpen,
@@ -21,7 +25,7 @@ export default function PlayerBar({
   isEQOpen,
   isQueueOpen,
   playlist,
-  currentTrackIndex,
+  nextTrack,
   togglePlay,
   playPrevious,
   playNext,
@@ -48,8 +52,8 @@ export default function PlayerBar({
     <div className="player-bar glass-panel" style={{ borderBottom: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
       <div className="player-left" style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: 0 }}>
         <div style={{ width: '56px', height: '56px', minWidth: '56px', borderRadius: '8px', background: 'var(--bg-surface-hover)', overflow: 'hidden' }}>
-           {currentTrack?.cover_url ? (
-             <img src={currentTrack.cover_url} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+           {proxiedCoverUrl(currentTrack?.cover_url) ? (
+             <img src={proxiedCoverUrl(currentTrack.cover_url)} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
            ) : (
              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Waves size={24} color="var(--text-muted)" />
@@ -68,7 +72,7 @@ export default function PlayerBar({
                      style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--accent-solid)', borderRadius: '4px', color: '#fff' }}
                      title={actualQuality !== playbackQuality ? `${playbackQuality} → ${actualQuality}` : actualQuality}
                    >
-                     {actualQuality === 'HI_RES' || actualQuality === 'HI_RES_LOSSLESS' ? 'MAX' : actualQuality === 'LOSSLESS' ? 'FLAC' : actualQuality}
+                     {qualityBadgeLabel(actualQuality) || actualQuality}
                    </span>
                  )}
                  {currentTrack.release_date && (
@@ -84,18 +88,27 @@ export default function PlayerBar({
               currentTrack.artists ? currentTrack.artists.map((artistName, i) => {
                 const artistId = currentTrack.artist_ids?.[i];
                 return (
-                  <React.Fragment key={i}>
+                  <Fragment key={i}>
                     {i > 0 && ", "}
                     {artistId ? (
                       <Link to={`/artist/${artistId}`} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
                         {artistName}
                       </Link>
                     ) : artistName}
-                  </React.Fragment>
+                  </Fragment>
                 );
               }) : 'Unknown Artist'
             ) : t('selectTrack')}
           </div>
+          {nextTrack && (
+            <div
+              data-testid="player-up-next"
+              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              title={`${nextTrack.title} — ${nextTrack.artists?.join(', ') || ''}`}
+            >
+              Up next: <span style={{ color: 'var(--text-secondary)' }}>{nextTrack.title}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -162,7 +175,9 @@ export default function PlayerBar({
                { id: 'LOSSLESS', label: 'FLAC', color: '#2575fc', level: 2 },
                { id: 'HI_RES', label: 'MAX', color: '#ffb703', level: 3 }
              ].map(q => {
-               const isDisabled = !availableQualities.includes(q.id);
+               const isDisabled = !qualitiesReady
+                 || !availableQualities.includes(q.id)
+                 || !isQualityAllowedForPlan(q.id, effectivePlan);
 
                return (
                  <div 

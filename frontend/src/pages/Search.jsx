@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, Fragment, memo } from 'react';
+import { debounce } from '../utils/debounce';
 import { showToast } from '../utils/toast';
 import { useOutletContext, Link } from 'react-router-dom';
-import { Search as SearchIcon, Download, Music, Disc, Mic, Play, Pause, Heart, Zap, ImagePlus, Plus, Check } from 'lucide-react';
+import { Search as SearchIcon, Download, Mic, Play, Pause, Heart, Zap, ImagePlus, Plus, Check } from 'lucide-react';
 import { cacheAudioTrack } from '../utils/cache';
 import PlaylistModal from '../components/PlaylistModal';
 import { suggestSearchCorrection, fixKeyboardLayout } from '../utils/searchQueryFix';
@@ -55,7 +56,7 @@ const dict = {
   }
 };
 
-export default function Search() {
+function Search() {
   const [query, setQuery] = useState(() => sessionStorage.getItem('tidal_search_query') || '');
   const [aiQuery, setAiQuery] = useState(() => sessionStorage.getItem('tidal_search_aiQuery') || '');
   const [aiImageBase64, setAiImageBase64] = useState(null);
@@ -87,25 +88,29 @@ export default function Search() {
   useEffect(() => { isSearchingRef.current = isSearching; }, [isSearching]);
   useEffect(() => { queryRef.current = query; }, [query]);
 
-  useEffect(() => {
-    sessionStorage.setItem('tidal_search_query', query);
-  }, [query]);
+  const persistSearchState = useMemo(() => debounce((patch) => {
+    try {
+      if ('query' in patch) sessionStorage.setItem('tidal_search_query', patch.query);
+      if ('aiQuery' in patch) sessionStorage.setItem('tidal_search_aiQuery', patch.aiQuery);
+      if ('searchMode' in patch) sessionStorage.setItem('tidal_search_mode', patch.searchMode);
+      if ('realResults' in patch) {
+        if (patch.realResults) sessionStorage.setItem('tidal_search_realResults', JSON.stringify(patch.realResults));
+        else sessionStorage.removeItem('tidal_search_realResults');
+      }
+      if ('aiResults' in patch) {
+        if (patch.aiResults) sessionStorage.setItem('tidal_search_aiResults', JSON.stringify(patch.aiResults));
+        else sessionStorage.removeItem('tidal_search_aiResults');
+      }
+    } catch {
+      /* quota */
+    }
+  }, 300), []);
 
-  useEffect(() => {
-    sessionStorage.setItem('tidal_search_aiQuery', aiQuery);
-  }, [aiQuery]);
-
-  useEffect(() => {
-    sessionStorage.setItem('tidal_search_mode', searchMode);
-  }, [searchMode]);
-
-  useEffect(() => {
-    if (realResults) sessionStorage.setItem('tidal_search_realResults', JSON.stringify(realResults));
-  }, [realResults]);
-
-  useEffect(() => {
-    if (aiResults) sessionStorage.setItem('tidal_search_aiResults', JSON.stringify(aiResults));
-  }, [aiResults]);
+  useEffect(() => { persistSearchState({ query }); }, [query, persistSearchState]);
+  useEffect(() => { persistSearchState({ aiQuery }); }, [aiQuery, persistSearchState]);
+  useEffect(() => { persistSearchState({ searchMode }); }, [searchMode, persistSearchState]);
+  useEffect(() => { persistSearchState({ realResults }); }, [realResults, persistSearchState]);
+  useEffect(() => { persistSearchState({ aiResults }); }, [aiResults, persistSearchState]);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   const { togglePlay: playerContextTogglePlay, currentTrackId, isPlaying, isLoading, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext } = useOutletContext();
   
@@ -123,16 +128,9 @@ export default function Search() {
     playerContextTogglePlay(track, playlistContext);
   };
 
-  // Mock results fallback if backend fails
-  const mockResults = [
-    { provider_id: 'mock1', title: 'Starboy', artists: ['The Weeknd', 'Daft Punk'], quality: 'LOSSLESS', cover_url: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&q=80&w=200', provider: 'tidal' },
-    { provider_id: 'mock2', title: 'Midnight City', artists: ['M83'], quality: 'LOSSLESS', cover_url: 'https://images.unsplash.com/photo-1493225457124-a1a2a5f5294b?auto=format&fit=crop&q=80&w=200', provider: 'tidal' },
-  ];
-
   useEffect(() => {
     const handler = setTimeout(() => {
       if (query.trim()) {
-        setQuerySuggestion(suggestSearchCorrection(query.trim()));
         performSearch(query.trim(), 0, false);
       } else {
         setRealResults(null);
@@ -173,11 +171,23 @@ export default function Search() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
         body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: PAGE_SIZE, offset })
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        const detail = errBody.detail || res.statusText;
+        throw new Error(typeof detail === 'string' ? detail : 'Search failed');
+      }
       const data = await res.json();
       if (data.tracks) {
         setRealResults((prev) => (append && prev ? [...prev, ...data.tracks] : data.tracks));
         setHasMore(Boolean(data.has_more));
         setSearchOffset(offset + data.tracks.length);
+        if (!append) {
+          if (data.tracks.length > 0) {
+            setQuerySuggestion(null);
+          } else {
+            setQuerySuggestion(suggestSearchCorrection(searchQuery));
+          }
+        }
         if (!append && data.tracks.length === 0) {
           const alt = fixKeyboardLayout(searchQuery);
           if (alt !== searchQuery) {
@@ -198,8 +208,18 @@ export default function Search() {
         }
       }
     } catch (err) {
-      console.error('Backend search failed, using mock data:', err);
-      if (!append) setRealResults(mockResults);
+      console.error('Search failed:', err);
+      if (!append) {
+        setRealResults([]);
+        const msg = lang === 'ru'
+          ? (err.message?.includes('expired') || err.message?.includes('Session')
+            ? 'Сессия истекла — войдите в аккаунт'
+            : 'Поиск недоступен. Проверьте вход или обновите страницу (Ctrl+Shift+R)')
+          : (err.message?.includes('expired') || err.message?.includes('Session')
+            ? 'Session expired — open Account and log in'
+            : 'Search unavailable. Log in or hard-refresh (Ctrl+Shift+R)');
+        showToast(msg);
+      }
     }
     setIsSearching(false);
   };
@@ -292,7 +312,7 @@ export default function Search() {
       const data = await res.json();
       if (res.ok) {
         // Start caching the file in browser storage for offline playback
-        cacheAudioTrack(result, 'LOSSLESS').then((success) => {});
+        cacheAudioTrack(result, 'LOSSLESS').then(() => {});
         
         // Save job_id to queue
         const saved = localStorage.getItem('tidal-queue-jobs');
@@ -319,10 +339,10 @@ export default function Search() {
         body: JSON.stringify({ query: aiQuery, imageBase64: aiImageBase64, limit: 10 })
       });
       const data = await res.json();
-      if (res.ok && data.tracks) {
+      if (res.ok && data.tracks?.length) {
         setAiResults(data.tracks);
       } else {
-        showToast(`Failed to generate playlist: ${data.detail || 'Unknown error'}`);
+        showToast(`Failed to generate playlist: ${data.detail || 'No tracks found'}`);
       }
     } catch (err) {
       console.error(err);
@@ -364,7 +384,7 @@ export default function Search() {
       <motion.div 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        style={{ marginBottom: '40px', width: '100%', width: '100%', maxWidth: '1400px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
+        style={{ marginBottom: '40px', width: '100%', maxWidth: '1400px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
       >
         <div style={{ display: 'flex', background: 'var(--bg-surface-hover)', borderRadius: '16px', padding: '6px', marginBottom: '32px' }}>
           <button 
@@ -406,7 +426,7 @@ export default function Search() {
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.2, duration: 0.4 }}
-        style={{ position: 'relative', width: '100%', width: '100%', maxWidth: '1400px', marginBottom: '40px' }}
+        style={{ position: 'relative', width: '100%', maxWidth: '1400px', marginBottom: '40px' }}
       >
         {searchMode === 'normal' ? (
           <form className="glass-panel" onSubmit={(e) => { e.preventDefault(); performSearch(query); }} style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', borderRadius: '24px', width: '100%' }}>
@@ -563,14 +583,14 @@ export default function Search() {
                   {result.artists ? result.artists.map((artistName, i) => {
                      const artistId = result.artist_ids?.[i];
                      return (
-                       <React.Fragment key={i}>
+                       <Fragment key={i}>
                          {i > 0 && ", "}
                          {artistId ? (
                            <Link to={`/artist/${artistId}`} onClick={e => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
                              {artistName}
                            </Link>
                          ) : artistName}
-                       </React.Fragment>
+                       </Fragment>
                      );
                   }) : t('unknownArtist')}
                   {result.year ? ` • ${result.year}` : (result.release_date ? ` • ${result.release_date.split('-')[0]}` : '')}
@@ -630,7 +650,7 @@ export default function Search() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px', width: '100%', marginTop: '40px' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px', marginTop: '40px' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{aiQuery} Mix</h2>
@@ -724,3 +744,5 @@ export default function Search() {
     </div>
   );
 }
+
+export default memo(Search);

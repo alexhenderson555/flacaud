@@ -1,6 +1,4 @@
-const CACHE_NAME = 'tidal-audio-cache-v2';
-
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 

@@ -1,8 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { routeAuthMe } from './helpers.js';
 
 test('set analyzer shows progress while job runs', async ({ page }) => {
   const jobId = `e2e-analyzer-${Date.now()}`;
   let polls = 0;
+
+  await routeAuthMe(page);
 
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-analyzer');

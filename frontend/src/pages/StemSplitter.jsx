@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { showToast } from '../utils/toast';
-import { useOutletContext } from 'react-router-dom';
 import { Disc, Download, Loader2, Music, Mic2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { enqueueDownloadJob } from '../utils/downloadJobs';
@@ -34,8 +33,17 @@ export default function StemSplitter() {
 
   useEffect(() => {
     let interval;
+    let attempts = 0;
+    const maxAttempts = 120;
     if (jobId && (status === 'queued' || status === 'running')) {
       interval = setInterval(async () => {
+        attempts += 1;
+        if (attempts > maxAttempts) {
+          clearInterval(interval);
+          setError('Job timed out — check that the worker is running');
+          setStatus('failed');
+          return;
+        }
         try {
           const res = await fetch(`/api/jobs/${jobId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } });
           if (res.ok) {

@@ -1,5 +1,3 @@
-import React from 'react';
-import { motion } from 'framer-motion';
 
 const CAMELOT_KEYS = [
   { id: '8B', label: '8B', color: '#E53935' }, // C Major

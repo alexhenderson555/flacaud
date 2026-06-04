@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function Titlebar() {
   const [isTauri, setIsTauri] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const [, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (window.__TAURI__) {

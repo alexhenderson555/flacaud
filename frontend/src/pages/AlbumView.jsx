@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { showToast } from '../utils/toast';
 import { useParams, useOutletContext, useNavigate, Link } from 'react-router-dom';
-import { Play, Pause, ChevronLeft, Download, Check, Heart, Plus } from 'lucide-react';
+import { Play, ChevronLeft, Download, Check, Heart, Plus } from 'lucide-react';
 import PlaylistModal from '../components/PlaylistModal';
 import { toggleLibraryTrack } from '../utils/library';
 import { cacheAudioTrack } from '../utils/cache';
@@ -22,7 +22,7 @@ export default function AlbumView() {
       try {
         const lib = JSON.parse(saved);
         setLibraryIds(new Set(lib.map(t => t.provider_id)));
-      } catch (e) {}
+      } catch { /* ignore */ }
     }
   }, []);
 
@@ -55,7 +55,7 @@ export default function AlbumView() {
       });
       if (res.ok) {
         // Cache in browser
-        cacheAudioTrack(track, 'LOSSLESS').then((success) => {});
+        cacheAudioTrack(track, 'LOSSLESS').then(() => {});
         showToast(`Started downloading: ${track.title}`);
       }
     } catch (err) {
@@ -101,7 +101,7 @@ export default function AlbumView() {
   return (
     <div style={{ padding: '0 20px', paddingBottom: '40px', overflowY: 'auto', height: '100%' }} className="hide-scrollbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px', marginTop: '16px' }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '50%', background: 'var(--bg-surface)' }}>
+        <button onClick={() => navigate(-1)} style={{ border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '50%', background: 'var(--bg-surface)' }}>
           <ChevronLeft size={24} />
         </button>
       </div>
@@ -187,14 +187,14 @@ export default function AlbumView() {
                   {track.artists?.map((artistName, i) => {
                      const artistId = track.artist_ids?.[i];
                      return (
-                       <React.Fragment key={i}>
+                       <Fragment key={i}>
                          {i > 0 && ", "}
                          {artistId ? (
                            <Link to={`/artist/${artistId}`} onClick={e => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
                              {artistName}
                            </Link>
                          ) : artistName}
-                       </React.Fragment>
+                       </Fragment>
                      );
                   })}
                 </div>

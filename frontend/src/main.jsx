@@ -1,4 +1,3 @@
-import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import App from './App.jsx'
@@ -28,12 +27,24 @@ window.fetch = async (...args) => {
 
 import { registerSW } from 'virtual:pwa-register';
 
-if ('serviceWorker' in navigator) {
-  registerSW({ immediate: true });
+/** Register PWA only after login — avoids SW competing with auth on first visit. */
+function registerPwaAfterAuth() {
+  if (!('serviceWorker' in navigator) || window.__tidalPwaRegistered) return;
+  window.__tidalPwaRegistered = true;
+  registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      window.location.reload();
+    },
+  });
+}
+
+window.addEventListener('tidal-auth-login', registerPwaAfterAuth);
+if (localStorage.getItem('tidal-token')) {
+  registerPwaAfterAuth();
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />}>
@@ -51,6 +62,5 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="album/:id" element={<AlbumView />} />
         </Route>
       </Routes>
-    </BrowserRouter>
-  </React.StrictMode>,
+    </BrowserRouter>,
 )

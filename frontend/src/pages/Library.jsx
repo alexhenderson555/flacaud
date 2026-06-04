@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { showToast } from '../utils/toast';
 import { useOutletContext, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Download, Disc, Play, Pause, Trash2, ListMusic, Plus, ChevronLeft, Check, Search } from 'lucide-react';
+import { Download, Disc, Play, Pause, Trash2, ListMusic, Plus, ChevronLeft, Check, Search } from 'lucide-react';
 import PlaylistModal from '../components/PlaylistModal';
 import CamelotWheel from '../components/CamelotWheel';
 
@@ -18,7 +18,7 @@ export default function Library() {
   const [filterBpmRange, setFilterBpmRange] = useState({ min: 60, max: 200 });
   const [showDjFilters, setShowDjFilters] = useState(false);
 
-  const { togglePlay: playerContextTogglePlay, playingTrackId, downloadedTracks, libraryRevision } = useOutletContext();
+  const { togglePlay: playerContextTogglePlay, playingTrackId, downloadedTracks, libraryRevision, handleDownload } = useOutletContext();
 
   const togglePlay = (track, contextList) => {
     playerContextTogglePlay(track, contextList);
@@ -59,21 +59,15 @@ export default function Library() {
       } catch (e) { console.error("Failed to load from DB", e); }
     } else {
       const savedLib = localStorage.getItem('tidal-library');
-      if (savedLib) try { setLibrary(JSON.parse(savedLib)); } catch (e) { }
+      if (savedLib) try { setLibrary(JSON.parse(savedLib)); } catch { /* ignore */ }
       const savedPlaylists = localStorage.getItem('tidal-playlists');
-      if (savedPlaylists) try { setPlaylists(JSON.parse(savedPlaylists)); } catch (e) { }
+      if (savedPlaylists) try { setPlaylists(JSON.parse(savedPlaylists)); } catch { /* ignore */ }
     }
   };
 
   useEffect(() => {
     loadLibraryData();
   }, [libraryRevision]);
-
-  const saveLibrary = async (newLib) => {
-    setLibrary(newLib);
-    localStorage.setItem('tidal-library', JSON.stringify(newLib));
-    // For syncing deletes to DB, we do it in removeFromLibrary instead.
-  };
 
   const savePlaylists = async (newPlaylists) => {
     setPlaylists(newPlaylists);
@@ -138,24 +132,9 @@ export default function Library() {
     }
   };
 
-  const handleDownload = async (track, e) => {
-    e.stopPropagation();
-    try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({ url: track.source_url || `https://tidal.com/track/${track.provider_id}`, quality: 'LOSSLESS' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const saved = localStorage.getItem('tidal-queue-jobs');
-        const jobs = saved ? JSON.parse(saved) : [];
-        jobs.push(data.job_id);
-        localStorage.setItem('tidal-queue-jobs', JSON.stringify(jobs));
-        showToast(`Downloading ${track.title} to queue!`);
-      }
-    } catch (err) {
-      console.error(err);
+  const handleDownloadLocal = async (track, e) => {
+    if (handleDownload) {
+      await handleDownload(track, e);
     }
   };
 
@@ -186,14 +165,14 @@ export default function Library() {
           {track.artists?.map((artistName, idx) => {
              const artistId = track.artist_ids?.[idx];
              return (
-               <React.Fragment key={idx}>
+               <Fragment key={idx}>
                  {idx > 0 && ", "}
                  {artistId ? (
                    <Link to={`/artist/${artistId}`} onClick={e => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
                      {artistName}
                    </Link>
                  ) : artistName}
-               </React.Fragment>
+               </Fragment>
              );
           })}
           {track.album && (
@@ -210,10 +189,6 @@ export default function Library() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-solid)', fontSize: '0.85rem', fontWeight: 600, background: 'rgba(37, 117, 252, 0.1)', padding: '6px 12px', borderRadius: '12px' }}>
-          <Disc size={14} /> {track.quality || 'FLAC'}
-        </div>
-
         <button 
           className="btn-secondary" 
           onClick={(e) => { e.stopPropagation(); togglePlay(track, contextList); }}
@@ -232,7 +207,7 @@ export default function Library() {
 
         <button 
           className="btn-primary" 
-          onClick={(e) => handleDownload(track, e)}
+          onClick={(e) => handleDownloadLocal(track, e)}
           style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: downloadedTracks?.has(track.provider_id) ? 0.7 : 1 }}
           title={downloadedTracks?.has(track.provider_id) ? "Downloaded" : "Download"}
         >
@@ -312,10 +287,25 @@ export default function Library() {
               </select>
             </div>
             <button 
+              type="button"
+              data-testid="library-dj-filters-btn"
               onClick={() => setShowDjFilters(!showDjFilters)}
-              style={{ background: showDjFilters ? 'var(--accent-glow)' : 'var(--bg-surface)', border: 'none', color: showDjFilters ? 'white' : 'var(--text-muted)', padding: '10px 16px', borderRadius: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              className="glass-panel"
+              style={{
+                border: showDjFilters ? '1px solid var(--accent-solid)' : '1px solid var(--border-subtle)',
+                background: showDjFilters ? 'var(--accent-glow)' : 'transparent',
+                color: showDjFilters ? 'white' : 'var(--text-secondary)',
+                padding: '10px 18px',
+                borderRadius: '24px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontWeight: 600,
+                fontSize: '0.95rem',
+              }}
             >
-              <Disc size={20} /> DJ Filters
+              <Disc size={18} /> DJ Filters
             </button>
           </div>
 
@@ -327,7 +317,7 @@ export default function Library() {
                 exit={{ opacity: 0, height: 0 }}
                 style={{ overflow: 'hidden', marginBottom: '24px' }}
               >
-                <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
+                <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', gap: '40px', flexWrap: 'wrap', border: '1px solid var(--border-subtle)' }} data-testid="library-dj-filters">
                   <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem' }}>Camelot Key Filter</h3>
                     <CamelotWheel selectedKey={filterKey} onSelectKey={setFilterKey} />

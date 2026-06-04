@@ -4,6 +4,9 @@ const RU = "ёйцукенгшщзхъфывапролджэячсмитьбю."
 const EN_SHIFT = '~QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
 const RU_SHIFT = 'Ё!"№;%:?*()_+ЙЦУКЕНГШЩЗХЪ/ФЫВАПРОЛДЖЭ,ЯЧСМИТЬБЮ.';
 
+const EN_VOWELS = /[aeiouyAEIOUY]/;
+const RU_VOWELS = /[аеёиоуыэюяАЕЁИОУЫЭЮЯ]/;
+
 function swapLayout(text, from, to, fromShift, toShift) {
   let out = '';
   for (const ch of text) {
@@ -37,9 +40,33 @@ export function fixKeyboardLayout(query) {
   return query;
 }
 
-/** Suggest correction when layout swap yields a different meaningful string. */
+/** True when query looks like keyboard mash (wrong layout), not an intentional word. */
+function looksLikeWrongLayout(query) {
+  const hasCyrillic = /[а-яА-ЯёЁ]/.test(query);
+  const hasLatin = /[a-zA-Z]/.test(query);
+  if (hasCyrillic && hasLatin) return false;
+
+  if (hasLatin && !hasCyrillic) {
+    // Latin typed on EN keyboard but meant RU: usually no English vowels (ghbdtn → привет)
+    if (EN_VOWELS.test(query)) return false;
+    if (query.length < 4) return false;
+    return true;
+  }
+
+  if (hasCyrillic && !hasLatin) {
+    // Cyrillic typed on RU keyboard but meant EN: usually no Russian vowels
+    if (RU_VOWELS.test(query)) return false;
+    if (query.length < 4) return false;
+    return true;
+  }
+
+  return false;
+}
+
+/** Suggest layout correction only for obvious keyboard-layout mistakes. */
 export function suggestSearchCorrection(query) {
-  if (!query || query.length < 2) return null;
+  if (!query || query.length < 4) return null;
+  if (!looksLikeWrongLayout(query)) return null;
   const fixed = fixKeyboardLayout(query);
   if (fixed === query) return null;
   const origCyr = /[а-яА-ЯёЁ]/.test(query);

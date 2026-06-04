@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { showToast } from '../utils/toast';
 import { useOutletContext } from 'react-router-dom';
 import {
@@ -77,7 +77,7 @@ function isSoundCloudUrl(url) {
 }
 
 export default function SetAnalyzer() {
-  const { togglePlay, playingTrackId, currentTrackId, isPlaying, downloadedTracks, lang, audioRef, toggleLike, likedTracks } = useOutletContext();
+  const { togglePlay, currentTrackId, isPlaying, downloadedTracks, lang, audioRef, toggleLike, likedTracks } = useOutletContext();
   const t = (key) => dict[lang]?.[key] || dict.en[key] || key;
 
   const [url, setUrl] = useState(() => sessionStorage.getItem('tidal-analyzer-url') || '');
@@ -172,8 +172,17 @@ export default function SetAnalyzer() {
 
   useEffect(() => {
     let interval;
+    let attempts = 0;
+    const maxAttempts = 180;
     if (jobId && (status === 'queued' || status === 'running')) {
       interval = setInterval(async () => {
+        attempts += 1;
+        if (attempts > maxAttempts) {
+          clearInterval(interval);
+          setError(t('analysisFailed'));
+          setStatus('failed');
+          return;
+        }
         try {
           const res = await fetch(`/api/jobs/${jobId}`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
@@ -376,7 +385,7 @@ export default function SetAnalyzer() {
               }}
               onPause={() => setSetPlaying(false)}
               config={{
-                soundcloud: { visual: !isSc },
+                soundcloud: { visual: isSc },
                 youtube: { playerVars: { modestbranding: 1, rel: 0 } },
               }}
             />

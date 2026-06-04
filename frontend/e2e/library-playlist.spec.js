@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { routeAuthMe, SEARCH_INPUT } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',
@@ -12,6 +13,8 @@ const TRACK = {
 
 test('add to library from player updates library page immediately', async ({ page }) => {
   let libraryItems = [];
+
+  await routeAuthMe(page);
 
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-lib-token');
@@ -64,7 +67,7 @@ test('add to library from player updates library page immediately', async ({ pag
   });
 
   await page.goto('/search');
-  await page.getByPlaceholder(/search|поиск/i).fill('e2e');
+  await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
   await page.waitForTimeout(800);
   await page.getByTitle('Play Preview').first().click();
   await page.waitForTimeout(500);
@@ -78,6 +81,8 @@ test('add to library from player updates library page immediately', async ({ pag
 
 test('create playlist and add track via modal', async ({ page }) => {
   let playlists = [];
+
+  await routeAuthMe(page);
 
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-pl-token');
@@ -127,7 +132,7 @@ test('create playlist and add track via modal', async ({ page }) => {
   });
 
   await page.goto('/search');
-  await page.getByPlaceholder(/search|поиск/i).fill('e2e');
+  await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
   await page.waitForTimeout(800);
 
   await page.getByTitle('Add to Playlist').first().click();
@@ -147,6 +152,8 @@ test('sequential playback requests next stream url', async ({ page }) => {
     { ...TRACK, provider_id: '9002', title: 'Track Two' },
   ];
   const streamLog = [];
+
+  await routeAuthMe(page);
 
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-play-token');
@@ -191,7 +198,7 @@ test('sequential playback requests next stream url', async ({ page }) => {
   });
 
   await page.goto('/search');
-  await page.getByPlaceholder(/search|поиск/i).fill('e2e');
+  await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
   await page.waitForTimeout(800);
 
   const playButtons = page.locator('button[title="Play Preview"]');

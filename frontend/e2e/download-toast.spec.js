@@ -1,8 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { routeAuthMe, SEARCH_INPUT } from './helpers.js';
 
 test('download toast shows progress bar while job runs', async ({ page }) => {
   const jobId = `e2e-toast-${Date.now()}`;
   let pollCount = 0;
+
+  await routeAuthMe(page);
 
   await page.addInitScript(
     ({ id }) => {
@@ -79,6 +82,8 @@ test('clicking download on search starts toast with progress', async ({ page }) 
   const jobId = `e2e-click-${Date.now()}`;
   let pollCount = 0;
 
+  await routeAuthMe(page);
+
   await page.addInitScript(() => {
     window.__E2E_DISABLE_AUTOSAVE__ = true;
     localStorage.setItem('tidal-token', 'e2e-ui-token');
@@ -147,7 +152,7 @@ test('clicking download on search starts toast with progress', async ({ page }) 
   });
 
   await page.goto('/search');
-  await page.getByPlaceholder(/search|поиск/i).fill('e2e');
+  await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
   await page.waitForTimeout(800);
 
   await page.getByTitle('Download').first().click();

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ListMusic, Plus, Play } from 'lucide-react';
+import { ListMusic, Plus } from 'lucide-react';
 import { showToast } from '../utils/toast';
 
 export default function Playlists() {

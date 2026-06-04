@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { showToast } from '../utils/toast';
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Radio as RadioIcon, Play, Pause, Heart, Loader2, Download, Disc } from 'lucide-react';
+import { Radio as RadioIcon, Play, Heart, Loader2, Download } from 'lucide-react';
 
 export default function Radio() {
   const [stationTracks, setStationTracks] = useState([]);
@@ -19,7 +18,6 @@ export default function Radio() {
   } = useOutletContext();
 
   const isTrackCurrent = (track) => currentTrackId === String(track.provider_id);
-  const showPauseIcon = (track) => isTrackCurrent(track) && isPlaying;
 
   const togglePlay = (track) => {
     playerContextTogglePlay(track, stationTracks);
@@ -59,7 +57,7 @@ export default function Radio() {
       } else {
         setError(lang === 'ru' ? "Не удалось сгенерировать радио-микс." : "Could not generate a radio mix right now.");
       }
-    } catch (err) {
+    } catch {
       setError(lang === 'ru' ? "Ошибка сети при подключении к радио." : "Network error while tuning into the radio.");
     }
     setIsGenerating(false);
@@ -149,11 +147,6 @@ export default function Radio() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-solid)', fontSize: '0.85rem', fontWeight: 600, background: 'rgba(37, 117, 252, 0.1)', padding: '6px 12px', borderRadius: '12px' }}>
-                    <Disc size={14} />
-                    {track.quality || 'LOSSLESS'}
-                  </div>
-                  
                   <button onClick={(e) => toggleLike(track, e)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                     <Heart size={20} color={likedTracks.has(String(track.provider_id)) ? "var(--accent-solid)" : "var(--text-muted)"} fill={likedTracks.has(String(track.provider_id)) ? "var(--accent-solid)" : "none"} />
                   </button>

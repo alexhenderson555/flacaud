@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { installE2EAuth, installApiStubs, routeMediaToken, routeStream, routeQualityAvailable, SEARCH_INPUT } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',
@@ -12,21 +13,13 @@ const TRACK = {
 };
 
 test('quality selector shows actual MAX badge for HI_RES', async ({ page }) => {
+  await installE2EAuth(page, { token: 'e2e-quality' });
   await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-quality');
-    localStorage.setItem('tidal-quality', 'HI_RES');
-    window.__E2E_DISABLE_AUTOSAVE__ = true;
+    localStorage.setItem('tidal-playback-quality', 'HI_RES');
   });
-
-  await page.route('**/api/library', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/playlists', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/downloads', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await installApiStubs(page);
+  await routeMediaToken(page);
+  await routeStream(page);
   await page.route('**/api/search', async (route) => {
     await route.fulfill({
       status: 200,
@@ -34,26 +27,14 @@ test('quality selector shows actual MAX badge for HI_RES', async ({ page }) => {
       body: JSON.stringify({ tracks: [TRACK], has_more: false }),
     });
   });
-  await page.route('**/api/auth/media-token', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'mtok' }) });
-  });
-  await page.route('**/api/quality/tidal/*/available', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        available: ['LOW', 'HIGH', 'LOSSLESS', 'HI_RES'],
-        max_quality: 'HI_RES',
-        actual: { HI_RES: 'HI_RES_LOSSLESS', LOSSLESS: 'LOSSLESS', HIGH: 'HIGH', LOW: 'LOW' },
-      }),
-    });
+  await routeQualityAvailable(page, {
+    available: ['LOW', 'HIGH', 'LOSSLESS', 'HI_RES'],
+    max_quality: 'HI_RES',
+    actual: { HI_RES: 'HI_RES_LOSSLESS', LOSSLESS: 'LOSSLESS', HIGH: 'HIGH', LOW: 'LOW' },
   });
   await page.route('**/api/quality/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ quality: 'HI_RES_LOSSLESS' }),
-    });
+    if (route.request().url().includes('/available')) return;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ quality: 'HI_RES_LOSSLESS' }) });
   });
   await page.route('**/api/stream/**', async (route) => {
     await route.fulfill({
@@ -65,7 +46,7 @@ test('quality selector shows actual MAX badge for HI_RES', async ({ page }) => {
   });
 
   await page.goto('/search');
-  await page.getByPlaceholder(/search|поиск/i).fill('hi res');
+  await page.getByPlaceholder(SEARCH_INPUT).fill('hi res');
   await page.waitForTimeout(700);
 
   await page.getByTitle('Play Preview').first().click();

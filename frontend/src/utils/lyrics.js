@@ -90,3 +90,15 @@ export function clearLyricsCache() {
   inflight.clear();
   emptyCacheUntil.clear();
 }
+
+/** Index of the lyric line active at `currentTime` (first line active during intro). */
+export function getActiveLyricIndex(lyrics, currentTime) {
+  if (!lyrics?.length) return -1;
+  if (currentTime < lyrics[0].time) return 0;
+  let idx = 0;
+  for (let i = 0; i < lyrics.length; i++) {
+    if (currentTime >= lyrics[i].time) idx = i;
+    else break;
+  }
+  return idx;
+}

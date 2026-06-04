@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { fetchLyricsForTrack, getCachedLyrics } from '../utils/lyrics';
+import { fetchLyricsForTrack, getCachedLyrics, getActiveLyricIndex } from '../utils/lyrics';
 
 export default function LyricsView({ currentTrack, audioRef, onClose }) {
   const [lyrics, setLyrics] = useState([]);
@@ -39,20 +39,19 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
   }, [currentTrack]);
 
   useEffect(() => {
+    if (lyrics.length > 0) {
+      activeIdxRef.current = 0;
+      setActiveIdx(0);
+    }
+  }, [lyrics]);
+
+  useEffect(() => {
     if (lyrics.length === 0 || !audioRef?.current) return;
 
     let rafId;
     const update = () => {
       if (audioRef.current) {
-        const ct = audioRef.current.currentTime;
-        let newIdx = -1;
-        for (let i = 0; i < lyrics.length; i++) {
-          if (ct >= lyrics[i].time) {
-            newIdx = i;
-          } else {
-            break;
-          }
-        }
+        const newIdx = getActiveLyricIndex(lyrics, audioRef.current.currentTime);
         if (newIdx !== activeIdxRef.current) {
           activeIdxRef.current = newIdx;
           setActiveIdx(newIdx);
@@ -140,6 +139,7 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
               return (
                 <div
                   key={idx}
+                  data-testid={isActive ? 'lyric-line-active' : `lyric-line-${idx}`}
                   style={{
                     fontSize: isActive ? 'clamp(2rem, 8vw, 3.5rem)' : 'clamp(1.5rem, 6vw, 2.5rem)',
                     fontWeight: 700,

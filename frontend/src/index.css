@@ -256,6 +256,28 @@ input {
   box-sizing: border-box;
 }
 
+:root {
+  --player-bar-height: 90px;
+  --player-bar-bottom: 0px;
+}
+
+/* Download toasts sit above the fixed player bar, not on top of it */
+.download-toast-stack {
+  position: fixed;
+  right: 24px;
+  z-index: 10050;
+  bottom: calc(var(--player-bar-bottom) + var(--player-bar-height) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+.download-toast-stack > * {
+  pointer-events: auto;
+}
+
 .player-bar {
   position: fixed;
   bottom: 0;
@@ -375,6 +397,17 @@ input {
     padding: 20px !important;
     padding-bottom: 160px !important;
   }
+  :root {
+    --player-bar-bottom: 70px;
+    --player-bar-height: 200px;
+  }
+
+  .download-toast-stack {
+    left: 16px;
+    right: 16px;
+    bottom: calc(var(--player-bar-bottom) + var(--player-bar-height) + 16px);
+  }
+
   .player-bar {
     position: fixed !important;
     width: 100% !important;

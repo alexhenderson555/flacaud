@@ -12,6 +12,14 @@ test('download toast can be dismissed', async ({ page }) => {
     { id: jobId },
   );
 
+  await page.route('**/api/auth/me', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ username: 'e2e', effective_plan: 'pro', daily_limit: 9999, downloads_today: 0, subscription_expires_at: null }),
+    }),
+  );
+
   await page.route(`**/api/jobs/${jobId}`, async (route) => {
     await route.fulfill({
       status: 200,

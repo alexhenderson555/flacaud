@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Mic2, Loader2 } from 'lucide-react';
-import { fetchLyricsForTrack, getCachedLyrics } from '../utils/lyrics';
+import { fetchLyricsForTrack, getCachedLyrics, getActiveLyricIndex } from '../utils/lyrics';
 
 export default function KaraokeMode({ currentTrack, audioRef, onClose }) {
   const containerRef = useRef(null);
@@ -51,15 +51,7 @@ export default function KaraokeMode({ currentTrack, audioRef, onClose }) {
     let rafId;
     const update = () => {
       if (audioRef.current) {
-        const ct = audioRef.current.currentTime;
-        let newIdx = 0;
-        for (let i = 0; i < lyrics.length; i++) {
-          if (ct >= lyrics[i].time) {
-            newIdx = i;
-          } else {
-            break;
-          }
-        }
+        const newIdx = getActiveLyricIndex(lyrics, audioRef.current.currentTime);
         if (newIdx !== activeIdxRef.current) {
           activeIdxRef.current = newIdx;
           setActiveIndex(newIdx);
