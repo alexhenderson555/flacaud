@@ -1,4 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+
+function enterFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+
+function exitFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
 
 export function usePlayerOverlays() {
   const [isEQOpen, setIsEQOpen] = useState(false);
@@ -6,36 +18,106 @@ export function usePlayerOverlays() {
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const [isDJOpen, setIsDJOpen] = useState(false);
   const [isKaraokeOpen, setIsKaraokeOpen] = useState(false);
+  const [isPartyOpen, setIsPartyOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isPlaylistModalOpenPlayer, setIsPlaylistModalOpenPlayer] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isKaraokeOpenRef = useRef(false);
+  isKaraokeOpenRef.current = isKaraokeOpen;
+
+  const closeKaraoke = useCallback(() => {
+    setIsKaraokeOpen(false);
+    exitFullscreen();
+  }, []);
+
+  const closeParty = useCallback(() => {
+    setIsPartyOpen(false);
+    exitFullscreen();
+  }, []);
 
   const toggleOverlay = useCallback((overlay) => {
-    if (overlay === 'karaoke') {
-      setIsKaraokeOpen((prev) => {
+    if (overlay === 'party') {
+      setIsPartyOpen((prev) => {
         const next = !prev;
-        if (next && !document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        } else if (!next && document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
+        if (next) {
+          setIsEQOpen(false);
+          setIsQueueOpen(false);
+          setIsLyricsOpen(false);
+          setIsDJOpen(false);
         }
         return next;
       });
       return;
     }
-    setIsEQOpen((prev) => (overlay === 'eq' ? !prev : false));
-    setIsQueueOpen((prev) => (overlay === 'queue' ? !prev : false));
-    setIsLyricsOpen((prev) => (overlay === 'lyrics' ? !prev : false));
-    setIsDJOpen((prev) => (overlay === 'dj' ? !prev : false));
+    if (overlay === 'karaoke') {
+      const next = !isKaraokeOpenRef.current;
+      if (next) {
+        enterFullscreen();
+      } else {
+        exitFullscreen();
+      }
+      setIsKaraokeOpen(next);
+      return;
+    }
+    // Stack on karaoke; only one utility panel among eq / queue / lyrics / dj
+    if (overlay === 'eq') {
+      setIsEQOpen((prev) => !prev);
+      setIsQueueOpen(false);
+      setIsLyricsOpen(false);
+      setIsDJOpen(false);
+      return;
+    }
+    if (overlay === 'queue') {
+      setIsQueueOpen((prev) => !prev);
+      setIsEQOpen(false);
+      setIsLyricsOpen(false);
+      setIsDJOpen(false);
+      return;
+    }
+    if (overlay === 'lyrics') {
+      setIsLyricsOpen((prev) => !prev);
+      setIsEQOpen(false);
+      setIsQueueOpen(false);
+      setIsDJOpen(false);
+      return;
+    }
+    if (overlay === 'dj') {
+      setIsDJOpen((prev) => !prev);
+      setIsEQOpen(false);
+      setIsQueueOpen(false);
+      setIsLyricsOpen(false);
+    }
   }, []);
 
   const closeAllPanels = useCallback(() => {
-    setIsCommandPaletteOpen(false);
-    setIsQueueOpen(false);
-    setIsLyricsOpen(false);
-    setIsEQOpen(false);
-    setIsDJOpen(false);
-  }, []);
+    if (isCommandPaletteOpen) {
+      setIsCommandPaletteOpen(false);
+      return;
+    }
+    if (isQueueOpen) {
+      setIsQueueOpen(false);
+      return;
+    }
+    if (isLyricsOpen) {
+      setIsLyricsOpen(false);
+      return;
+    }
+    if (isEQOpen) {
+      setIsEQOpen(false);
+      return;
+    }
+    if (isDJOpen) {
+      setIsDJOpen(false);
+      return;
+    }
+    if (isPartyOpen) {
+      closeParty();
+      return;
+    }
+    if (isKaraokeOpenRef.current) {
+      closeKaraoke();
+    }
+  }, [closeKaraoke, closeParty, isCommandPaletteOpen, isQueueOpen, isLyricsOpen, isEQOpen, isDJOpen, isPartyOpen]);
 
   return {
     isEQOpen,
@@ -43,6 +125,7 @@ export function usePlayerOverlays() {
     isLyricsOpen,
     isDJOpen,
     isKaraokeOpen,
+    isPartyOpen,
     isCommandPaletteOpen,
     setIsCommandPaletteOpen,
     isPlaylistModalOpenPlayer,
@@ -51,6 +134,9 @@ export function usePlayerOverlays() {
     setIsMobileMenuOpen,
     toggleOverlay,
     closeAllPanels,
+    closeKaraoke,
+    closeParty,
+    setIsPartyOpen,
     setIsQueueOpen,
     setIsLyricsOpen,
     setIsEQOpen,

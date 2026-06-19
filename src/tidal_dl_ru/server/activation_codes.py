@@ -9,7 +9,11 @@ from typing import Optional
 
 from sqlmodel import Field, Session, SQLModel, select
 
-from tidal_dl_ru.bot.users import Plan, set_plan
+from tidal_dl_ru.bot.users import Plan
+from tidal_dl_ru.server.subscription_apply import (
+    apply_paid_plan_for_telegram,
+    apply_paid_plan_for_user_id,
+)
 from tidal_dl_ru.database import database as db_mod
 
 
@@ -64,20 +68,10 @@ def redeem_code(code: str, user_id: int, telegram_id: int | None = None) -> tupl
             return False, "Invalid plan on code"
 
         if telegram_id:
-            set_plan(telegram_id, plan)
+            apply_paid_plan_for_telegram(telegram_id, plan)
         else:
-            from tidal_dl_ru.database.models import User
-
-            user = session.get(User, user_id)
-            if not user:
+            if apply_paid_plan_for_user_id(user_id, plan) is None:
                 return False, "User not found"
-            user.plan = plan.value
-            if plan == Plan.LIFETIME:
-                user.subscription_expires_at = None
-            elif plan in (Plan.BASIC, Plan.PRO):
-                user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
-            session.add(user)
-            session.commit()
 
         row.redeemed_at = datetime.now(timezone.utc)
         row.redeemed_by_user_id = user_id

@@ -1,0 +1,410 @@
+{
+  "Electronic": [
+    {
+      "name": "Melodic House",
+      "image": "https://resources.tidal.com/images/65b504a2/0c56/44a8/a3b3/9e1c5ceacb64/320x320.jpg"
+    },
+    {
+      "name": "Deep House",
+      "image": "https://resources.tidal.com/images/5168c7c3/40e8/4761/b9f3/4564d3adce15/320x320.jpg"
+    },
+    {
+      "name": "Techno",
+      "image": "https://resources.tidal.com/images/11fb3e02/8ef3/46a4/97ca/546d97fb16ee/320x320.jpg"
+    },
+    {
+      "name": "Synthwave",
+      "image": "https://resources.tidal.com/images/ce71b07b/4f9e/4ddf/9ca1/ad0722ec850c/320x320.jpg"
+    },
+    {
+      "name": "Trance",
+      "image": "https://resources.tidal.com/images/3762750d/eb05/4e0a/a0f8/374148375c2f/320x320.jpg"
+    },
+    {
+      "name": "Dubstep",
+      "image": "https://resources.tidal.com/images/2a630f1d/dd0e/453d/908a/4bf1f8e68304/320x320.jpg"
+    },
+    {
+      "name": "Drum and Bass",
+      "image": "https://resources.tidal.com/images/47cabae1/ab7b/4924/ae59/ef20b709738c/320x320.jpg"
+    },
+    {
+      "name": "Chillwave",
+      "image": "https://resources.tidal.com/images/e55398ca/9271/484c/a747/fea8f07b72f4/320x320.jpg"
+    },
+    {
+      "name": "IDM",
+      "image": "https://resources.tidal.com/images/15727f39/1227/4de0/a751/71f492d80601/320x320.jpg"
+    },
+    {
+      "name": "House",
+      "image": "https://resources.tidal.com/images/80482cda/d706/4f2d/89b0/8d86047353e4/320x320.jpg"
+    },
+    {
+      "name": "Hardstyle",
+      "image": "https://resources.tidal.com/images/7fcc16cb/a878/4513/977a/44fb093ccaeb/320x320.jpg"
+    }
+  ],
+  "Rock": [
+    {
+      "name": "Indie Rock",
+      "image": "https://resources.tidal.com/images/1d55eb0b/0d62/464c/83e8/e6b83f4922be/320x320.jpg"
+    },
+    {
+      "name": "Punk",
+      "image": "https://resources.tidal.com/images/3cbfef31/7f28/42a5/8f8f/b822d6b77ad6/320x320.jpg"
+    },
+    {
+      "name": "Alternative",
+      "image": "https://resources.tidal.com/images/f9b0dc80/a605/4397/a589/31868364d5b3/320x320.jpg"
+    },
+    {
+      "name": "Classic Rock",
+      "image": "https://resources.tidal.com/images/6d20dd65/6a17/4f24/ae21/d0d97348c760/320x320.jpg"
+    },
+    {
+      "name": "Grunge",
+      "image": "https://resources.tidal.com/images/354251d0/d434/411a/a889/06cf7daeffef/320x320.jpg"
+    },
+    {
+      "name": "Psychedelic Rock",
+      "image": "https://resources.tidal.com/images/ac662971/0ff3/4f09/b749/a5c3caf57cb4/320x320.jpg"
+    },
+    {
+      "name": "Hard Rock",
+      "image": "https://resources.tidal.com/images/8a620f4f/0b64/4255/9a4e/9edb54455bad/320x320.jpg"
+    },
+    {
+      "name": "Post-Punk",
+      "image": "https://resources.tidal.com/images/742969b7/79a9/42fa/a68f/1ab0f43bc397/320x320.jpg"
+    }
+  ],
+  "Metal": [
+    {
+      "name": "Heavy Metal",
+      "image": "https://resources.tidal.com/images/2759a99b/5d6e/4330/8240/acd0fceb2240/320x320.jpg"
+    },
+    {
+      "name": "Death Metal",
+      "image": "https://resources.tidal.com/images/6578bb73/5350/425d/8a0b/956463d2687f/320x320.jpg"
+    },
+    {
+      "name": "Black Metal",
+      "image": "https://resources.tidal.com/images/f7ba8e43/ec8f/4635/af4a/450a32c55255/320x320.jpg"
+    },
+    {
+      "name": "Metalcore",
+      "image": "https://resources.tidal.com/images/2d1f776b/b6ce/47dc/94bf/576a020056a2/320x320.jpg"
+    },
+    {
+      "name": "Doom Metal",
+      "image": "https://resources.tidal.com/images/636b7a5a/bbae/4356/861c/4cf8f6ad56f9/320x320.jpg"
+    },
+    {
+      "name": "Nu Metal",
+      "image": "https://resources.tidal.com/images/38b04dae/ea36/457c/9f1f/b175b31f6cd4/320x320.jpg"
+    },
+    {
+      "name": "Thrash Metal",
+      "image": "https://resources.tidal.com/images/0b6a87b1/54a4/4014/9ac2/a2c7b978ae19/320x320.jpg"
+    },
+    {
+      "name": "Symphonic Metal",
+      "image": "https://resources.tidal.com/images/ca7c9759/81f6/4f2a/a1b5/a71b74084570/320x320.jpg"
+    }
+  ],
+  "Hip-Hop / Rap": [
+    {
+      "name": "Trap",
+      "image": "https://resources.tidal.com/images/299bad8b/03b0/4f3d/bb8d/e2b65a16d829/320x320.jpg"
+    },
+    {
+      "name": "Boom Bap",
+      "image": "https://resources.tidal.com/images/0f5128e8/0425/4dfc/ae09/a854f18594ee/320x320.jpg"
+    },
+    {
+      "name": "Lo-Fi",
+      "image": "https://resources.tidal.com/images/548bce96/e2e9/4959/b845/ba02a648cff6/320x320.jpg"
+    },
+    {
+      "name": "Drill",
+      "image": "https://resources.tidal.com/images/2d596a41/a0bd/4e03/869c/c147b955365e/320x320.jpg"
+    },
+    {
+      "name": "Conscious Rap",
+      "image": "https://resources.tidal.com/images/431a91bb/cafa/473e/a56d/81708c54ead3/320x320.jpg"
+    },
+    {
+      "name": "Cloud Rap",
+      "image": "https://resources.tidal.com/images/3b955515/bed1/4b1b/a8d4/57ecbbf278fe/320x320.jpg"
+    },
+    {
+      "name": "Old School Hip-Hop",
+      "image": "https://resources.tidal.com/images/77a4d5b3/8a0d/4794/9c29/0656bcae848d/320x320.jpg"
+    },
+    {
+      "name": "Mumble Rap",
+      "image": "https://resources.tidal.com/images/c6c630f0/2b32/4e5e/8414/171a83790471/320x320.jpg"
+    },
+    {
+      "name": "Grime",
+      "image": "https://resources.tidal.com/images/146b6ac6/95f9/42c1/b7c1/c8d13b37f7f0/320x320.jpg"
+    }
+  ],
+  "Pop": [
+    {
+      "name": "Synth-Pop",
+      "image": "https://resources.tidal.com/images/32918894/17c4/4511/b84c/aa7d45423c1e/320x320.jpg"
+    },
+    {
+      "name": "Dream Pop",
+      "image": "https://resources.tidal.com/images/7b4ce9be/0e39/443d/bc15/980b2c68c799/320x320.jpg"
+    },
+    {
+      "name": "Electropop",
+      "image": "https://resources.tidal.com/images/32b1f1a6/cbbe/426e/a4b0/915670c60cef/320x320.jpg"
+    },
+    {
+      "name": "Hyperpop",
+      "image": "https://resources.tidal.com/images/23234104/2eb2/444d/a525/693cb3346b9b/320x320.jpg"
+    },
+    {
+      "name": "Dance-Pop",
+      "image": "https://resources.tidal.com/images/027ffd02/3b19/469f/82bb/9bea3ec8ccac/320x320.jpg"
+    },
+    {
+      "name": "Indie Pop",
+      "image": "https://resources.tidal.com/images/9d604867/a1da/4834/bcd5/58232961834f/320x320.jpg"
+    },
+    {
+      "name": "Teen Pop",
+      "image": "https://resources.tidal.com/images/08488473/6ad3/43e2/a581/440936e42ffb/320x320.jpg"
+    },
+    {
+      "name": "Art Pop",
+      "image": "https://resources.tidal.com/images/24968a42/7183/426d/8873/edb9a486642a/320x320.jpg"
+    }
+  ],
+  "R&B / Soul": [
+    {
+      "name": "Neo-Soul",
+      "image": "https://resources.tidal.com/images/702666a2/3123/44aa/9461/b69af35c366f/320x320.jpg"
+    },
+    {
+      "name": "Contemporary R&B",
+      "image": "https://resources.tidal.com/images/137a2117/fcb0/4e80/9b00/2e6caec67d8c/320x320.jpg"
+    },
+    {
+      "name": "Funk",
+      "image": "https://resources.tidal.com/images/b4d18570/e32a/4a5f/8634/76b9a0843c10/320x320.jpg"
+    },
+    {
+      "name": "Motown",
+      "image": "https://resources.tidal.com/images/f881b44f/fe53/42f0/829c/75b590421517/320x320.jpg"
+    },
+    {
+      "name": "Quiet Storm",
+      "image": "https://resources.tidal.com/images/9b886d7f/ce1c/4981/b34f/39d0d63e9fd2/320x320.jpg"
+    },
+    {
+      "name": "Alternative R&B",
+      "image": "https://resources.tidal.com/images/c80ee6e1/ccb5/447f/a9f7/540381a48da4/320x320.jpg"
+    },
+    {
+      "name": "Classic Soul",
+      "image": "https://resources.tidal.com/images/65cc635f/039d/426b/9ea2/9d452c4faae1/320x320.jpg"
+    }
+  ],
+  "Jazz & Blues": [
+    {
+      "name": "Bebop",
+      "image": "https://resources.tidal.com/images/d3d8b106/7f61/4817/85da/ffae1f4d255e/320x320.jpg"
+    },
+    {
+      "name": "Smooth Jazz",
+      "image": "https://resources.tidal.com/images/d071a104/0e41/4474/8ac3/1a5b8f632d94/320x320.jpg"
+    },
+    {
+      "name": "Delta Blues",
+      "image": "https://resources.tidal.com/images/0a428250/6562/48c3/8a27/fd20aac6fef7/320x320.jpg"
+    },
+    {
+      "name": "Chicago Blues",
+      "image": "https://resources.tidal.com/images/b255c0d4/c3c5/43a1/b63b/dc61cff2b84f/320x320.jpg"
+    },
+    {
+      "name": "Jazz Fusion",
+      "image": "https://resources.tidal.com/images/c37a4f6b/3b9a/4fc2/98b9/36944496974e/320x320.jpg"
+    },
+    {
+      "name": "Cool Jazz",
+      "image": "https://resources.tidal.com/images/b335df36/c47c/4155/ba8f/3339273496cd/320x320.jpg"
+    },
+    {
+      "name": "Free Jazz",
+      "image": "https://resources.tidal.com/images/6ec66391/ff25/40bd/9335/6e375df00b14/320x320.jpg"
+    },
+    {
+      "name": "Soul Jazz",
+      "image": "https://resources.tidal.com/images/6acd5ef6/4b8a/4a35/9acf/ecd87b35777b/320x320.jpg"
+    }
+  ],
+  "Latin": [
+    {
+      "name": "Reggaeton",
+      "image": "https://resources.tidal.com/images/c879c812/ab3a/420f/9b10/a797d06abf8f/320x320.jpg"
+    },
+    {
+      "name": "Salsa",
+      "image": "https://resources.tidal.com/images/41f1ee3a/7bd5/4805/a128/de5e919c7336/320x320.jpg"
+    },
+    {
+      "name": "Bossa Nova",
+      "image": "https://resources.tidal.com/images/5e9772a3/4867/4dd7/b992/c22aefa747c5/320x320.jpg"
+    },
+    {
+      "name": "Bachata",
+      "image": "https://resources.tidal.com/images/707025e6/9af0/4a49/b46b/bdaf1a7e0d6e/320x320.jpg"
+    },
+    {
+      "name": "Latin Pop",
+      "image": "https://resources.tidal.com/images/2d4dbdfb/d00b/4501/9348/19231e69d4bd/320x320.jpg"
+    },
+    {
+      "name": "Cumbia",
+      "image": "https://resources.tidal.com/images/a055daf1/5e1d/4506/9a47/2e6035164bbf/320x320.jpg"
+    },
+    {
+      "name": "Merengue",
+      "image": "https://resources.tidal.com/images/82d3edee/d84a/4c6e/ae59/be40d0868765/320x320.jpg"
+    }
+  ],
+  "Classical": [
+    {
+      "name": "Symphony",
+      "image": "https://resources.tidal.com/images/f28ab1b0/e7f5/423a/a96d/2af3959ec330/320x320.jpg"
+    },
+    {
+      "name": "Baroque",
+      "image": "https://resources.tidal.com/images/7b66232f/700b/49f2/932d/957574c70c16/320x320.jpg"
+    },
+    {
+      "name": "Romantic",
+      "image": "https://resources.tidal.com/images/03b8e0e8/76e3/44fc/925d/c1115cd4153f/320x320.jpg"
+    },
+    {
+      "name": "Chamber Music",
+      "image": "https://resources.tidal.com/images/35a55907/6a17/467e/a832/70a023059ea5/320x320.jpg"
+    },
+    {
+      "name": "Contemporary Classical",
+      "image": "https://resources.tidal.com/images/75794627/4d22/4742/b953/976f73de3329/320x320.jpg"
+    },
+    {
+      "name": "Opera",
+      "image": "https://resources.tidal.com/images/e51dd69d/6140/477f/afc6/d20a9ccd84dd/320x320.jpg"
+    },
+    {
+      "name": "Choral",
+      "image": "https://resources.tidal.com/images/78b1df1a/577b/4597/b911/52246a1b7827/320x320.jpg"
+    }
+  ],
+  "Country & Folk": [
+    {
+      "name": "Modern Country",
+      "image": "https://resources.tidal.com/images/57a996dd/7039/4513/967b/dd979ac240b8/320x320.jpg"
+    },
+    {
+      "name": "Bluegrass",
+      "image": "https://resources.tidal.com/images/cbbcd018/ed2e/469b/ba91/8cb69187287d/320x320.jpg"
+    },
+    {
+      "name": "Americana",
+      "image": "https://resources.tidal.com/images/6479f358/3674/411c/a87a/57cb9a7e6e2b/320x320.jpg"
+    },
+    {
+      "name": "Indie Folk",
+      "image": "https://resources.tidal.com/images/8bb04edb/4771/43d9/8ab9/5fc52b2d92d5/320x320.jpg"
+    },
+    {
+      "name": "Acoustic",
+      "image": "https://resources.tidal.com/images/3cbf844d/1bf7/4473/9a7d/bcab43e72467/320x320.jpg"
+    },
+    {
+      "name": "Alt-Country",
+      "image": "https://resources.tidal.com/images/6e5335a7/46dd/498f/85d3/ee50b61bd58d/320x320.jpg"
+    },
+    {
+      "name": "Traditional Country",
+      "image": "https://resources.tidal.com/images/c5e8441b/aaf8/4cb1/8fa7/cf42b5a66811/320x320.jpg"
+    }
+  ],
+  "Global & World": [
+    {
+      "name": "Afrobeats",
+      "image": "https://resources.tidal.com/images/f704b117/80f2/40aa/93a9/4fe180e1133d/320x320.jpg"
+    },
+    {
+      "name": "Afro",
+      "image": "https://resources.tidal.com/images/c0e38ce7/548e/46d0/8dfd/d45450e61693/320x320.jpg"
+    },
+    {
+      "name": "K-Pop",
+      "image": "https://resources.tidal.com/images/0d1c2805/1418/42e8/9537/d58ea9c12ff3/320x320.jpg"
+    },
+    {
+      "name": "J-Pop",
+      "image": "https://resources.tidal.com/images/5341b0b2/b11b/4afa/9610/6d8b10b5898c/320x320.jpg"
+    },
+    {
+      "name": "Reggae",
+      "image": "https://resources.tidal.com/images/1639b0f4/0357/4ee1/b8f4/c2cbf4456506/320x320.jpg"
+    },
+    {
+      "name": "Dancehall",
+      "image": "https://resources.tidal.com/images/1dda8d72/7273/41a9/bf38/1c8f66bf3013/320x320.jpg"
+    },
+    {
+      "name": "Bollywood",
+      "image": "https://resources.tidal.com/images/3e6ae0b4/f1c6/4fea/ab8f/c72c9209b621/320x320.jpg"
+    },
+    {
+      "name": "Celtic",
+      "image": "https://resources.tidal.com/images/5abbee31/7b5b/49a8/8e7f/dd78c74dea8f/320x320.jpg"
+    }
+  ],
+  "Chill & Focus": [
+    {
+      "name": "Lo-Fi Beats",
+      "image": "https://resources.tidal.com/images/af5ae813/4bab/49dd/9ccd/606cd17b5eba/320x320.jpg"
+    },
+    {
+      "name": "Nature Sounds",
+      "image": "https://resources.tidal.com/images/bf075730/d5eb/4c03/a575/e3e57d1b3bf2/320x320.jpg"
+    },
+    {
+      "name": "Meditation",
+      "image": "https://resources.tidal.com/images/4e64862a/ffad/457a/b3e8/42c62010ca5e/320x320.jpg"
+    },
+    {
+      "name": "White Noise",
+      "image": "https://resources.tidal.com/images/87739240/a193/4179/aa00/ba36f2fbc307/320x320.jpg"
+    },
+    {
+      "name": "Cinematic",
+      "image": "https://resources.tidal.com/images/b2f05a80/7498/456e/8c0e/fea4bc5ab49d/320x320.jpg"
+    },
+    {
+      "name": "Ambient",
+      "image": "https://resources.tidal.com/images/123ea62e/de8e/4b56/868d/0ea9f54d7106/320x320.jpg"
+    },
+    {
+      "name": "Downtempo",
+      "image": "https://resources.tidal.com/images/d8b390c3/4164/422a/9a9c/1e9cad2266cd/320x320.jpg"
+    },
+    {
+      "name": "Binaural Beats",
+      "image": "https://resources.tidal.com/images/db30af7b/8503/4486/b18a/1c7f2722de76/320x320.jpg"
+    }
+  ]
+}

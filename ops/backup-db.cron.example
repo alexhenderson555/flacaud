@@ -1,0 +1,6 @@
+# Example crontab entry for daily SQLite/Postgres backup.
+# Install: sudo cp ops/backup-db.cron.example /etc/cron.d/tidal-dl-backup
+#
+# 0 3 * * * root cd /opt/tidal-dl-ru && bash ops/backup-db.sh >> /var/log/tidal-backup.log 2>&1
+
+0 3 * * * root cd /opt/tidal-dl-ru && bash ops/backup-db.sh >> /var/log/tidal-backup.log 2>&1

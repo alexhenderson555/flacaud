@@ -5,15 +5,38 @@ import {
   registerUser,
   userDataFromLogin,
   persistEffectivePlan,
+  signOut,
+  getAccessToken,
 } from '../utils/authSession';
+import { persistAccessToken, clearAccessToken } from '../utils/tokenStorage';
+import { getLegal } from '../content/legalContent';
 import { isQualityAllowedForPlan, clampQualityToPlan } from '../utils/qualityPrefs';
+import { dispatchDjPrefsChanged } from '../utils/djPrefs';
 import { pauseBackgroundRequests, resumeBackgroundRequests } from '../utils/authBusy';
 import { primeMediaToken } from '../utils/mediaToken';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Shield, Palette, Activity, History, LogIn, Globe } from 'lucide-react';
+import {
+  Settings,
+  Shield,
+  Activity,
+  History,
+  LogIn,
+  Globe,
+  Sparkles,
+  Disc3,
+  HardDrive,
+  Palette,
+} from 'lucide-react';
 import UpgradeModal from '../components/UpgradeModal';
+import DownloadHistory from '../components/account/DownloadHistory';
+import ThemeList from '../components/account/ThemeList';
+import PromoCodeBlock from '../components/upgrade/PromoCodeBlock';
 import { planDisplayName } from '../constants/plans';
+import { PROFILE_EMOJIS } from '../utils/profileAvatars';
+import { peekPendingShareToken } from '../utils/shareApi';
+import { getOfflineCacheStats, clearOfflineCache, OFFLINE_CACHE_UPDATED } from '../utils/cache';
+import { showToast } from '../utils/toast';
 
 const dict = {
   en: {
@@ -23,12 +46,18 @@ const dict = {
     downloads: 'Downloads Today',
     nextBilling: 'Next Billing Date',
     upgrade: 'Upgrade Plan',
+    logout: 'Log out',
     welcome: 'Welcome!',
     loginDesc: 'Log in to access high-res downloads, create playlists, and save your preferences.',
-    loginTg: 'Login with Telegram',
-    loginGo: 'Login with Google',
     loginEm: 'Continue with Email',
-    defAudio: 'Default Audio Quality',
+    forgotPassword: 'Forgot password?',
+    loginId: 'Username or email',
+    loginIdRegister: 'Username',
+    defAudio: 'Playback Quality',
+    defAudioAuto: 'Automatic',
+    defAudioAutoDesc: 'Best quality for each track within your plan',
+    defAudioManual: 'Fixed quality',
+    defAudioManualDesc: 'Always use the selected tier (downgrades per track if needed)',
     dlHistory: 'Download History',
     dlDesc: 'View your previously requested tracks',
     bgVis: 'Background Visualizer',
@@ -41,10 +70,18 @@ const dict = {
     volDesc: 'Auto Gain Control (keeps all tracks at same loudness)',
     planStatus: 'Status',
     noBilling: '—',
-    themeOcean: 'Ocean Blue',
-    themePurple: 'Cyber Purple',
-    themeCrimson: 'Crimson Red',
-    themeEmerald: 'Emerald Green'
+    djAnalysis: 'BPM & key analysis',
+    djAnalysisDesc: 'Background track analysis and DJ filters in your library (Pro plan)',
+    djPlanRequired: 'Available on Pro and Lifetime plans',
+    offlineCache: 'Offline cache',
+    offlineCacheDesc: 'Tracks saved on this device for playback without network',
+    offlineCacheEmpty: 'No cached tracks',
+    offlineCacheClear: 'Clear cache',
+    offlineCacheCleared: 'Offline cache cleared',
+    acceptTerms: 'I accept the Terms of Use and Privacy Policy',
+    verifyBanner: 'Please verify your email — check your inbox.',
+    verifySpamHint: 'If you do not see it, check Spam — mail from a new domain often lands there first.',
+    resendVerify: 'Resend verification email',
   },
   ru: {
     account: 'Ваш',
@@ -53,12 +90,18 @@ const dict = {
     downloads: 'Скачано сегодня',
     nextBilling: 'Следующее списание',
     upgrade: 'Улучшить план',
+    logout: 'Выйти',
     welcome: 'Добро пожаловать!',
     loginDesc: 'Войдите, чтобы скачивать в высоком качестве, создавать плейлисты и сохранять настройки.',
-    loginTg: 'Войти через Telegram',
-    loginGo: 'Войти через Google',
     loginEm: 'Продолжить по Email',
-    defAudio: 'Качество по умолчанию',
+    forgotPassword: 'Забыли пароль?',
+    loginId: 'Логин или email',
+    loginIdRegister: 'Имя пользователя',
+    defAudio: 'Качество воспроизведения',
+    defAudioAuto: 'Автоматически',
+    defAudioAutoDesc: 'Максимум для каждого трека в рамках вашего тарифа',
+    defAudioManual: 'Фиксированное качество',
+    defAudioManualDesc: 'Всегда выбранный уровень (при необходимости понизится для трека)',
     dlHistory: 'История скачиваний',
     dlDesc: 'Посмотреть ранее скачанные треки',
     bgVis: 'Визуализатор',
@@ -71,33 +114,84 @@ const dict = {
     volDesc: 'Автоматически выравнивает громкость всех треков (Auto Gain Control)',
     planStatus: 'Статус',
     noBilling: '—',
-    themeOcean: 'Океанский Синий',
-    themePurple: 'Кибер-Пурпур',
-    themeCrimson: 'Багровый',
-    themeEmerald: 'Изумрудный'
-  }
+    djAnalysis: 'Анализ BPM и тональности',
+    djAnalysisDesc: 'Фоновый анализ треков и DJ-фильтры в медиатеке (тариф Про)',
+    djPlanRequired: 'Доступно на тарифах Про и Навсегда',
+    offlineCache: 'Офлайн-кэш',
+    offlineCacheDesc: 'Треки на этом устройстве для прослушивания без сети',
+    offlineCacheEmpty: 'Нет кэшированных треков',
+    offlineCacheClear: 'Очистить кэш',
+    offlineCacheCleared: 'Офлайн-кэш очищен',
+    acceptTerms: 'Я принимаю Условия и Политику конфиденциальности',
+    verifyBanner: 'Подтвердите email — проверьте почту.',
+    verifySpamHint: 'Если письма нет, загляните в «Спам» — с нового домена письма часто попадают туда.',
+    resendVerify: 'Отправить письмо снова',
+  },
 };
 
+const QUALITY_TIERS = [
+  { id: 'HIGH', label: '320k', spec: 'AAC 320 kbps' },
+  { id: 'LOSSLESS', label: 'Lossless', spec: 'FLAC (CD on Basic, Hi-Res on Pro)' },
+];
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let n = bytes;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i += 1;
+  }
+  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
 export default function Account() {
+  const navigate = useNavigate();
   const {
-    theme, setTheme, visualizerEnabled, setVisualizerEnabled,
-    defaultPlaybackQuality, setDefaultPlaybackQuality, lang, setLang,
+    theme,
+    setTheme,
+    visualizerEnabled,
+    setVisualizerEnabled,
+    defaultPlaybackQuality,
+    setDefaultPlaybackQuality,
+    autoPlaybackQuality,
+    setAutoPlaybackQuality,
+    lang,
+    setLang,
+    djAnalysisEnabled,
+    setDjAnalysisEnabled,
+    djFeaturesAvailable,
   } = useOutletContext();
+
   const t = (key) => dict[lang][key] || key;
-  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('tidal-token'));
+
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!getAccessToken());
   const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
-  const [username, setUsername] = useState('');
+  const [downloadHistoryOpen, setDownloadHistoryOpen] = useState(false);
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [authError, setAuthError] = useState('');
   const [userData, setUserData] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authSlow, setAuthSlow] = useState(false);
+  const [verifyResendMsg, setVerifyResendMsg] = useState('');
+  const [offlineCacheStats, setOfflineCacheStats] = useState({ count: 0, bytes: 0, quota: null });
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [activationCode, setActivationCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  const [avatar, setAvatar] = useState(PROFILE_EMOJIS[0]);
   const authInFlightRef = useRef(false);
 
+  const refreshOfflineCacheStats = async () => {
+    setOfflineCacheStats(await getOfflineCacheStats());
+  };
+
   const checkAuth = async () => {
-    const token = localStorage.getItem('tidal-token');
+    const token = getAccessToken();
     if (!token) {
       setIsLoggedIn(false);
       return;
@@ -108,11 +202,12 @@ export default function Account() {
         const data = await parseJsonSafe(res);
         if (data?.effective_plan) persistEffectivePlan(data.effective_plan);
         setUserData(data);
+        setDjAnalysisEnabled?.(!!data?.dj_enabled);
         setIsLoggedIn(true);
       } else if (res.status === 401) {
         setIsLoggedIn(false);
         setUserData(null);
-        localStorage.removeItem('tidal-token');
+        clearAccessToken();
         localStorage.removeItem('tidal-user');
       } else {
         setUserData(null);
@@ -125,38 +220,128 @@ export default function Account() {
   };
 
   useEffect(() => {
-    if (!localStorage.getItem('tidal-token')) {
+    if (!getAccessToken()) {
       setIsLoggedIn(false);
       return;
     }
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (!isLoggedIn) return undefined;
+    refreshOfflineCacheStats();
+    const onUpdate = () => { void refreshOfflineCacheStats(); };
+    window.addEventListener(OFFLINE_CACHE_UPDATED, onUpdate);
+    return () => window.removeEventListener(OFFLINE_CACHE_UPDATED, onUpdate);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!userData?.effective_plan) return;
+    const capped = clampQualityToPlan(defaultPlaybackQuality, userData.effective_plan);
+    if (capped !== defaultPlaybackQuality) setDefaultPlaybackQuality(capped);
+  }, [userData?.effective_plan, defaultPlaybackQuality, setDefaultPlaybackQuality]);
+
+  const handleCancelSubscription = async () => {
+    if (cancelLoading) return;
+    setCancelLoading(true);
+    try {
+      await apiFetch('/api/subscription/cancel', { method: 'POST', auth: true, lang });
+      await checkAuth();
+    } catch (err) {
+      setAuthError(messageForApiError(err, lang));
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleRedeemActivation = async () => {
+    const code = activationCode.trim();
+    if (!code) return;
+    if (!isLoggedIn) {
+      setAuthError(lang === 'ru' ? 'Сначала войдите в аккаунт' : 'Log in first to activate a code');
+      return;
+    }
+    setRedeeming(true);
+    try {
+      const res = await apiFetch('/api/activation/redeem', {
+        method: 'POST',
+        auth: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+        lang,
+      });
+      const data = await parseJsonSafe(res);
+      if (!res.ok) {
+        showToast(data.detail || (lang === 'ru' ? 'Неверный код' : 'Invalid code'));
+        return;
+      }
+      showToast(data.message || (lang === 'ru' ? 'Тариф активирован!' : 'Plan activated!'));
+      setActivationCode('');
+      await checkAuth();
+    } catch (err) {
+      showToast(messageForApiError(err, lang));
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
   const handleAuth = async () => {
     if (authInFlightRef.current) return;
     setAuthError('');
-    if (!username || !password || (isRegistering && !email)) {
+    if (!loginId || !password || (isRegistering && !email)) {
       setAuthError(lang === 'ru' ? 'Заполните все поля' : 'Please fill in all fields');
+      return;
+    }
+    if (isRegistering && !acceptTerms) {
+      setAuthError(lang === 'ru' ? 'Примите условия использования' : 'Please accept the Terms and Privacy Policy');
       return;
     }
 
     authInFlightRef.current = true;
+    sessionStorage.setItem('tidal-login-start-ms', String(Date.now()));
     setAuthLoading(true);
     setAuthSlow(false);
     const slowTimer = setTimeout(() => setAuthSlow(true), 4000);
     pauseBackgroundRequests();
     try {
       if (isRegistering) {
-        await registerUser({ email, username, password });
+        await registerUser({ email, username: loginId, password, acceptTerms });
       }
-      const data = await loginWithPassword(username, password);
-      localStorage.setItem('tidal-token', data.access_token);
-      localStorage.setItem('tidal-user', data.username || username);
-      setUserData(userDataFromLogin(data, username));
+      const data = await loginWithPassword(loginId, password);
+      persistAccessToken(data.access_token);
+      localStorage.setItem('tidal-user', data.username || loginId);
+      const profile = userDataFromLogin(data, loginId);
+      setUserData(profile);
+      setDjAnalysisEnabled?.(!!profile?.dj_enabled);
       setIsLoggedIn(true);
       await primeMediaToken();
       window.dispatchEvent(new CustomEvent('tidal-auth-login'));
-      checkAuth().catch(() => { /* refresh profile in background */ });
+      checkAuth().catch(() => {});
+
+      const pendingCode = activationCode.trim();
+      if (pendingCode) {
+        try {
+          const res = await apiFetch('/api/activation/redeem', {
+            method: 'POST',
+            auth: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: pendingCode }),
+            lang,
+          });
+          const redeemData = await parseJsonSafe(res);
+          if (res.ok) {
+            showToast(redeemData.message || (lang === 'ru' ? 'Тариф активирован!' : 'Plan activated!'));
+            setActivationCode('');
+            await checkAuth();
+          }
+        } catch { /* optional post-login redeem */ }
+      }
+
+      const shareToken = peekPendingShareToken();
+      if (shareToken) {
+        window.location.assign(`/s/${encodeURIComponent(shareToken)}`);
+        return;
+      }
     } catch (err) {
       setAuthError(messageForApiError(err, lang));
     } finally {
@@ -167,28 +352,77 @@ export default function Account() {
       setAuthLoading(false);
     }
   };
-  
-  const handleLogout = () => {
-    localStorage.removeItem('tidal-token');
-    localStorage.removeItem('tidal-user');
-    localStorage.removeItem('tidal-effective-plan');
+
+  const handleLogout = async () => {
+    await signOut();
     setIsLoggedIn(false);
     setUserData(null);
-    window.dispatchEvent(new CustomEvent('tidal-auth-expired'));
+    window.dispatchEvent(new CustomEvent('tidal-auth-expired', { detail: { silent: true } }));
   };
 
-  useEffect(() => {
-    if (!userData?.effective_plan) return;
-    const capped = clampQualityToPlan(defaultPlaybackQuality, userData.effective_plan);
-    if (capped !== defaultPlaybackQuality) setDefaultPlaybackQuality(capped);
-  }, [userData?.effective_plan, defaultPlaybackQuality, setDefaultPlaybackQuality]);
+  const handleResendVerification = async () => {
+    setVerifyResendMsg('');
+    try {
+      const res = await apiFetch('/api/auth/resend-verification', { method: 'POST', auth: true });
+      const data = await parseJsonSafe(res);
+      setVerifyResendMsg(data.message || t('resendVerify'));
+    } catch (err) {
+      setVerifyResendMsg(messageForApiError(err, lang));
+    }
+  };
 
-  const emojis = ['😎', '👽', '🦊', '🎧', '🚀', '👾', '🔥', '🥷'];
-  const [avatar, setAvatar] = useState('😎');
-  const cycleAvatar = () => setAvatar(emojis[(emojis.indexOf(avatar) + 1) % emojis.length]);
+  const handleDjToggle = async () => {
+    if (!djFeaturesAvailable) {
+      setIsUpgradeOpen(true);
+      return;
+    }
+    const next = !djAnalysisEnabled;
+    try {
+      const res = await apiFetch('/api/auth/me/preferences', {
+        method: 'PATCH',
+        auth: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dj_enabled: next }),
+      });
+      if (res.ok) {
+        const data = await parseJsonSafe(res);
+        setDjAnalysisEnabled(!!data.dj_enabled);
+        setUserData((prev) => (prev ? { ...prev, dj_enabled: data.dj_enabled } : prev));
+        if (data.dj_enabled) dispatchDjPrefsChanged();
+      } else if (res.status === 403) {
+        setAuthError(t('djPlanRequired'));
+        setIsUpgradeOpen(true);
+      }
+    } catch {
+      setAuthError(lang === 'ru' ? 'Не удалось сохранить настройку' : 'Could not save preference');
+    }
+  };
+
+  const cycleAvatar = () => {
+    setAvatar(PROFILE_EMOJIS[(PROFILE_EMOJIS.indexOf(avatar) + 1) % PROFILE_EMOJIS.length]);
+  };
+
+  const expiryWarning = (() => {
+    if (!userData?.subscription_expires_at) return null;
+    if (userData.effective_plan === 'lifetime' || userData.effective_plan === 'free') return null;
+    const days = Math.ceil((new Date(userData.subscription_expires_at) - Date.now()) / 864e5);
+    if (days > 7) return null;
+    return lang === 'ru'
+      ? `Подписка истекает через ${days} дн. — продлите в разделе тарифов.`
+      : `Subscription expires in ${days} day(s) — renew from Upgrade.`;
+  })();
+
+  const plan = userData?.effective_plan || 'free';
 
   return (
     <div style={{ paddingBottom: '40px' }}>
+      <DownloadHistory
+        open={downloadHistoryOpen}
+        onClose={() => setDownloadHistoryOpen(false)}
+        lang={lang}
+        isLoggedIn={isLoggedIn}
+      />
+
       <AnimatePresence>
         {isUpgradeOpen && (
           <UpgradeModal
@@ -198,178 +432,493 @@ export default function Account() {
           />
         )}
       </AnimatePresence>
-      
-      <motion.div 
+
+      <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         style={{ marginBottom: '40px' }}
       >
-        <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>{t('account')} <span className="text-gradient">{t('accountBold')}</span></h1>
+        <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>
+          {t('account')}{' '}
+          <span className="text-gradient">{t('accountBold')}</span>
+        </h1>
         <p style={{ color: 'var(--text-secondary)' }}>{t('accountDesc')}</p>
       </motion.div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', maxWidth: '1000px' }}>
-        {/* LEFT COLUMN: Account & Audio */}
-        <motion.div 
+        {/* LEFT COLUMN */}
+        <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.1 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
         >
-          {/* Profile Card */}
-          <div className="glass-panel" style={{ padding: '32px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', background: 'radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)', opacity: 0.3 }}></div>
-          
-          {isLoggedIn ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
-                <div 
-                  onClick={cycleAvatar}
-                  style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--accent-solid)', cursor: 'pointer', transition: 'transform 0.2s', userSelect: 'none' }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                  title="Change avatar"
-                >
-                  <span style={{ fontSize: '2.5rem' }}>{avatar}</span>
-                </div>
-                <div>
-                  <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{userData?.username || localStorage.getItem('tidal-user') || 'User'}</h2>
-                  <div style={{ color: 'var(--accent-solid)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase' }}>
-                    <Shield size={16} />
-                    {planDisplayName(userData?.effective_plan, lang)} {lang === 'ru' ? 'тариф' : 'Plan'}
-                  </div>
-                </div>
-              </div>
+          {/* Profile / Auth */}
+          <div
+            className="glass-panel"
+            style={{ padding: '32px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: '-50px',
+                right: '-50px',
+                width: '200px',
+                height: '200px',
+                background: 'radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)',
+                opacity: 0.3,
+              }}
+            />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>{t('downloads')}</span>
-                  <span style={{ fontWeight: 600 }}>{userData?.downloads_today ?? 0} <span style={{ color: 'var(--text-muted)' }}>/ {userData?.daily_limit ?? 3}</span></span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>{t('nextBilling')}</span>
-                  <span style={{ fontWeight: 600 }}>
-                    {userData?.effective_plan === 'lifetime'
-                      ? (lang === 'ru' ? 'Навсегда' : 'Lifetime')
-                      : userData?.subscription_expires_at
-                        ? new Date(userData.subscription_expires_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US')
-                        : t('noBilling')}
-                  </span>
-                </div>
-              </div>
-
-              <button className="btn-primary" onClick={() => setIsUpgradeOpen(true)} style={{ width: '100%', marginTop: '32px' }}>
-                {t('upgrade')}
-              </button>
-              <button className="btn-secondary" onClick={handleLogout} style={{ width: '100%', marginTop: '12px' }}>
-                Log out
-              </button>
-            </>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: '16px', padding: '20px 0' }}>
-              <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(37, 117, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-solid)', marginBottom: '8px' }}>
-                <LogIn size={32} />
-              </div>
-              <h2 style={{ margin: 0 }}>{isRegistering ? 'Create Account' : t('welcome')}</h2>
-              
-              {authError && <div style={{ color: 'var(--danger)', fontSize: '0.9rem' }}>{authError}</div>}
-              
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-                {isRegistering && (
-                  <input 
-                    type="email" 
-                    placeholder="Email" 
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', color: 'white' }}
-                  />
-                )}
-                <input 
-                  type="text" 
-                  placeholder="Username" 
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', color: 'white' }}
-                />
-                <input 
-                  type="password" 
-                  placeholder="Password" 
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', color: 'white' }}
-                />
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleAuth}
-                  disabled={authLoading}
-                  style={{ width: '100%', padding: '12px', marginTop: '8px', opacity: authLoading ? 0.7 : 1 }}
-                >
-                  {authLoading
-                    ? (authSlow
-                      ? (lang === 'ru' ? 'Подключение к серверу…' : 'Connecting to server…')
-                      : (lang === 'ru' ? 'Подождите…' : 'Please wait…'))
-                    : (isRegistering ? (lang === 'ru' ? 'Регистрация' : 'Sign Up') : (lang === 'ru' ? 'Войти' : 'Log In'))}
-                </button>
-                <div onClick={() => setIsRegistering(!isRegistering)} style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', cursor: 'pointer', marginTop: '8px' }}>
-                  {isRegistering ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
-                </div>
-              </div>
-            </div>
-          )}
-          </div>
-          {/* Default Audio Quality */}
-          <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(37, 117, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-solid)' }}>
-              <Settings size={24} />
-            </div>
-            <div style={{ width: '100%' }}>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>{t('defAudio')}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {[
-                  { id: 'LOW', label: 'Low', desc: '96kbps AAC', icon: '📻' },
-                  { id: 'HIGH', label: 'High', desc: '320kbps AAC', icon: '🎧' },
-                  { id: 'LOSSLESS', label: 'Lossless', desc: 'FLAC 16-bit', icon: '💿' },
-                  { id: 'HI_RES', label: 'Max', desc: 'FLAC 24-bit', icon: '✨' }
-                ].map(q => {
-                  const allowed = isQualityAllowedForPlan(q.id, userData?.effective_plan || 'free');
-                  return (
+            {isLoggedIn ? (
+              <>
+                {userData && userData.email_verified === false && (
                   <div
-                    key={q.id}
-                    onClick={() => {
-                      if (!allowed) {
-                        setAuthError(lang === 'ru' ? 'Это качество доступно на платном тарифе' : 'This quality requires a paid plan');
-                        return;
-                      }
-                      setAuthError('');
-                      setDefaultPlaybackQuality(q.id);
-                    }}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: '12px',
-                      padding: '12px 16px', borderRadius: '12px',
-                      background: defaultPlaybackQuality === q.id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)',
-                      border: defaultPlaybackQuality === q.id ? '1px solid var(--accent-solid)' : '1px solid var(--border-subtle)',
-                      cursor: allowed ? 'pointer' : 'not-allowed',
-                      opacity: allowed ? 1 : 0.45,
-                      transition: 'all 0.2s ease',
-                      boxShadow: defaultPlaybackQuality === q.id ? '0 0 12px var(--accent-glow)' : 'none'
+                      marginBottom: '16px',
+                      padding: '12px 16px',
+                      borderRadius: '12px',
+                      background: 'rgba(255, 193, 7, 0.12)',
+                      border: '1px solid rgba(255, 193, 7, 0.35)',
+                      fontSize: '0.9rem',
                     }}
                   >
-                    <span style={{ fontSize: '1.5rem' }}>{q.icon}</span>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ fontWeight: defaultPlaybackQuality === q.id ? 700 : 500, color: defaultPlaybackQuality === q.id ? 'white' : 'var(--text-primary)' }}>{q.label}</div>
-                      <div style={{ fontSize: '0.75rem', marginTop: '2px', color: defaultPlaybackQuality === q.id ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)' }}>{q.desc}</div>
+                    <div>{t('verifyBanner')}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                      {t('verifySpamHint')}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ marginTop: '8px' }}
+                      onClick={handleResendVerification}
+                    >
+                      {t('resendVerify')}
+                    </button>
+                    {verifyResendMsg && (
+                      <div style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>{verifyResendMsg}</div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
+                  <div
+                    onClick={cycleAvatar}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      background: 'var(--bg-main)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid var(--accent-solid)',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s',
+                      userSelect: 'none',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                    title="Change avatar"
+                  >
+                    <span style={{ fontSize: '2.5rem' }}>{avatar}</span>
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>
+                      {userData?.username || localStorage.getItem('tidal-user') || 'User'}
+                    </h2>
+                    <div
+                      style={{
+                        color: 'var(--accent-solid)',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      <Shield size={16} />
+                      {planDisplayName(userData?.effective_plan, lang)}{' '}
+                      {lang === 'ru' ? 'тариф' : 'Plan'}
                     </div>
                   </div>
-                  );
-                })}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('downloads')}</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {userData?.downloads_today ?? 0}
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          {' '}/ {userData?.daily_limit ?? 3}
+                        </span>
+                      </span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-valuenow={userData?.downloads_today ?? 0}
+                      aria-valuemin={0}
+                      aria-valuemax={userData?.daily_limit ?? 3}
+                      style={{
+                        height: '8px',
+                        borderRadius: '999px',
+                        background: 'var(--bg-main)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${Math.min(100, ((userData?.downloads_today ?? 0) / Math.max(1, userData?.daily_limit ?? 3)) * 100)}%`,
+                          background: 'var(--accent-solid)',
+                          borderRadius: '999px',
+                          transition: 'width 0.2s ease',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {expiryWarning && (
+                    <div className="account-expiry-warn" role="status">
+                      {expiryWarning}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      paddingBottom: '16px',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-secondary)' }}>{t('nextBilling')}</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {userData?.effective_plan === 'lifetime'
+                        ? (lang === 'ru' ? 'Навсегда' : 'Lifetime')
+                        : userData?.subscription_expires_at
+                          ? new Date(userData.subscription_expires_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US')
+                          : t('noBilling')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="account-profile-actions">
+                  <button type="button" className="btn-primary" onClick={() => setIsUpgradeOpen(true)}>
+                    {userData?.subscription_cancel_at_period_end
+                      ? (lang === 'ru' ? 'Продлить' : 'Renew')
+                      : t('upgrade')}
+                  </button>
+                  {userData?.effective_plan !== 'free'
+                    && userData?.effective_plan !== 'lifetime'
+                    && !userData?.subscription_cancel_at_period_end && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={cancelLoading}
+                      onClick={handleCancelSubscription}
+                    >
+                      {lang === 'ru' ? 'Отменить автопродление' : 'Cancel auto-renew'}
+                    </button>
+                  )}
+                  <button type="button" className="btn-secondary" onClick={handleLogout}>
+                    {t('logout')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  gap: '16px',
+                  padding: '20px 0',
+                }}
+              >
+                <div
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: 'rgba(37, 117, 252, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--accent-solid)',
+                    marginBottom: '8px',
+                  }}
+                >
+                  <LogIn size={32} />
+                </div>
+                <h2 style={{ margin: 0 }}>{isRegistering ? 'Create Account' : t('welcome')}</h2>
+
+                {authError && (
+                  <div style={{ color: 'var(--danger)', fontSize: '0.9rem' }}>{authError}</div>
+                )}
+
+                <form
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    marginTop: '8px',
+                  }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!authLoading) handleAuth();
+                  }}
+                >
+                  {isRegistering && (
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        background: 'var(--bg-main)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'white',
+                      }}
+                    />
+                  )}
+                  <input
+                    type="text"
+                    placeholder={t(isRegistering ? 'loginIdRegister' : 'loginId')}
+                    value={loginId}
+                    onChange={(e) => setLoginId(e.target.value)}
+                    autoComplete="username"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '12px',
+                      background: 'var(--bg-main)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'white',
+                    }}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={isRegistering ? 'new-password' : 'current-password'}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '12px',
+                      background: 'var(--bg-main)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'white',
+                    }}
+                  />
+                  {isRegistering && (
+                    <label
+                      style={{
+                        display: 'flex',
+                        gap: '10px',
+                        alignItems: 'flex-start',
+                        textAlign: 'left',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={acceptTerms}
+                        onChange={(e) => setAcceptTerms(e.target.checked)}
+                        style={{ marginTop: '3px' }}
+                      />
+                      <span>
+                        {getLegal(lang, 'acceptLabel')}{' '}
+                        (
+                        <a href="/terms" style={{ color: 'var(--accent-solid)' }}>
+                          {lang === 'ru' ? 'Условия' : 'Terms'}
+                        </a>
+                        {' · '}
+                        <a href="/privacy" style={{ color: 'var(--accent-solid)' }}>
+                          {lang === 'ru' ? 'Конфиденциальность' : 'Privacy'}
+                        </a>
+                        )
+                      </span>
+                    </label>
+                  )}
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={authLoading}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      marginTop: '8px',
+                      opacity: authLoading ? 0.7 : 1,
+                    }}
+                  >
+                    {authLoading
+                      ? (authSlow
+                        ? (lang === 'ru' ? 'Подключение к серверу…' : 'Connecting to server…')
+                        : (lang === 'ru' ? 'Подождите…' : 'Please wait…'))
+                      : (isRegistering
+                        ? (lang === 'ru' ? 'Регистрация' : 'Sign Up')
+                        : (lang === 'ru' ? 'Войти' : 'Log In'))}
+                  </button>
+                </form>
+
+                {!isRegistering && (
+                  <button
+                    type="button"
+                    className="auth-forgot-link"
+                    onClick={() => navigate('/forgot-password')}
+                  >
+                    {t('forgotPassword')}
+                  </button>
+                )}
+
+                <div
+                  onClick={() => setIsRegistering(!isRegistering)}
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    marginTop: '8px',
+                  }}
+                >
+                  {isRegistering
+                    ? 'Already have an account? Log In'
+                    : "Don't have an account? Sign Up"}
+                </div>
+
+                <PromoCodeBlock
+                  lang={lang}
+                  activationCode={activationCode}
+                  setActivationCode={setActivationCode}
+                  onRedeem={handleRedeemActivation}
+                  redeeming={redeeming}
+                  compact
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Playback Quality */}
+          <div className="glass-panel settings-panel">
+            <div className="settings-panel__header">
+              <div
+                className="settings-panel__icon"
+                style={{ background: 'rgba(37, 117, 252, 0.12)', color: 'var(--accent-solid)' }}
+              >
+                <Settings size={24} />
+              </div>
+              <div>
+                <h3 className="settings-panel__title">{t('defAudio')}</h3>
+                <p className="settings-panel__desc">
+                  {t(autoPlaybackQuality ? 'defAudioAutoDesc' : 'defAudioManualDesc')}
+                </p>
               </div>
             </div>
+
+            <div
+              className={`quality-auto-card${autoPlaybackQuality ? ' quality-auto-card--active' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAutoPlaybackQuality(!autoPlaybackQuality)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setAutoPlaybackQuality(!autoPlaybackQuality);
+              }}
+            >
+              <div className="quality-auto-card__main">
+                <div className="quality-auto-card__badge">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <div className="quality-auto-card__label">{t('defAudioAuto')}</div>
+                  <div className="quality-auto-card__hint">{t('defAudioAutoDesc')}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="settings-toggle"
+                aria-pressed={autoPlaybackQuality}
+                style={{ background: autoPlaybackQuality ? 'var(--accent-solid)' : 'var(--bg-surface-hover)' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAutoPlaybackQuality(!autoPlaybackQuality);
+                }}
+              >
+                <div
+                  className="settings-toggle__knob"
+                  style={{ left: autoPlaybackQuality ? '24px' : '4px' }}
+                />
+              </button>
+            </div>
+
+            {!autoPlaybackQuality && (
+              <>
+                <div className="quality-manual-label">{t('defAudioManual')}</div>
+                <div className="quality-tier-grid">
+                  {QUALITY_TIERS.map((q) => {
+                    const allowed = isQualityAllowedForPlan(q.id, plan);
+                    return (
+                      <button
+                        key={q.id}
+                        type="button"
+                        className={`quality-tier-card${defaultPlaybackQuality === q.id ? ' quality-tier-card--active' : ''}${allowed ? '' : ' quality-tier-card--disabled'}`}
+                        disabled={!allowed}
+                        onClick={() => {
+                          if (!allowed) {
+                            setAuthError(
+                              lang === 'ru'
+                                ? 'Это качество доступно на платном тарифе'
+                                : 'This quality requires a paid plan',
+                            );
+                            return;
+                          }
+                          setAuthError('');
+                          setDefaultPlaybackQuality(q.id);
+                        }}
+                      >
+                        <span className="quality-tier-card__name">{q.label}</span>
+                        <span className="quality-tier-card__spec">{q.spec}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Download History */}
-          <div className="glass-panel" onClick={() => alert(lang === 'ru' ? "История скачиваний в разработке! Вы можете найти скачанные треки в локальной папке 'downloads'." : "Download history is coming soon! You can find all downloaded files in your local 'downloads' folder.")} style={{ padding: '24px', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(255, 179, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--warning)' }}>
+          <div
+            className="glass-panel account-card--clickable"
+            role="button"
+            tabIndex={0}
+            onClick={() => isLoggedIn && setDownloadHistoryOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && isLoggedIn) setDownloadHistoryOpen(true);
+            }}
+            style={{ opacity: isLoggedIn ? 1 : 0.5, cursor: isLoggedIn ? 'pointer' : 'not-allowed' }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'rgba(255, 179, 0, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--warning)',
+              }}
+            >
               <History size={24} />
             </div>
             <div>
@@ -379,16 +928,101 @@ export default function Account() {
           </div>
         </motion.div>
 
-        {/* RIGHT COLUMN: UI & Display */}
-        <motion.div 
+        {/* RIGHT COLUMN */}
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
         >
-          <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* DJ Analysis */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: '24px',
+              borderRadius: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              opacity: isLoggedIn && djFeaturesAvailable ? 1 : 0.55,
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(37, 117, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-solid)' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'rgba(156, 39, 176, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ce93d8',
+                }}
+              >
+                <Disc3 size={24} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{t('djAnalysis')}</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  {djFeaturesAvailable ? t('djAnalysisDesc') : t('djPlanRequired')}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={!isLoggedIn || !djFeaturesAvailable}
+              onClick={handleDjToggle}
+              style={{
+                width: '48px',
+                height: '28px',
+                borderRadius: '14px',
+                background: djAnalysisEnabled && djFeaturesAvailable ? 'var(--accent-solid)' : 'var(--bg-surface-hover)',
+                border: 'none',
+                cursor: isLoggedIn && djFeaturesAvailable ? 'pointer' : 'not-allowed',
+                position: 'relative',
+                transition: 'background 0.2s',
+              }}
+            >
+              <div
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  background: 'var(--control-knob)',
+                  position: 'absolute',
+                  top: '4px',
+                  left: djAnalysisEnabled && djFeaturesAvailable ? '24px' : '4px',
+                  transition: 'left 0.2s',
+                }}
+              />
+            </button>
+          </div>
+
+          {/* Visualizer */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: '24px',
+              borderRadius: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'rgba(37, 117, 252, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--accent-solid)',
+                }}
+              >
                 <Activity size={24} />
               </div>
               <div>
@@ -396,57 +1030,110 @@ export default function Account() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('bgDesc')}</p>
               </div>
             </div>
-            <button 
+            <button
+              type="button"
               onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-              style={{ background: visualizerEnabled ? 'var(--accent-solid)' : 'var(--bg-surface-hover)', color: 'white', border: 'none', padding: '8px 24px', borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: 600 }}
+              className={`settings-pill-btn${visualizerEnabled ? ' settings-pill-btn--on' : ' settings-pill-btn--off'}`}
             >
               {visualizerEnabled ? 'ON' : 'OFF'}
             </button>
           </div>
 
-          {/* Themes */}
-          <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(156, 39, 176, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9c27b0' }}>
+          {/* Appearance */}
+          <div className="glass-panel settings-panel settings-panel--appearance">
+            <div className="settings-panel__header">
+              <div
+                className="settings-panel__icon"
+                style={{ background: 'rgba(156, 39, 176, 0.12)', color: '#ce93d8' }}
+              >
                 <Palette size={24} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{t('appearance')}</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('appDesc')}</p>
+                <h3 className="settings-panel__title">{t('appearance')}</h3>
+                <p className="settings-panel__desc">{t('appDesc')}</p>
               </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-              {[
-                { id: 'dark', label: 'Dark', color: '#1a1a2e' },
-                { id: 'ocean', label: t('themeOcean'), color: '#0f2027' },
-                { id: 'purple', label: t('themePurple'), color: '#1f1c2c' },
-                { id: 'crimson', label: t('themeCrimson'), color: '#2b1010' },
-                { id: 'emerald', label: t('themeEmerald'), color: '#092015' }
-              ].map(th => (
-                <div
-                  key={th.id}
-                  onClick={() => setTheme(th.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '8px 16px', borderRadius: '12px',
-                    background: theme === th.id ? 'var(--accent-glow)' : 'var(--bg-surface-hover)',
-                    border: theme === th.id ? '1px solid var(--accent-solid)' : '1px solid var(--border-subtle)',
-                    cursor: 'pointer', transition: 'all 0.2s ease',
-                    boxShadow: theme === th.id ? '0 0 12px var(--accent-glow)' : 'none'
-                  }}
-                >
-                  <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: th.color, border: '2px solid rgba(255,255,255,0.2)' }} />
-                  <span style={{ fontSize: '0.95rem', fontWeight: theme === th.id ? 600 : 400, color: theme === th.id ? 'white' : 'var(--text-primary)' }}>{th.label}</span>
-                </div>
-              ))}
-            </div>
+            <ThemeList theme={theme} setTheme={setTheme} lang={lang} />
           </div>
 
+          {/* Offline cache */}
+          {isLoggedIn && (
+            <div
+              className="glass-panel"
+              style={{
+                padding: '24px',
+                borderRadius: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    background: 'rgba(33, 150, 243, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#42a5f5',
+                  }}
+                >
+                  <HardDrive size={24} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{t('offlineCache')}</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('offlineCacheDesc')}</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '6px' }}>
+                    {offlineCacheStats.count > 0
+                      ? `${offlineCacheStats.count} · ${formatBytes(offlineCacheStats.bytes)}${offlineCacheStats.quota ? ` / ${formatBytes(offlineCacheStats.quota)}` : ''}`
+                      : t('offlineCacheEmpty')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={offlineCacheStats.count === 0}
+                onClick={async () => {
+                  await clearOfflineCache();
+                  await refreshOfflineCacheStats();
+                  showToast(t('offlineCacheCleared'));
+                }}
+              >
+                {t('offlineCacheClear')}
+              </button>
+            </div>
+          )}
 
-          {/* Language Switcher */}
-          <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Language */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: '24px',
+              borderRadius: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(0, 200, 83, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00c853' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'rgba(0, 200, 83, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#00c853',
+                }}
+              >
                 <Globe size={24} />
               </div>
               <div>
@@ -455,21 +1142,40 @@ export default function Account() {
               </div>
             </div>
             <div style={{ display: 'flex', background: 'var(--bg-surface-hover)', borderRadius: '12px', padding: '4px' }}>
-              <button 
+              <button
+                type="button"
                 onClick={() => setLang('en')}
-                style={{ background: lang === 'en' ? 'var(--accent-solid)' : 'transparent', color: lang === 'en' ? 'white' : 'var(--text-secondary)', border: 'none', padding: '6px 16px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 600 }}
+                style={{
+                  background: lang === 'en' ? 'var(--accent-solid)' : 'transparent',
+                  color: lang === 'en' ? 'var(--on-accent)' : 'var(--text-secondary)',
+                  border: 'none',
+                  padding: '6px 16px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontWeight: 600,
+                }}
               >
                 EN
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={() => setLang('ru')}
-                style={{ background: lang === 'ru' ? 'var(--accent-solid)' : 'transparent', color: lang === 'ru' ? 'white' : 'var(--text-secondary)', border: 'none', padding: '6px 16px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 600 }}
+                style={{
+                  background: lang === 'ru' ? 'var(--accent-solid)' : 'transparent',
+                  color: lang === 'ru' ? 'var(--on-accent)' : 'var(--text-secondary)',
+                  border: 'none',
+                  padding: '6px 16px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontWeight: 600,
+                }}
               >
                 RU
               </button>
             </div>
           </div>
-
         </motion.div>
       </div>
     </div>

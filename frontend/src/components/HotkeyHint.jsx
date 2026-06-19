@@ -4,7 +4,8 @@ const hints = {
   ru: 'Space play · ←/→ трек · Shift+←/→ seek · [ ] ±5с · M mute · E EQ · Q очередь · L текст · / Ctrl+K · Esc',
 };
 
-export default function HotkeyHint({ lang = 'en' }) {
+export default function HotkeyHint({ lang = 'en', hidden = false }) {
+  if (hidden) return null;
   return (
     <div
       className="hide-on-mobile"

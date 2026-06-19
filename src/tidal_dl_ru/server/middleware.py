@@ -10,14 +10,37 @@ from typing import Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Per-IP limits (window seconds, max requests)
 logger = logging.getLogger(__name__)
 
+# Exact path → (window seconds, max requests)
 RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/api/auth/login": (300, 20),
     "/api/auth/register": (3600, 10),
+    "/api/auth/forgot-password": (3600, 5),
+    "/api/auth/reset-password": (3600, 10),
     "/api/search": (60, 60),
+    "/api/lyrics": (60, 45),
+    "/api/ai-playlist": (60, 15),
+    "/api/recommendations": (60, 40),
+    "/api/recognize": (60, 20),
+    "/api/jobs": (60, 12),
+    "/api/tracks/meta": (60, 40),
+    "/api/image-proxy": (60, 300),
+    "/api/client-errors": (3600, 60),
 }
+
+
+def _rate_limit_rule(path: str, method: str) -> tuple[int, int] | None:
+    if path in RATE_LIMITS and method in ("GET", "POST"):
+        return RATE_LIMITS[path]
+    if method == "POST" and path.endswith("/warm") and "/api/stream/" in path:
+        return (60, 40)
+    if method == "GET" and path.endswith("/dj-meta"):
+        return (60, 30)
+    # Quality probes require auth; keep a modest per-IP cap as defense in depth.
+    if method == "GET" and "/api/quality/" in path and path.endswith("/available"):
+        return (60, 60)
+    return None
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -31,6 +54,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers.setdefault(
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains",
+            )
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
+                "media-src 'self' blob:; connect-src 'self' https:; font-src 'self' data:; "
+                "frame-ancestors 'none'",
             )
         return response
 
@@ -68,8 +98,8 @@ async def _redis_check(redis, key: str, window: int, limit: int) -> bool:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         path = request.url.path
-        rule = RATE_LIMITS.get(path)
-        if rule is None or request.method not in ("POST", "GET"):
+        rule = _rate_limit_rule(path, request.method)
+        if rule is None:
             return await call_next(request)
 
         window, limit = rule
@@ -81,7 +111,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if redis is not None:
             try:
                 allowed = await _redis_check(redis, key, window, limit)
-            except Exception:
+            except Exception as exc:
+                logger.warning("rate_limit redis error, using memory fallback: %s", exc)
                 allowed = _memory_check(key, window, limit)
         else:
             allowed = _memory_check(key, window, limit)
@@ -94,7 +125,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 extra={"event": "rate_limit", "path": path, "client_ip": client_ip},
             )
             return Response(
-                content='{"detail":"Too many requests. Try again later."}',
+                content='{"detail":{"code":"http_429","message":"Too many requests. Try again later."}}',
                 status_code=429,
                 media_type="application/json",
                 headers={"Retry-After": str(window)},

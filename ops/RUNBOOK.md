@@ -35,11 +35,71 @@ cd /opt/tidal-dl-ru && git pull && docker compose build && docker compose up -d
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 ```
 
+## Database migrations (Alembic)
+
+Schema is managed by **Alembic** (`migrations/versions/`). On API startup, `create_db_and_tables()` runs `alembic upgrade head`.
+
+**Fresh install:** tables created automatically.
+
+**Existing prod DB** (created before Alembic): on first boot with Alembic, the API detects legacy tables and runs `alembic stamp head` — no data loss.
+
+Manual commands (from repo root on server or locally):
+
+```bash
+make migrate          # alembic upgrade head
+make migrate-stamp    # mark current schema as head without running DDL
+uv run alembic current
+uv run alembic history
+```
+
+New schema changes: add a revision under `migrations/versions/`, deploy, restart API.
+
 ## Backup
 
 ```bash
 bash ops/backup-db.sh
 ```
+
+Uses SQLite dump by default; if `.env` has `DATABASE_URL=postgresql…`, runs `pg_dump` instead.
+
+**Restore Postgres:** `psql -U tidal -d tidaldl < /var/backups/tidal-dl-ru/tidaldl-YYYYMMDD.sql`
+
+## Ops metrics
+
+Set `TIDALDLRU_OPS_API_KEY` in production `.env`, then:
+
+```bash
+curl -H "X-Ops-Key: $TIDALDLRU_OPS_API_KEY" https://flacaud.ru/api/metrics
+curl -H "X-Ops-Key: $TIDALDLRU_OPS_API_KEY" https://flacaud.ru/api/metrics/prometheus
+```
+
+`/api/logs` and `/api/pool/health` require the same key. Without the key in production these endpoints return 404/401.
+
+**Prometheus alerts:** example rules in `ops/prometheus/alerts.yml` (health, disk >85%, stream errors, Tidal pool).
+
+**Full observability stack (recommended):** Prometheus + Loki + Promtail + Grafana — see `ops/observability/README.md`. Enable with `TIDAL_ENABLE_OBSERVABILITY=1` and `GRAFANA_ADMIN_PASSWORD` in `.env`. Graylog is intentionally **not** used (too heavy for a single VPS; Loki integrates with the same Grafana UI).
+
+**Browser errors:** frontend POSTs to `/api/client-errors` (always). Query in Loki: `{service="api"} | json | event="client_error"`.
+
+**Sentry (optional):** set `TIDALDLRU_SENTRY_DSN` on API and `VITE_SENTRY_DSN` at frontend build time. Without DSN, Sentry is disabled.
+
+**Auth:** short-lived access JWT (~1h) + httpOnly refresh cookie (`/api/auth/refresh`, `/api/auth/logout`). Email verification on register; set `TIDALDLRU_REQUIRE_EMAIL_VERIFY=true` to block login until verified.
+
+## Disk cleanup
+
+Worker runs `disk_cleanup_task` on a cron schedule (03:00 and 15:00 UTC). Tune via:
+
+- `TIDALDLRU_JOB_TTL` — job directory max age
+- `TIDALDLRU_FILE_TTL` — stream-cache file max age
+- `TIDALDLRU_STREAM_CACHE_MAX_BYTES` — LRU cap (default 8 GB)
+
+**Cron (daily 03:00 UTC):**
+
+```cron
+0 3 * * * root cd /opt/tidal-dl-ru && bash ops/backup-db.sh >> /var/log/tidal-backup.log 2>&1
+```
+
+See `ops/backup-db.cron.example`.
 
 ## Rotate secrets
 

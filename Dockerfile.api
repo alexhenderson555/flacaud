@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
+COPY alembic.ini /app/alembic.ini
+COPY migrations /app/migrations
+COPY scripts /app/scripts
 COPY frontend /app/frontend
 
 ENV PATH=/app/.venv/bin:$PATH \
@@ -27,4 +30,5 @@ ENV PATH=/app/.venv/bin:$PATH \
 RUN mkdir -p /var/lib/tidal-dl-ru/jobs /root/.config/tidal-dl-ru /var/lib/tidal-dl-ru/db
 
 EXPOSE 8000
-CMD ["uvicorn", "tidal_dl_ru.server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+ENV TIDALDLRU_FORWARDED_ALLOW_IPS="172.16.0.0/12,127.0.0.1,10.0.0.0/8"
+CMD ["sh", "-c", "exec uvicorn tidal_dl_ru.server.app:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips \"${TIDALDLRU_FORWARDED_ALLOW_IPS}\""]

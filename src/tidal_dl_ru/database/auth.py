@@ -28,7 +28,7 @@ if not SECRET_KEY:
         stacklevel=2,
     )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("TIDALDLRU_ACCESS_TOKEN_MINUTES", "60"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -37,7 +37,11 @@ def _pw_bytes(password: str) -> bytes:
     # so truncate up front. Hash and verify must truncate identically.
     return password.encode("utf-8")[:72]
 
-def verify_password(plain_password: str, hashed_password: str):
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
+    # Telegram-only users have no password hash; treat as a clean auth failure
+    # rather than crashing on None.encode().
+    if not hashed_password:
+        return False
     return bcrypt.checkpw(_pw_bytes(plain_password), hashed_password.encode('utf-8'))
 
 def get_password_hash(password: str):
@@ -56,7 +60,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 from fastapi import Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from tidal_dl_ru.database.database import engine
+from tidal_dl_ru.database import database as db_module
 
 # ── Short-lived media tokens ────────────────────────────────────────────────
 # Browser media contexts (<audio src>, <a href> downloads) can't send an
@@ -64,23 +68,53 @@ from tidal_dl_ru.database.database import engine
 # (it lands in access logs / history), we mint a 1-hour signed token that only
 # grants media/file access.
 MEDIA_TOKEN_TTL = 3600  # seconds
+PASSWORD_RESET_TTL = 3600  # seconds — link valid for 1 hour
+EMAIL_VERIFY_TTL = 60 * 60 * 24 * 3  # 3 days
+
+_MEDIA_SALT = "tidaldl-media-v1"
+_PWRESET_SALT = "tidaldl-pwreset-v1"
+_EMAIL_VERIFY_SALT = "tidaldl-emailverify-v1"
 
 
-def _media_serializer() -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(SECRET_KEY, salt="tidaldl-media-v1")
+def _timed_serializer(salt: str) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(SECRET_KEY, salt=salt)
 
 
-def sign_media_token(user_id: int) -> str:
-    return _media_serializer().dumps({"uid": user_id})
+def _sign_uid_token(salt: str, user_id: int) -> str:
+    return _timed_serializer(salt).dumps({"uid": user_id})
 
 
-def verify_media_token(token: str) -> Optional[int]:
+def _verify_uid_token(salt: str, token: str, max_age: int) -> Optional[int]:
     try:
-        data = _media_serializer().loads(token, max_age=MEDIA_TOKEN_TTL)
+        data = _timed_serializer(salt).loads(token, max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
     uid = data.get("uid")
     return int(uid) if uid is not None else None
+
+
+def sign_media_token(user_id: int) -> str:
+    return _sign_uid_token(_MEDIA_SALT, user_id)
+
+
+def verify_media_token(token: str) -> Optional[int]:
+    return _verify_uid_token(_MEDIA_SALT, token, MEDIA_TOKEN_TTL)
+
+
+def sign_password_reset_token(user_id: int) -> str:
+    return _sign_uid_token(_PWRESET_SALT, user_id)
+
+
+def verify_password_reset_token(token: str) -> Optional[int]:
+    return _verify_uid_token(_PWRESET_SALT, token, PASSWORD_RESET_TTL)
+
+
+def sign_email_verify_token(user_id: int) -> str:
+    return _sign_uid_token(_EMAIL_VERIFY_SALT, user_id)
+
+
+def verify_email_verify_token(token: str) -> Optional[int]:
+    return _verify_uid_token(_EMAIL_VERIFY_SALT, token, EMAIL_VERIFY_TTL)
 
 
 def _creds_exc() -> HTTPException:
@@ -94,7 +128,7 @@ def _creds_exc() -> HTTPException:
 def _user_from_username(username: Optional[str]) -> User:
     if not username:
         raise _creds_exc()
-    with Session(engine) as session:
+    with Session(db_module.engine) as session:
         user = session.exec(select(User).where(User.username == username)).first()
         if user is None:
             raise _creds_exc()
@@ -111,7 +145,7 @@ def decode_token(token: str) -> dict:
 
 
 def _user_from_id(uid: int) -> User:
-    with Session(engine) as session:
+    with Session(db_module.engine) as session:
         user = session.get(User, int(uid))
         if user is None:
             raise _creds_exc()
@@ -135,6 +169,16 @@ def _user_from_jwt(token: str) -> User:
     return _user_from_payload(decode_token(token))
 
 
+def get_optional_user(token: str = Depends(oauth2_scheme)) -> Optional[User]:
+    """Return authenticated user or None when no Bearer token is sent."""
+    if not token:
+        return None
+    try:
+        return _user_from_jwt(token)
+    except HTTPException:
+        return None
+
+
 def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     """Header-only auth (Authorization: Bearer <jwt>) for the JSON API.
 
@@ -153,7 +197,7 @@ def get_media_user(request: Request, token: str = Depends(oauth2_scheme)) -> Use
         uid = verify_media_token(mt)
         if uid is None:
             raise _creds_exc()
-        with Session(engine) as session:
+        with Session(db_module.engine) as session:
             user = session.get(User, uid)
             if user is None:
                 raise _creds_exc()

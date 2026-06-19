@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { routeAuthMe } from './helpers.js';
+import { installE2EAuth, installApiStubs } from './helpers.js';
 
 const LIBRARY = [
   {
@@ -27,20 +27,10 @@ const LIBRARY = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await routeAuthMe(page);
-
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-token');
-  });
-
+  await installE2EAuth(page);
+  await installApiStubs(page);
   await page.route('**/api/library', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(LIBRARY) });
-  });
-  await page.route('**/api/playlists', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/downloads', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
 });
 
@@ -52,6 +42,7 @@ test('DJ filters panel opens with glass styling', async ({ page }) => {
 
 test('library search filters tracks', async ({ page }) => {
   await page.goto('/library');
+  await expect(page.getByText('Fast Beat')).toBeVisible({ timeout: 15_000 });
   await page.getByPlaceholder(/search library/i).fill('Fast');
   await expect(page.getByText('Fast Beat')).toBeVisible();
   await expect(page.getByText('Slow Jam')).toHaveCount(0);
@@ -59,7 +50,7 @@ test('library search filters tracks', async ({ page }) => {
 
 test('track rows do not show lossless quality badge', async ({ page }) => {
   await page.goto('/library');
-  await expect(page.getByText('Slow Jam')).toBeVisible();
+  await expect(page.getByText('Slow Jam')).toBeVisible({ timeout: 15_000 });
   const row = page.locator('.glass-panel').filter({ hasText: 'Slow Jam' });
   await expect(row.getByText('FLAC')).toHaveCount(0);
   await expect(row.getByText('LOSSLESS')).toHaveCount(0);

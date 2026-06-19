@@ -17,6 +17,12 @@ from tidal_dl_ru.providers.tidal.models import (
 from tidal_dl_ru.providers.tidal.models import (
     Track as TidalTrack,
 )
+from tidal_dl_ru.providers.tidal.quality_probe import (
+    manifest_delivers_ui_tier,
+    pick_download_ui_quality,
+    probe_tidal_qualities,
+    ui_quality_to_enum,
+)
 
 _URL_RE = re.compile(r"tidal\.com(?:/browse)?/(?:track|album|playlist|mix)/[\w-]+", re.I)
 
@@ -26,6 +32,29 @@ _QUALITY_MAP = {
     Quality.LOSSLESS: AudioQuality.LOSSLESS,
     Quality.HI_RES: AudioQuality.HI_RES_LOSSLESS,
 }
+
+
+def _parse_release_meta(raw: str | None) -> tuple[str | None, int | None]:
+    """ISO date or Tidal streamStartDate → (YYYY-MM-DD, year)."""
+    if not raw:
+        return None, None
+    part = raw.split("T")[0].strip()
+    if len(part) < 4 or not part[:4].isdigit():
+        return None, None
+    try:
+        year = int(part[:4])
+    except ValueError:
+        return None, None
+    release = part if len(part) >= 10 else f"{year}-01-01"
+    return release, year
+
+
+def _release_meta_from_tidal(t: TidalTrack) -> tuple[str | None, int | None]:
+    if t.album and t.album.release_date:
+        return _parse_release_meta(t.album.release_date)
+    if t.stream_start_date:
+        return _parse_release_meta(t.stream_start_date)
+    return None, None
 
 
 def _to_universal(t: TidalTrack) -> Track:
@@ -39,20 +68,13 @@ def _to_universal(t: TidalTrack) -> Track:
     album_title = None
     album_id = None
     cover = None
-    year = None
-    release_date = None
+    release_date, year = _release_meta_from_tidal(t)
     total_tracks = None
     if t.album:
         album_title = t.album.title
         album_id = str(t.album.id)
         album_artist = t.album.artist.name if t.album.artist else None
         cover = cover_url(t.album.cover) if t.album.cover else None
-        release_date = t.album.release_date
-        if release_date:
-            try:
-                year = int(release_date.split("-")[0])
-            except ValueError:
-                pass
         total_tracks = t.album.number_of_tracks
     return Track(
         provider="tidal",
@@ -77,6 +99,21 @@ def _to_universal(t: TidalTrack) -> Track:
         version=t.version,
         quality=t.audio_quality,
     )
+
+
+def to_universal_enriched(client: TidalClient | None, t: TidalTrack) -> Track:
+    """Map Tidal track; fetch full album when stub has no release date."""
+    uni = _to_universal(t)
+    if uni.release_date or uni.year or not client or not uni.album_id:
+        return uni
+    try:
+        alb = client.get_album(uni.album_id)
+        release_date, year = _parse_release_meta(alb.release_date)
+        if release_date:
+            return uni.model_copy(update={"release_date": release_date, "year": year})
+    except Exception:
+        pass
+    return uni
 
 
 class TidalProvider(Provider):
@@ -134,7 +171,6 @@ class TidalProvider(Provider):
     ) -> Path:
         import httpx
 
-        tidal_q = _QUALITY_MAP[quality]
         http = httpx.Client(timeout=60.0, follow_redirects=True)
         acquired_acc_id: Optional[int] = None
         try:
@@ -151,7 +187,28 @@ class TidalProvider(Provider):
             except tidal_pool.NoAccountAvailable:
                 client = TidalClient(http=http)
 
-            manifest = client.get_playback_manifest(track.provider_id, tidal_q)
+            probe = probe_tidal_qualities(client, track.provider_id)
+            probe_dl = probe.get("downloadable") or []
+            ui_pick = pick_download_ui_quality(quality.value, probe)
+            candidates: list[str] = [ui_pick]
+            for tier in ("HI_RES", "LOSSLESS", "HIGH"):
+                if tier in probe_dl and tier not in candidates:
+                    candidates.append(tier)
+            if "HIGH" not in candidates:
+                candidates.append("HIGH")
+            manifest = None
+            ui_pick = "HIGH"
+            for candidate in candidates:
+                tidal_q = ui_quality_to_enum(candidate)
+                m = client.get_playback_manifest(track.provider_id, tidal_q)
+                if manifest_delivers_ui_tier(m, candidate):
+                    manifest = m
+                    ui_pick = candidate
+                    break
+            if manifest is None:
+                manifest = client.get_playback_manifest(
+                    track.provider_id, ui_quality_to_enum("HIGH")
+                )
             path = download_track(http, manifest, dest_no_ext, on_progress=on_progress)
             if acquired_acc_id is not None:
                 tidal_pool.report_success(acquired_acc_id)

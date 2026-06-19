@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import time
 from typing import Optional
@@ -20,6 +21,8 @@ from tidal_dl_ru.config import (
     ensure_dirs,
 )
 from tidal_dl_ru.providers.tidal.models import DeviceAuth, TokenSet
+
+logger = logging.getLogger(__name__)
 
 SCOPE = "r_usr+w_usr+w_sub"
 
@@ -191,7 +194,7 @@ def refresh_token(client: httpx.Client, refresh: str) -> TokenSet:
     try:
         return pkce_refresh_token(client, refresh)
     except AuthError:
-        pass
+        logger.debug("PKCE token refresh failed; falling back to device-flow", exc_info=True)
     # Fallback: device-flow client
     resp = client.post(
         f"{AUTH_BASE}/token",

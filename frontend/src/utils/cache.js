@@ -2,15 +2,24 @@ import localforage from 'localforage';
 import { getMediaToken } from './mediaToken';
 
 localforage.config({
-  name: 'FlacAudio',
+  name: 'FlacAud',
   storeName: 'audio_cache',
   description: 'Cached audio files for offline playback',
 });
 
 const inflightCache = new Map();
 
+export const OFFLINE_CACHE_UPDATED = 'flacaud-offline-cache-updated';
+
+function notifyOfflineCacheUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(OFFLINE_CACHE_UPDATED));
+  }
+}
+
 export function cacheKeyFor(track, quality = 'HIGH') {
-  return `${track.provider}_${track.provider_id}_${quality}`;
+  const provider = track?.provider || 'tidal';
+  return `${provider}_${track.provider_id}_${quality}`;
 }
 
 export const cacheAudioTrack = async (track, quality = 'HIGH') => {
@@ -19,7 +28,7 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
     const existing = await localforage.getItem(cacheKey);
     if (existing) return true;
 
-    let resource = `/api/stream/${track.provider}/${track.provider_id}?quality=${quality}&mt=${await getMediaToken()}`;
+    let resource = `/api/stream/${track.provider || 'tidal'}/${track.provider_id}?quality=${quality}&mt=${await getMediaToken()}`;
     if (window.__TAURI__) {
       resource = 'http://localhost:8000' + resource;
     }
@@ -29,6 +38,7 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
 
     const blob = await response.blob();
     await localforage.setItem(cacheKey, blob);
+    notifyOfflineCacheUpdated();
     return true;
   } catch (error) {
     console.error('Failed to cache audio track', error);
@@ -105,3 +115,32 @@ export const removeCachedAudioTrack = async (track, quality = 'HIGH') => {
     return false;
   }
 };
+
+/** Count/size of blobs in the offline audio cache (Account settings). */
+export async function getOfflineCacheStats() {
+  const keys = await localforage.keys();
+  let bytes = 0;
+  let count = 0;
+  for (const key of keys) {
+    const item = await localforage.getItem(key);
+    if (item instanceof Blob) {
+      bytes += item.size;
+      count += 1;
+    }
+  }
+  let quota = null;
+  try {
+    if (navigator.storage?.estimate) {
+      quota = (await navigator.storage.estimate()).quota ?? null;
+    }
+  } catch {
+    quota = null;
+  }
+  return { count, bytes, quota };
+}
+
+export async function clearOfflineCache() {
+  await localforage.clear();
+  inflightCache.clear();
+  notifyOfflineCacheUpdated();
+}

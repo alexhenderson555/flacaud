@@ -1,5 +1,6 @@
 import { apiFetch } from './apiClient';
 import { isBackgroundPaused } from './authBusy';
+import { getAccessToken } from './tokenStorage';
 
 // Short-lived media token for media URLs that ride in a query string
 // (<audio src>, <a href> downloads) — so the long-lived 7-day session JWT
@@ -22,7 +23,7 @@ export async function getMediaToken({ force = false } = {}) {
   const now = Date.now() / 1000;
   if (!force && _token && _exp - 30 > now) return _token;
   if (!force && isBackgroundPaused()) return '';
-  if (!localStorage.getItem('tidal-token')) return '';
+  if (!getAccessToken()) return '';
   try {
     const res = await apiFetch('/api/auth/media-token', { auth: true, timeoutMs: 15000, retries: 1 });
     if (!res.ok) {

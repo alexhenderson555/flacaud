@@ -10,6 +10,8 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+user_id_var: ContextVar[str] = ContextVar("user_id", default="-")
+username_var: ContextVar[str] = ContextVar("username", default="-")
 service_var: ContextVar[str] = ContextVar("service", default="app")
 
 _configured = False
@@ -18,6 +20,8 @@ _configured = False
 class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = request_id_var.get()
+        record.user_id = user_id_var.get()
+        record.username = username_var.get()
         record.service = service_var.get()
         return True
 
@@ -32,7 +36,41 @@ class JsonLogFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
         }
-        for key in ("method", "path", "status", "duration_ms", "client_ip", "user", "event"):
+        for key in (
+            "method",
+            "path",
+            "query",
+            "status",
+            "duration_ms",
+            "client_ip",
+            "user",
+            "user_id",
+            "username",
+            "auth",
+            "user_agent",
+            "event",
+            "component",
+            "url",
+            "stack",
+            "error_message",
+            "position",
+            "match_score",
+            "search_query",
+            "candidate_count",
+            "matched",
+            "source",
+            "tidal",
+            "source_platform",
+            "source_total",
+            "matched_count",
+            "unmatched_count",
+            "skipped_unavailable",
+            "task_id",
+            "added_to_library",
+            "already_in_library",
+            "playlist_id",
+            "total_tracks",
+        ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         if record.exc_info:
@@ -78,11 +116,13 @@ def configure_logging(service: str = "api") -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    if os.environ.get("TIDALDLRU_DEBUG_VERBOSE", "").strip().lower() not in ("1", "true", "yes"):
+        for noisy in (
+            "tidal_dl_ru.core.lyrics",
+            "tidal_dl_ru.server.recommendations",
+            "tidal_dl_ru.core.set_analyzer",
+            "tidal_dl_ru.core.recognize",
+        ):
+            logging.getLogger(noisy).setLevel(logging.INFO)
 
     _configured = True
-
-
-def log_event(logger: logging.Logger, level: int, event: str, **fields) -> None:
-    """Structured fields on a single log line (text or JSON)."""
-    extra = {"event": event, **fields}
-    logger.log(level, event, extra=extra)

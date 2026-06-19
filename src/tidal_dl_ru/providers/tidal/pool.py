@@ -9,7 +9,10 @@ independently when the pool is empty.
 from __future__ import annotations
 
 import base64
+import contextlib
 import os
+import threading
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -122,7 +125,6 @@ _engine: Optional[Engine] = None
 _SessionLocal: Optional[sessionmaker[Session]] = None
 
 
-import threading
 
 _engine_lock = threading.Lock()
 
@@ -138,8 +140,6 @@ def _get_engine() -> Engine:
             _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
 
-import contextlib
-
 
 @contextlib.contextmanager
 def session():
@@ -150,6 +150,34 @@ def session():
         yield db
     finally:
         db.close()
+
+
+# --- rate-limit cooldown (in-memory; per API worker process) ----------------
+
+_cooldown_lock = threading.Lock()
+_cooldown_until: dict[int, float] = {}
+DEFAULT_RATE_LIMIT_COOLDOWN_SEC = 45.0
+
+
+def report_rate_limited(
+    account_id: int,
+    cooldown_sec: float = DEFAULT_RATE_LIMIT_COOLDOWN_SEC,
+) -> None:
+    """Backoff this pool account after Tidal 429 (do not ban)."""
+    with _cooldown_lock:
+        _cooldown_until[account_id] = time.time() + cooldown_sec
+    report_failure(account_id, 429)
+
+
+def _is_on_cooldown(account_id: int) -> bool:
+    with _cooldown_lock:
+        until = _cooldown_until.get(account_id, 0.0)
+    return until > time.time()
+
+
+def clear_cooldowns_for_tests() -> None:
+    with _cooldown_lock:
+        _cooldown_until.clear()
 
 
 # --- pool operations --------------------------------------------------------
@@ -198,22 +226,35 @@ def remove_account(account_id: int) -> bool:
         return True
 
 
-def acquire(http: Optional[httpx.Client] = None) -> tuple[TidalAccount, TokenSet]:
+def acquire(
+    http: Optional[httpx.Client] = None,
+    *,
+    exclude_ids: frozenset[int] | None = None,
+) -> tuple[TidalAccount, TokenSet]:
     """Pick the least-recently-used active account under quota, refresh its token.
 
     Returns the account + a fresh TokenSet. The caller passes the TokenSet to
     TidalClient and reports back via report_success / report_failure.
     """
     now = datetime.now(timezone.utc)
+    skip = exclude_ids or frozenset()
     with session() as s:
         stmt = (
             select(TidalAccount)
             .where(TidalAccount.status == "active")
             .where(TidalAccount.downloads_today < TidalAccount.daily_quota)
             .order_by(TidalAccount.last_used_at.asc().nullsfirst())
-            .limit(1)
+            .limit(32)
         )
-        acc = s.execute(stmt).scalar_one_or_none()
+        candidates = list(s.execute(stmt).scalars())
+        acc = None
+        for candidate in candidates:
+            if candidate.id in skip:
+                continue
+            if _is_on_cooldown(candidate.id):
+                continue
+            acc = candidate
+            break
         if acc is None:
             raise NoAccountAvailable(
                 "No active Tidal accounts with remaining quota. "
@@ -268,9 +309,10 @@ def report_failure(account_id: int, http_status: int) -> None:
         acc = s.get(TidalAccount, account_id)
         if acc is None:
             return
-        if http_status in (401, 403, 429):
+        if http_status in (401, 403):
             acc.status = "banned"
             acc.banned_at = now
+        # 429 = rate limit — transient; do not ban the pool account.
         # 5xx → temporary; we don't disable the account
         s.commit()
 

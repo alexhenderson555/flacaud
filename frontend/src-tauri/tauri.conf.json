@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "FlacAudio",
+        "title": "FlacAud",
         "width": 1280,
         "height": 800,
         "resizable": true,

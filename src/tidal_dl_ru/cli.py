@@ -195,19 +195,19 @@ def search(
 
 @app.command()
 def download(
-    url: str = typer.Argument(..., help="URL from any supported provider"),
+    url: str = typer.Argument(..., help="Tidal track / album / playlist URL"),
     quality: Quality = typer.Option(Quality.LOSSLESS, "--quality", "-q", case_sensitive=False),
     out: Path = typer.Option(DEFAULT_DOWNLOAD_DIR, "--out", "-o"),
     lyrics: bool = typer.Option(True, "--lyrics/--no-lyrics", help="Fetch synced LRC lyrics"),
     karaoke: bool = typer.Option(False, "--karaoke", "-k", help="Translate lyrics to Russian (.ru.lrc)"),
     bpm: bool = typer.Option(False, "--bpm", help="Detect BPM & key, write DJ tags"),
 ) -> None:
-    """Download a track / album / playlist from any supported provider."""
+    """Download a track / album / playlist from Tidal."""
     p = find_provider(url)
     if p is None:
         console.print(
-            "[red]No provider matched this URL.[/red] "
-            "Run [bold]providers[/bold] to see what's supported."
+            "[red]No Tidal URL matched.[/red] "
+            "Paste a link from tidal.com (track, album, or playlist)."
         )
         raise typer.Exit(2)
     console.print(f"[cyan]Provider:[/cyan] {p.display_name}")

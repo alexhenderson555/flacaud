@@ -1,0 +1,39 @@
+
+export default function LandingVideoBg() {
+  return (
+    <div className="landing__canvas-wrap" aria-hidden="true" style={{
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0, overflow: 'hidden', pointerEvents: 'none', backgroundColor: '#000'
+    }}>
+      <video
+        src="/videos/1.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: '100vw',
+          height: '100vh',
+          objectFit: 'cover',
+          transform: 'translate(-50%, -50%)',
+          opacity: 0.6,
+          filter: 'saturate(1.2)'
+        }}
+      />
+      
+      {/* Heavy vignette and color tint overlay to blend with the app's dark purple aesthetic */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+        background: 'linear-gradient(to bottom, rgba(5,5,8,0.7) 0%, rgba(5,5,8,0.9) 100%)'
+      }} />
+      <div style={{
+        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+        background: 'radial-gradient(circle at top, rgba(106, 17, 203, 0.2) 0%, transparent 60%)',
+        mixBlendMode: 'screen'
+      }} />
+    </div>
+  );
+}
+

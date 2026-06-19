@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { routeAuthMe } from './helpers.js';
+import { installE2EAuth, installPlayerStubs } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',
@@ -8,57 +8,42 @@ const TRACK = {
   artists: ['Artist'],
   cover_url: 'https://via.placeholder.com/64',
   quality: 'LOSSLESS',
+  duration_s: 200,
 };
 
-test('My Vibe starts station from ai-playlist fallback', async ({ page }) => {
-  await routeAuthMe(page);
+test('Genreverse starts station from recommendations', async ({ page }) => {
+  await installE2EAuth(page, { token: 'e2e-radio' });
+  await installPlayerStubs(page);
 
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-radio');
-    window.__E2E_DISABLE_AUTOSAVE__ = true;
-  });
-
-  await page.route('**/api/library', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/playlists', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/downloads', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  await page.route('**/api/ai-playlist', async (route) => {
+  await page.route('**/api/genres', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ tracks: [TRACK, { ...TRACK, provider_id: '555002', title: 'Track 2' }] }),
+      body: JSON.stringify({
+        electronic: { id: 'electronic', name: 'Electronic', color: '#000', image: '/genres/genre_electronic_1781783267241.png' },
+      }),
     });
   });
-  await page.route('**/api/auth/media-token', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'mt' }) });
-  });
-  await page.route('**/api/quality/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ quality: 'LOSSLESS' }) });
-  });
-  await page.route('**/api/stream/**', async (route) => {
+  await page.route('**/api/recommendations*', async (route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'audio/mp4',
-      body: Buffer.alloc(64, 1),
-      headers: { 'Content-Length': '64', 'X-Actual-Quality': 'LOSSLESS' },
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tracks: [TRACK, { ...TRACK, provider_id: '555002', title: 'Track 2' }],
+      }),
     });
   });
   await page.route('**/api/lyrics**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lyrics: [] }) });
   });
-  await page.route('**/api/image-proxy**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(8) });
-  });
 
-  await page.goto('/radio');
-  const aiPromise = page.waitForResponse((r) => r.url().includes('/api/ai-playlist') && r.status() === 200);
-  await page.getByRole('button', { name: /Start Radio/i }).click();
-  await aiPromise;
-  await expect(page.getByRole('heading', { name: 'Up Next on Your Station' })).toBeVisible({ timeout: 15000 });
+  await page.goto('/genreverse');
+  await page.locator('.radio-page').getByText('Electronic', { exact: true }).first().click();
+  const startBtn = page.getByRole('button', { name: /Start Radio|Запустить радио/i });
+  await expect(startBtn).toBeVisible({ timeout: 10_000 });
+  const recPromise = page.waitForResponse((r) => r.url().includes('/api/recommendations') && r.status() === 200);
+  await startBtn.click();
+  await recPromise;
+  await expect(page.getByRole('heading', { name: /Up Next on Your Station|Дальше на вашей станции/i })).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole('main').getByText('Radio Track')).toBeVisible();
 });

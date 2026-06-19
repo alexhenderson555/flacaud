@@ -1,26 +1,66 @@
-import { Fragment } from 'react';
-import { qualityBadgeLabel, isQualityAllowedForPlan } from '../utils/qualityPrefs';
-import { proxiedCoverUrl } from '../utils/coverUrl';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import MetaBadge from './MetaBadge';
+import { formatTrackYear } from '../utils/trackNormalize';
+import {
+  streamBadgeLabel,
+  qualityButtonLabel,
+  isQualityAllowedForPlan,
+  isPlaybackQualityAvailable,
+  isTidalCatalogOnlyLossless,
+  qualityUnavailableTooltip,
+} from '../utils/qualityPrefs';
+import { appDict } from '../locales/appDict';
+import { coverImgSrc } from '../utils/coverUrl';
+import { apiGetJson } from '../utils/apiClient';
+import { usePlayerStore } from '../store/usePlayerStore';
 import { Link } from 'react-router-dom';
-import { Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders, ListMusic, Volume2, Waves, Radio } from 'lucide-react';
+import {
+  Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders,
+  ListMusic, Volume2, Waves, Radio, Shuffle, Repeat, Repeat1, ChevronUp, ChevronDown, Sparkles,
+} from 'lucide-react';
+import { REPEAT_ALL, REPEAT_ONE } from '../utils/playbackModes';
+import { PLAYER_HOTKEYS, withHotkey } from '../utils/playerHotkeys';
+import { isTrackLiked } from '../utils/trackNormalize';
 import { motion } from 'framer-motion';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { usePartyModeAvailable } from '../hooks/usePartyModeAvailable';
+import PlayerMobileActions from './player/PlayerMobileActions';
+
+const QUALITY_OPTIONS = [
+  { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
+  { id: 'LOSSLESS', label: 'Lossless', level: 2 },
+];
 
 export default function PlayerBar({
   t,
+  lang = 'en',
+  embedUrl = '',
+  embedPlaying = false,
+  embedEngaged = false,
+  embedTitle = '',
+  toggleSetEmbed,
+  setAudioMode = false,
+  setAudioProgress = 0,
+  setAudioDuration = 0,
+  seekSetAudioPreview,
+  seekSetAudioCommit,
   currentTrack,
-  actualQuality,
+  deliveredStream,
   isLoading,
   isPlaying,
   progress,
   trackDuration,
   volume,
   playbackQuality,
+  streamQuality = playbackQuality,
   effectivePlan = 'free',
-  availableQualities = ['LOW', 'HIGH', 'LOSSLESS', 'HI_RES'],
+  availableQualities = ['HIGH', 'LOSSLESS'],
   qualitiesReady = true,
   maxTrackQuality,
+  probeData = null,
   likedTracks,
   isKaraokeOpen,
+  isPartyOpen = false,
   isDJOpen,
   isEQOpen,
   isQueueOpen,
@@ -29,263 +69,657 @@ export default function PlayerBar({
   togglePlay,
   playPrevious,
   playNext,
-  handleSeek,
+  handleSeekPreview,
+  handleSeekCommit,
+  beginSeekScrub,
   changeQuality,
   toggleLike,
   setIsPlaylistModalOpenPlayer,
   handleDownloadPlayer,
   toggleOverlay,
   setVolume,
-  timeSpanRef,
-  progressRef,
-  startTrackRadio
+  startTrackRadio,
+  shuffleEnabled = false,
+  repeatMode = 'off',
+  toggleShuffle,
+  cycleRepeat,
 }) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const partyModeAvailable = usePartyModeAvailable();
+  const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const coverRefreshAttempted = useRef(false);
+  const setCurrentTrack = usePlayerStore((s) => s.setCurrentTrack);
+  const swipeRef = useRef({ startY: 0, active: false });
+
+  const handlePlayerTouchStart = (e) => {
+    if (!isMobile) return;
+    if (e.target.closest('input, button, a, .player-seek-range, .player-volume-range')) return;
+    swipeRef.current = { startY: e.touches[0].clientY, active: true };
+  };
+
+  const handlePlayerTouchEnd = (e) => {
+    if (!isMobile || !swipeRef.current.active) return;
+    swipeRef.current.active = false;
+    const dy = e.changedTouches[0].clientY - swipeRef.current.startY;
+    if (Math.abs(dy) < 48) return;
+    if (dy < 0 && !mobileExpanded) setMobileExpanded(true);
+    if (dy > 0 && mobileExpanded) setMobileExpanded(false);
+  };
+
+  useEffect(() => {
+    setCoverFailed(false);
+    coverRefreshAttempted.current = false;
+  }, [currentTrack?.provider_id, currentTrack?.cover_url]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileExpanded(false);
+      document.documentElement.classList.remove('player-mobile-expanded');
+      return undefined;
+    }
+    document.documentElement.classList.toggle('player-mobile-expanded', mobileExpanded);
+    return () => document.documentElement.classList.remove('player-mobile-expanded');
+  }, [isMobile, mobileExpanded]);
+
+  const handleCoverError = () => {
+    setCoverFailed(true);
+    if (coverRefreshAttempted.current || !currentTrack?.provider_id) return;
+    coverRefreshAttempted.current = true;
+    const provider = currentTrack.provider || 'tidal';
+    apiGetJson(`/api/track/${provider}/${currentTrack.provider_id}`, { auth: true })
+      .then((meta) => {
+        if (!meta?.cover_url) return;
+        setCoverFailed(false);
+        coverRefreshAttempted.current = false;
+        setCurrentTrack({ ...currentTrack, cover_url: meta.cover_url });
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!isMobile || !mobileExpanded) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setMobileExpanded(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMobile, mobileExpanded]);
 
   const formatTime = (timeInSeconds) => {
-    if (!timeInSeconds || isNaN(timeInSeconds)) return "0:00";
+    if (!timeInSeconds || Number.isNaN(timeInSeconds)) return '0:00';
     const m = Math.floor(timeInSeconds / 60);
     const s = Math.floor(timeInSeconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  return (
-    <div className="player-bar glass-panel" style={{ borderBottom: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
-      <div className="player-left" style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: 0 }}>
-        <div style={{ width: '56px', height: '56px', minWidth: '56px', borderRadius: '8px', background: 'var(--bg-surface-hover)', overflow: 'hidden' }}>
-           {proxiedCoverUrl(currentTrack?.cover_url) ? (
-             <img src={proxiedCoverUrl(currentTrack.cover_url)} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-           ) : (
-             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Waves size={24} color="var(--text-muted)" />
-             </div>
-           )}
+  const seekPct = trackDuration
+    ? `${(Math.min(progress, trackDuration) / trackDuration) * 100}%`
+    : '0%';
+
+  const mainPlayerClaimsBar = !!currentTrack;
+  const setActive = !mainPlayerClaimsBar
+    && embedEngaged && !!embedUrl && !!embedTitle
+    && (embedPlaying || !isPlaying);
+  const setSeekPct = setAudioDuration
+    ? `${(Math.min(setAudioProgress, setAudioDuration) / setAudioDuration) * 100}%`
+    : '0%';
+  const liked = currentTrack && isTrackLiked(likedTracks, currentTrack);
+  const showMini = isMobile && !mobileExpanded;
+  const showFull = !isMobile || mobileExpanded;
+  const setLabel = lang === 'ru' ? 'DJ-сет' : 'DJ set';
+  const displayTitle = setActive
+    ? embedTitle
+    : (currentTrack ? currentTrack.title : t('readyToPlay'));
+  const displayArtistTooltip = setActive
+    ? setLabel
+    : (currentTrack
+      ? (currentTrack.artists?.length ? currentTrack.artists.join(', ') : 'Unknown Artist')
+      : t('selectTrack'));
+  const titleTooltip = (setActive && embedTitle) || currentTrack ? displayTitle : undefined;
+  const artistTooltip = (setActive && embedTitle) || currentTrack ? displayArtistTooltip : undefined;
+  const transportPlaySize = isMobile ? 36 : 48;
+  const transportSkipSize = isMobile ? 20 : 24;
+  const transportMinorSize = isMobile ? 18 : 22;
+
+  const coverThumb = (size = 56) => (
+    <div
+      className="player-cover-thumb"
+      style={{ width: size, height: size, minWidth: size, borderRadius: size <= 48 ? 8 : 12 }}
+    >
+      {setActive ? (
+        <div className="player-cover-thumb__placeholder player-cover-thumb__placeholder--set">
+          <Radio size={size <= 48 ? 20 : 24} color="var(--accent-solid)" />
         </div>
-        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-               {currentTrack ? currentTrack.title : t('readyToPlay')}
-             </span>
-             {currentTrack && (
-               <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                 {actualQuality && (
-                   <span 
-                     style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--accent-solid)', borderRadius: '4px', color: '#fff' }}
-                     title={actualQuality !== playbackQuality ? `${playbackQuality} → ${actualQuality}` : actualQuality}
-                   >
-                     {qualityBadgeLabel(actualQuality) || actualQuality}
-                   </span>
-                 )}
-                 {currentTrack.release_date && (
-                   <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--bg-surface-hover)', borderRadius: '4px', color: 'var(--text-secondary)' }}>
-                     {currentTrack.release_date.split('-')[0]}
-                   </span>
-                 )}
-               </div>
-             )}
-          </div>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentTrack ? (
-              currentTrack.artists ? currentTrack.artists.map((artistName, i) => {
-                const artistId = currentTrack.artist_ids?.[i];
-                return (
-                  <Fragment key={i}>
-                    {i > 0 && ", "}
-                    {artistId ? (
-                      <Link to={`/artist/${artistId}`} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
-                        {artistName}
-                      </Link>
-                    ) : artistName}
-                  </Fragment>
-                );
-              }) : 'Unknown Artist'
-            ) : t('selectTrack')}
-          </div>
-          {nextTrack && (
-            <div
-              data-testid="player-up-next"
-              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              title={`${nextTrack.title} — ${nextTrack.artists?.join(', ') || ''}`}
-            >
-              Up next: <span style={{ color: 'var(--text-secondary)' }}>{nextTrack.title}</span>
-            </div>
-          )}
+      ) : currentTrack?.cover_url && !coverFailed ? (
+        <img
+          src={coverImgSrc(currentTrack.cover_url)}
+          alt=""
+          decoding="async"
+          onError={handleCoverError}
+        />
+      ) : (
+        <div className="player-cover-thumb__placeholder">
+          <Waves size={size <= 48 ? 20 : 24} color="var(--text-muted)" />
         </div>
-      </div>
-
-      <div className="player-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 2, justifyContent: 'center', color: 'var(--text-primary)' }}>
-         <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-           <SkipBack 
-             size={20} 
-             opacity={currentTrack ? 1 : 0.5} 
-             cursor={currentTrack ? "pointer" : "default"} 
-             onClick={playPrevious}
-           />
-           <div 
-              data-testid="player-transport-btn"
-              onClick={() => currentTrack && !isLoading && togglePlay(currentTrack)}
-              style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--text-primary)', color: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: currentTrack && !isLoading ? 'pointer' : 'default', opacity: currentTrack ? 1 : 0.5, position: 'relative' }}
-           >
-             {isLoading ? (
-               <motion.div 
-                 animate={{ rotate: 360 }} 
-                 transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                 style={{ width: '18px', height: '18px', border: '2px solid transparent', borderTopColor: 'currentColor', borderRadius: '50%' }}
-               />
-             ) : (
-               isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: '4px' }} />
-             )}
-           </div>
-           <SkipForward 
-             size={20} 
-             opacity={(playlist.length > 0 && currentTrack) ? 1 : 0.5} 
-             cursor={(playlist.length > 0 && currentTrack) ? "pointer" : "default"} 
-             onClick={playNext}
-           />
-         </div>
-         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%', maxWidth: '600px', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-           <span ref={timeSpanRef} style={{ width: '45px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatTime(progress)}</span>
-           <div 
-             onClick={handleSeek}
-             style={{ flex: 1, height: '8px', background: 'var(--bg-surface-hover)', borderRadius: '4px', cursor: trackDuration ? 'pointer' : 'default', position: 'relative', overflow: 'visible' }}
-           >
-             <div ref={progressRef} style={{ width: `${trackDuration ? Math.min(100, (progress/trackDuration)*100) : 0}%`, height: '100%', background: 'var(--accent-solid)', borderRadius: '4px', position: 'relative' }}>
-               <div style={{ 
-                 position: 'absolute', 
-                 right: '-6px', 
-                 top: '50%', 
-                 transform: 'translateY(-50%)', 
-                 width: '12px', 
-                 height: '12px', 
-                 borderRadius: '50%', 
-                 background: '#fff', 
-                 boxShadow: '0 0 5px rgba(0,0,0,0.5)' 
-               }} />
-             </div>
-           </div>
-           <span style={{ width: '45px', textAlign: 'left', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{formatTime(trackDuration)}</span>
-         </div>
-      </div>
-
-      <div className="player-right" style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, justifyContent: 'flex-end', color: 'var(--text-secondary)' }}>
-         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginRight: '16px', borderRight: '1px solid var(--border-subtle)', paddingRight: '24px' }}>
-           <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '20px', padding: '2px', border: '1px solid rgba(255,255,255,0.1)' }}>
-             {[
-               { id: 'LOW', label: '96k', color: 'rgba(255,255,255,0.2)', level: 0 },
-               { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
-               { id: 'LOSSLESS', label: 'FLAC', color: '#2575fc', level: 2 },
-               { id: 'HI_RES', label: 'MAX', color: '#ffb703', level: 3 }
-             ].map(q => {
-               const isDisabled = !qualitiesReady
-                 || !availableQualities.includes(q.id)
-                 || !isQualityAllowedForPlan(q.id, effectivePlan);
-
-               return (
-                 <div 
-                   key={q.id}
-                   onClick={() => !isDisabled && changeQuality(q.id)}
-                   data-testid={`quality-${q.id}`}
-                   data-available={!isDisabled}
-                   style={{
-                     padding: '4px 10px',
-                     fontSize: '0.65rem',
-                     fontWeight: playbackQuality === q.id ? 700 : 500,
-                     color: playbackQuality === q.id ? '#fff' : (isDisabled ? 'var(--text-muted)' : 'var(--text-secondary)'),
-                     background: playbackQuality === q.id ? q.color : 'transparent',
-                     borderRadius: '18px',
-                     cursor: isDisabled ? 'not-allowed' : 'pointer',
-                     opacity: isDisabled ? 0.3 : 1,
-                     transition: 'all 0.2s ease',
-                     boxShadow: playbackQuality === q.id && q.id !== 'LOW' && q.id !== 'HIGH' ? `0 0 10px ${q.color}60` : 'none',
-                     textTransform: 'uppercase',
-                     letterSpacing: '0.5px'
-                   }}
-                   title={isDisabled ? `${q.label} — not available for this track` : (maxTrackQuality === q.id ? `${q.label} (max)` : q.label)}
-                 >
-                   {q.label}
-                 </div>
-               );
-             })}
-           </div>
-           
-           <div style={{ display: 'flex', alignItems: 'center', gap: '28px', marginRight: '8px' }}>
-              <Heart 
-                size={22} 
-                data-testid="player-like-btn"
-                cursor={currentTrack ? "pointer" : "default"}
-                fill={currentTrack && likedTracks.has(String(currentTrack.provider_id)) ? "var(--accent-solid)" : "none"}
-                color={currentTrack && likedTracks.has(String(currentTrack.provider_id)) ? "var(--accent-solid)" : "var(--text-primary)"}
-                onClick={(e) => { e.preventDefault(); toggleLike(currentTrack, e); }}
-                style={{ transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }} 
-                title={currentTrack && likedTracks.has(String(currentTrack.provider_id)) ? 'Remove from Library' : 'Add to Library'}
-              />
-              <Plus 
-                size={22} 
-                cursor={currentTrack ? "pointer" : "default"}
-                onClick={() => currentTrack && setIsPlaylistModalOpenPlayer(true)}
-                style={{ color: 'var(--text-primary)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
-                title="Add to Playlist"
-              />
-              <Radio 
-                size={22} 
-                cursor={currentTrack ? "pointer" : "default"}
-                onClick={() => currentTrack && startTrackRadio(currentTrack)}
-                style={{ color: 'var(--text-primary)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
-                title={t('startTrackRadio') || "Start Track Radio"}
-              />
-              {currentTrack && (
-               <Download 
-                 size={22} 
-                 cursor="pointer" 
-                 title={`Download in ${playbackQuality}`} 
-                 onClick={handleDownloadPlayer}
-                 style={{ color: 'var(--text-primary)', transition: 'color 0.2s' }} 
-               />
-              )}
-              <button 
-                onClick={() => toggleOverlay('karaoke')}
-                style={{ background: 'transparent', border: 'none', color: isKaraokeOpen ? 'var(--accent-solid)' : 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s' }}
-                title="Karaoke Mode"
-              >
-                <Mic2 size={22} />
-              </button>
-              <button 
-                onClick={() => toggleOverlay('dj')}
-                style={{ background: 'transparent', border: 'none', color: isDJOpen ? 'var(--accent-solid)' : 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s' }}
-                title="DJ Tools"
-              >
-                <Disc3 size={22} />
-              </button>
-              <button 
-                onClick={() => toggleOverlay('eq')}
-                style={{ background: 'transparent', border: 'none', color: isEQOpen ? 'var(--accent-solid)' : 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s' }}
-                title="Target Quality"
-              >
-                <Sliders size={22} />
-              </button>
-              <button 
-                onClick={() => toggleOverlay('queue')}
-                style={{ background: 'transparent', border: 'none', color: isQueueOpen ? 'var(--accent-solid)' : 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s' }}
-                title="Queue"
-              >
-                <ListMusic size={22} />
-              </button>
-            </div>
-         </div>
-
-         <Volume2 className="hide-on-mobile" size={20} />
-         <input
-           type="range"
-           className="hide-on-mobile"
-           min="0"
-           max="1"
-           step="0.01"
-           value={volume}
-           onChange={(e) => setVolume(parseFloat(e.target.value))}
-           aria-label="Volume"
-           data-testid="volume-slider"
-           style={{ width: '100px', cursor: 'pointer', accentColor: 'var(--accent-solid)' }}
-         />
-      </div>
+      )}
     </div>
+  );
+
+  const artistLine = setActive ? setLabel : currentTrack ? (
+    currentTrack.artists ? currentTrack.artists.map((artistName, i) => {
+      const artistId = currentTrack.artist_ids?.[i];
+      return (
+        <Fragment key={i}>
+          {i > 0 && ', '}
+          {artistId ? (
+            <Link to={`/artist/${artistId}`} className="player-artist-link">
+              {artistName}
+            </Link>
+          ) : artistName}
+        </Fragment>
+      );
+    }) : 'Unknown Artist'
+  ) : t('selectTrack');
+
+  const transportBtn = (size = 40) => {
+    const playing = setActive ? embedPlaying : isPlaying;
+    const canTransport = setActive || currentTrack;
+    return (
+      <button
+        type="button"
+        data-testid="player-transport-btn"
+        aria-label={playing ? t('playerPause') : t('playerPlay')}
+        disabled={!canTransport}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (setActive) toggleSetEmbed?.();
+          else if (currentTrack) togglePlay(currentTrack, playlist?.length ? playlist : null);
+        }}
+        className="player-transport-btn"
+        style={{ width: size, height: size }}
+      >
+        {!setActive && isLoading ? (
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+            className="player-transport-spinner"
+            style={{ width: size * 0.45, height: size * 0.45 }}
+          />
+        ) : (
+          playing
+            ? <Pause size={size * 0.5} fill="currentColor" />
+            : <Play size={size * 0.5} fill="currentColor" style={{ marginLeft: 2 }} />
+        )}
+      </button>
+    );
+  };
+
+  const miniSkipNextBtn = (size = 34) => (
+    <button
+      type="button"
+      data-testid="player-mini-next"
+      aria-label={t('playerNext')}
+      disabled={setActive || !(playlist.length > 0 && currentTrack)}
+      onClick={(e) => {
+        e.stopPropagation();
+        playNext();
+      }}
+      className="player-transport-btn player-transport-btn--ghost"
+      style={{ width: size, height: size }}
+    >
+      <SkipForward size={18} />
+    </button>
+  );
+
+  const handleMiniSeek = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (setActive || !trackDuration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const nextTime = ratio * trackDuration;
+    handleSeekPreview(nextTime);
+    handleSeekCommit(nextTime);
+  };
+
+  const qualityDict = appDict[lang] || appDict.en;
+
+  const preferredUnavailable = qualitiesReady && !isPlaybackQualityAvailable(
+    playbackQuality,
+    availableQualities,
+    maxTrackQuality,
+    effectivePlan,
+    probeData,
+  );
+  const activeQualityId = preferredUnavailable ? streamQuality : playbackQuality;
+
+  const qualityPicker = (
+    <div className="player-quality-picker">
+      {QUALITY_OPTIONS.map((q) => {
+        const planBlocked = !isQualityAllowedForPlan(q.id, effectivePlan);
+        const trackBlocked = qualitiesReady && !isPlaybackQualityAvailable(
+          q.id,
+          availableQualities,
+          maxTrackQuality,
+          effectivePlan,
+          probeData,
+        );
+        const isDisabled = planBlocked || trackBlocked || !qualitiesReady;
+        const tidalCatalogOnly = isTidalCatalogOnlyLossless(probeData);
+
+        return (
+          <button
+            type="button"
+            key={q.id}
+            onClick={() => !isDisabled && changeQuality(q.id)}
+            data-testid={`quality-${q.id}`}
+            data-available={!isDisabled}
+            data-tidal-catalog-only={tidalCatalogOnly && q.id === 'LOSSLESS' ? 'true' : undefined}
+            disabled={isDisabled}
+            className={`player-quality-option${activeQualityId === q.id ? ' is-active' : ''}`}
+            style={{
+              ...(q.color ? { '--q-color': q.color } : {}),
+              opacity: isDisabled ? 0.35 : 1,
+            }}
+            title={
+              !qualitiesReady
+                ? (qualityDict.qualityChecking || (lang === 'ru' ? 'Проверка трека…' : 'Checking track…'))
+                : isDisabled
+                  ? qualityUnavailableTooltip(lang, {
+                    planBlocked,
+                    tidalCatalogOnly,
+                    tier: q.id,
+                    dict: qualityDict,
+                  })
+                  : (maxTrackQuality === q.id ? `${q.label} (max)` : q.label)
+            }
+          >
+            {qualityButtonLabel(q.id, lang)}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const mobileExpandedActions = !setActive && currentTrack && (
+    <PlayerMobileActions
+      lang={lang}
+      t={t}
+      currentTrack={currentTrack}
+      liked={liked}
+      toggleLike={toggleLike}
+      setIsPlaylistModalOpenPlayer={setIsPlaylistModalOpenPlayer}
+      startTrackRadio={startTrackRadio}
+      handleDownloadPlayer={handleDownloadPlayer}
+      toggleOverlay={toggleOverlay}
+      isKaraokeOpen={isKaraokeOpen}
+      isDJOpen={isDJOpen}
+      isEQOpen={isEQOpen}
+      isQueueOpen={isQueueOpen}
+    />
+  );
+
+  const actionIcons = (
+    <div className="player-action-icons">
+      <Heart
+        size={22}
+        data-testid="player-like-btn"
+        cursor={currentTrack ? 'pointer' : 'default'}
+        fill={liked ? 'var(--accent-solid)' : 'none'}
+        color={liked ? 'var(--accent-solid)' : 'var(--text-primary)'}
+        onClick={(e) => { e.preventDefault(); toggleLike(currentTrack, e); }}
+        style={{ transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
+        title={withHotkey(
+          liked ? 'Remove from Library' : 'Add to Library',
+          PLAYER_HOTKEYS.like,
+        )}
+      />
+      <Plus
+        size={22}
+        cursor={currentTrack ? 'pointer' : 'default'}
+        onClick={() => currentTrack && setIsPlaylistModalOpenPlayer(true)}
+        style={{ color: 'var(--player-text)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
+        title="Add to Playlist"
+      />
+      <Radio
+        size={22}
+        cursor={currentTrack ? 'pointer' : 'default'}
+        onClick={() => currentTrack && startTrackRadio(currentTrack)}
+        style={{ color: 'var(--player-text)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
+        title={withHotkey(t('startTrackRadio') || 'Start Track Radio', PLAYER_HOTKEYS.trackRadio)}
+      />
+      {currentTrack && (
+        <Download
+          size={22}
+          cursor="pointer"
+          title={`Download in ${playbackQuality}`}
+          onClick={handleDownloadPlayer}
+          style={{ color: 'var(--player-text)', transition: 'color 0.2s' }}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => toggleOverlay('karaoke')}
+        className="player-overlay-btn"
+        data-active={isKaraokeOpen}
+        title={withHotkey('Karaoke Mode', PLAYER_HOTKEYS.karaoke)}
+      >
+        <Mic2 size={22} />
+      </button>
+      {partyModeAvailable && (
+        <button
+          type="button"
+          onClick={() => toggleOverlay('party')}
+          className="player-overlay-btn player-overlay-btn--party"
+          data-active={isPartyOpen}
+          data-testid="player-party-btn"
+          title={withHotkey(lang === 'ru' ? 'Party mode' : 'Party mode', PLAYER_HOTKEYS.party)}
+        >
+          <Sparkles size={22} />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => toggleOverlay('dj')}
+        className="player-overlay-btn"
+        data-active={isDJOpen}
+        title={withHotkey('DJ Tools', PLAYER_HOTKEYS.dj)}
+      >
+        <Disc3 size={22} />
+      </button>
+      <button
+        type="button"
+        onClick={() => toggleOverlay('eq')}
+        className="player-overlay-btn"
+        data-active={isEQOpen}
+        title={withHotkey('Equalizer', PLAYER_HOTKEYS.eq)}
+      >
+        <Sliders size={22} />
+      </button>
+      <button
+        type="button"
+        onClick={() => toggleOverlay('queue')}
+        className="player-overlay-btn"
+        data-testid="player-queue-btn"
+        data-active={isQueueOpen}
+        title={withHotkey('Queue', PLAYER_HOTKEYS.queue)}
+      >
+        <ListMusic size={22} />
+      </button>
+    </div>
+  );
+
+  const seekRow = setActive ? (
+    setAudioMode ? (
+      <div className="player-seek-row">
+        <span className="player-time">{formatTime(setAudioProgress)}</span>
+        <input
+          type="range"
+          className="player-seek-range"
+          min={0}
+          max={setAudioDuration || 0}
+          step={0.1}
+          value={setAudioDuration ? Math.min(setAudioProgress, setAudioDuration) : 0}
+          disabled={!setAudioDuration}
+          aria-label={t('playerSeek')}
+          data-testid="player-set-seek-slider"
+          style={{ '--seek-pct': setSeekPct }}
+          onInput={(e) => seekSetAudioPreview?.(parseFloat(e.target.value))}
+          onChange={(e) => seekSetAudioCommit?.(parseFloat(e.target.value))}
+        />
+        <span className="player-time player-time--end">{formatTime(setAudioDuration)}</span>
+      </div>
+    ) : null
+  ) : (
+    <div className="player-seek-row">
+      <span className="player-time">{formatTime(progress)}</span>
+      <input
+        type="range"
+        className="player-seek-range"
+        min={0}
+        max={trackDuration || 0}
+        step={0.1}
+        value={trackDuration ? Math.min(progress, trackDuration) : 0}
+        disabled={!trackDuration || isLoading}
+        aria-label={t('playerSeek')}
+        data-testid="player-seek-slider"
+        style={{ '--seek-pct': seekPct }}
+        onPointerDown={beginSeekScrub}
+        onInput={(e) => handleSeekPreview(parseFloat(e.target.value))}
+        onChange={(e) => handleSeekCommit(parseFloat(e.target.value))}
+      />
+      <span className="player-time player-time--end">{formatTime(trackDuration)}</span>
+    </div>
+  );
+
+  const transportRow = (
+    <div className="player-transport-row">
+      {!setActive && (
+        <button
+          type="button"
+          data-testid="player-shuffle"
+          aria-label={t('playerShuffle')}
+          aria-pressed={shuffleEnabled}
+          onClick={toggleShuffle}
+          className="player-transport-icon"
+          data-active={shuffleEnabled}
+        >
+          <Shuffle size={transportMinorSize} />
+        </button>
+      )}
+      <button
+        type="button"
+        aria-label={t('playerPrevious')}
+        disabled={setActive || !currentTrack}
+        onClick={playPrevious}
+        className="player-transport-icon"
+      >
+        <SkipBack size={transportSkipSize} />
+      </button>
+      {transportBtn(transportPlaySize)}
+      <button
+        type="button"
+        aria-label={t('playerNext')}
+        disabled={setActive || !(playlist.length > 0 && currentTrack)}
+        onClick={playNext}
+        className="player-transport-icon"
+      >
+        <SkipForward size={transportSkipSize} />
+      </button>
+      {!setActive && (
+        <button
+          type="button"
+          data-testid="player-repeat"
+          aria-label={
+            repeatMode === REPEAT_ONE
+              ? t('playerRepeatOne')
+              : repeatMode === REPEAT_ALL
+                ? t('playerRepeatAll')
+                : t('playerRepeat')
+          }
+          aria-pressed={repeatMode !== 'off'}
+          onClick={cycleRepeat}
+          className="player-transport-icon"
+          data-active={repeatMode !== 'off'}
+        >
+          {repeatMode === REPEAT_ONE ? <Repeat1 size={transportMinorSize} /> : <Repeat size={transportMinorSize} />}
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {isMobile && mobileExpanded && (
+        <button
+          type="button"
+          className="player-backdrop"
+          aria-label={lang === 'ru' ? 'Свернуть плеер' : 'Collapse player'}
+          onClick={() => setMobileExpanded(false)}
+        />
+      )}
+
+      <div
+        className={[
+          'player-bar',
+          'glass-panel',
+          isMobile ? 'player-bar--mobile' : '',
+          mobileExpanded ? 'player-bar--expanded' : '',
+          setActive ? 'player-bar--set-mode' : '',
+        ].filter(Boolean).join(' ')}
+        data-testid="player-bar"
+        data-set-mode={setActive ? 'true' : undefined}
+        onTouchStart={handlePlayerTouchStart}
+        onTouchEnd={handlePlayerTouchEnd}
+      >
+        {isMobile && (
+          <button
+            type="button"
+            className="player-bar__progress-rail"
+            style={{ '--seek-pct': seekPct }}
+            aria-label={t('playerSeek')}
+            data-testid="player-mini-seek"
+            disabled={!trackDuration || setActive}
+            onClick={handleMiniSeek}
+            onPointerDown={(e) => e.stopPropagation()}
+          />
+        )}
+
+        {showMini && (
+          <div
+            className="player-bar__mini"
+            role="button"
+            tabIndex={0}
+            onClick={() => setMobileExpanded(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setMobileExpanded(true);
+              }
+            }}
+          >
+            {coverThumb(44)}
+            <div className="player-bar__mini-meta">
+              <div className="player-bar__mini-title" title={titleTooltip}>
+                {displayTitle}
+              </div>
+              <div className="player-bar__mini-artist" title={artistTooltip}>{artistLine}</div>
+            </div>
+            <div className="player-bar__mini-transport">
+              {miniSkipNextBtn(34)}
+              {transportBtn(36)}
+            </div>
+            <button
+              type="button"
+              className="player-bar__expand-btn"
+              aria-label={lang === 'ru' ? 'Развернуть плеер' : 'Expand player'}
+              onClick={(e) => { e.stopPropagation(); setMobileExpanded(true); }}
+            >
+              <ChevronUp size={20} />
+            </button>
+          </div>
+        )}
+
+        {showFull && (
+          <>
+            {isMobile && (
+              <button
+                type="button"
+                className="player-bar__swipe-hint"
+                aria-hidden
+                tabIndex={-1}
+              />
+            )}
+
+            {isMobile && (
+              <button
+                type="button"
+                className="player-bar__collapse-btn"
+                aria-label={lang === 'ru' ? 'Свернуть плеер' : 'Collapse player'}
+                onClick={() => setMobileExpanded(false)}
+              >
+                <ChevronDown size={22} />
+              </button>
+            )}
+
+            <div className="player-left">
+              {coverThumb(isMobile ? 72 : 56)}
+              <div className="player-track-meta">
+                <div className="player-track-title">
+                  <span
+                    data-testid="player-track-title"
+                    className="player-track-title__text"
+                    title={titleTooltip}
+                  >
+                    {displayTitle}
+                  </span>
+                  {!setActive && currentTrack && (
+                    <div className="player-track-badges">
+                      {formatTrackYear(currentTrack) && (
+                        <MetaBadge variant="muted">{formatTrackYear(currentTrack)}</MetaBadge>
+                      )}
+                      {playbackQuality && qualitiesReady && (
+                        <MetaBadge
+                          className="hide-on-mobile"
+                          variant="solid"
+                          title={
+                            deliveredStream?.tier && deliveredStream.tier !== playbackQuality
+                              ? `${streamBadgeLabel({ tier: playbackQuality }, playbackQuality)} → ${streamBadgeLabel(deliveredStream, playbackQuality)}`
+                              : streamBadgeLabel(deliveredStream, playbackQuality)
+                          }
+                        >
+                          {streamBadgeLabel(deliveredStream, playbackQuality)}
+                        </MetaBadge>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
+                {!setActive && nextTrack && !isMobile && (
+                  <div
+                    data-testid="player-up-next"
+                    className="player-up-next"
+                    title={`${nextTrack.title} — ${nextTrack.artists?.join(', ') || ''}`}
+                  >
+                    Up next: <span>{nextTrack.title}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="player-center">
+              {transportRow}
+              {seekRow}
+              {isMobile && mobileExpanded && mobileExpandedActions}
+            </div>
+
+            {!setActive && <div className="player-quality-slot">{qualityPicker}</div>}
+
+            <div className="player-right">
+              {!setActive && (
+                <div className="player-right__cluster">
+                  {isMobile && mobileExpanded ? null : actionIcons}
+                </div>
+              )}
+              <div className="player-volume-row hide-on-mobile">
+                <Volume2 size={20} />
+                <input
+                  type="range"
+                  className="player-volume-range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  style={{ '--volume-pct': `${Math.round(volume * 100)}%` }}
+                  onInput={(e) => setVolume(parseFloat(e.target.value))}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  aria-label="Volume"
+                  data-testid="volume-slider"
+                />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }

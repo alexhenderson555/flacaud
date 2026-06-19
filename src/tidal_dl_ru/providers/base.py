@@ -13,14 +13,6 @@ class ProviderError(Exception):
     pass
 
 
-class NotSupportedHere(ProviderError):
-    """Provider was given a URL it doesn't handle."""
-
-
-class AuthRequired(ProviderError):
-    """Provider needs a one-time login before this call."""
-
-
 class Provider(ABC):
     """A music source. Implementations live under tidal_dl_ru.providers.<name>."""
 
@@ -48,8 +40,4 @@ class Provider(ABC):
     # Optional capabilities. Default to None / unsupported.
 
     def search(self, query: str, limit: int = 10) -> list[Track]:
-        return []
-
-    def list_library(self) -> list[Track]:
-        """Return user's saved/liked tracks. Empty if provider doesn't expose a library."""
         return []

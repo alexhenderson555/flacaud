@@ -2,7 +2,7 @@ export const appDict = {
   en: {
     search: 'Search & Shazam',
     library: 'Library',
-    radio: 'My Vibe',
+    radio: 'Genreverse',
     transfer: 'Transfer Library',
     queue: 'Queue',
     account: 'Account',
@@ -27,6 +27,7 @@ export const appDict = {
     hotkeys: 'Keyboard shortcuts',
     downloadStarted: 'Download started',
     setAnalyzer: 'Set Analyzer',
+    setLibrary: 'Set Library',
     proTools: 'Pro Tools',
     myMusic: 'My Music',
     failedToStream: 'Failed to stream track',
@@ -40,7 +41,7 @@ export const appDict = {
   ru: {
     search: 'Поиск и Шазам',
     library: 'Медиатека',
-    radio: 'Моя Волна',
+    radio: 'Genreverse',
     transfer: 'Перенос музыки',
     queue: 'Очередь',
     account: 'Профиль',
@@ -65,6 +66,7 @@ export const appDict = {
     hotkeys: 'Горячие клавиши',
     downloadStarted: 'Загрузка начата',
     setAnalyzer: 'Анализатор сетов',
+    setLibrary: 'Библиотека сетов',
     proTools: 'Pro Tools',
     myMusic: 'Моя музыка',
     failedToStream: 'Не удалось воспроизвести',

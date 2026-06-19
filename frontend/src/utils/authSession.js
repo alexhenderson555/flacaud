@@ -1,10 +1,16 @@
 import { clearMediaToken } from './mediaToken';
 import { apiFetch, parseJsonSafe, ApiError } from './apiClient';
+import { logoutSession, tryRefreshAccessToken } from './apiFetchCore';
+import { clearAccessToken, getAccessToken } from './tokenStorage';
+
+export { tryRefreshAccessToken, getAccessToken };
 
 export function clearSession() {
-  localStorage.removeItem('tidal-token');
-  localStorage.removeItem('tidal-user');
-  localStorage.removeItem('tidal-effective-plan');
+  clearAccessToken();
+  try {
+    localStorage.removeItem('tidal-user');
+    localStorage.removeItem('tidal-effective-plan');
+  } catch { /* ignore */ }
   clearMediaToken();
 }
 
@@ -28,10 +34,10 @@ export function getStoredEffectivePlan() {
   }
 }
 
-/** Returns true when session JWT is valid. False when missing/invalid. Throws ApiError on network failure. */
+/** Session check result for app boot and visibility recheck. */
 export async function validateSession() {
-  const token = localStorage.getItem('tidal-token');
-  if (!token) return false;
+  const token = getAccessToken();
+  if (!token) return { ok: false };
 
   if (validateInFlight) return validateInFlight;
 
@@ -45,13 +51,17 @@ export async function validateSession() {
       if (res.ok) {
         const data = await parseJsonSafe(res);
         if (data?.effective_plan) persistEffectivePlan(data.effective_plan);
-        return true;
+        return {
+          ok: true,
+          plan: data?.effective_plan || getStoredEffectivePlan(),
+          dj_enabled: !!data?.dj_enabled,
+        };
       }
       if (res.status === 401) {
         clearSession();
-        return false;
+        return { ok: false };
       }
-      return false;
+      return { ok: false };
     } finally {
       validateInFlight = null;
     }
@@ -100,11 +110,11 @@ export async function loginWithPassword(username, password) {
   }
 }
 
-export async function registerUser({ email, username, password }) {
+export async function registerUser({ email, username, password, acceptTerms = false }) {
   const res = await apiFetch('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, username, password }),
+    body: JSON.stringify({ email, username, password, accept_terms: !!acceptTerms }),
     timeoutMs: 45000,
     retries: 1,
   });
@@ -127,4 +137,18 @@ export function userDataFromLogin(data, fallbackUsername) {
     downloads_today: data.downloads_today ?? 0,
     subscription_expires_at: data.subscription_expires_at ?? null,
   };
+}
+
+export async function verifyEmailToken(token) {
+  const res = await fetch(`/api/auth/verify-email?token=${token}`, { method: 'POST' });
+  return res.json().catch(() => ({}));
+}
+
+export async function signOut() {
+  await logoutSession();
+  try {
+    localStorage.removeItem('tidal-user');
+    localStorage.removeItem('tidal-effective-plan');
+  } catch { /* ignore */ }
+  clearMediaToken();
 }

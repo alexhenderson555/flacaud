@@ -1,0 +1,99 @@
+
+/* ── Marketing landing (/) ── */
+.landing {
+  --landing-font-display: 'Outfit', 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+  background: var(--bg-main);
+  color: var(--text-primary);
+}
+
+.landing__grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+.landing__glow {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.landing__glow--1 {
+  width: 520px;
+  height: 520px;
+  top: -140px;
+  right: -100px;
+  background: rgba(106, 17, 203, 0.28);
+}
+
+.landing__glow--2 {
+  width: 400px;
+  height: 400px;
+  bottom: 5%;
+  left: -120px;
+  background: rgba(37, 117, 252, 0.18);
+}
+
+.landing__glow--3 {
+  width: 280px;
+  height: 280px;
+  top: 45%;
+  right: 20%;
+  background: rgba(110, 231, 183, 0.08);
+}
+
+.landing__main,
+.landing__legal {
+  position: relative;
+  z-index: 1;
+}
+
+.landing__header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px clamp(20px, 5vw, 48px);
+  backdrop-filter: blur(18px);
+  background: rgba(8, 8, 12, 0.65);
+  border-bottom: 1px solid transparent;
+  transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+}
+
+.landing__header--scrolled {
+  background: rgba(8, 8, 12, 0.9);
+  border-bottom-color: var(--border-subtle);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.landing__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.landing__lang-btn {
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}

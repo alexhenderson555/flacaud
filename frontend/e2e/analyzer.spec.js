@@ -1,16 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { routeAuthMe } from './helpers.js';
+import { installE2EAuth } from './helpers.js';
 
 test('set analyzer shows progress while job runs', async ({ page }) => {
   const jobId = `e2e-analyzer-${Date.now()}`;
   let polls = 0;
 
-  await routeAuthMe(page);
-
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-analyzer');
-    window.__E2E_DISABLE_AUTOSAVE__ = true;
-  });
+  await installE2EAuth(page, { token: 'e2e-analyzer' });
 
   await page.route('**/api/jobs', async (route) => {
     if (route.request().method() === 'POST') {
@@ -44,5 +39,5 @@ test('set analyzer shows progress while job runs', async ({ page }) => {
   await page.getByPlaceholder(/youtube|soundcloud|set url|ссылка/i).fill('https://soundcloud.com/test/set');
   await page.getByRole('button', { name: /analyze|анализ/i }).click();
 
-  await expect(page.getByTestId('analyzer-progress')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('analyzer-progress')).toBeVisible({ timeout: 15_000 });
 });

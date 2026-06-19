@@ -1,18 +1,70 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import { motion } from 'framer-motion';
 import { Sliders, X } from 'lucide-react';
 
+const FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const PRESETS = [
+  { id: 'flat', label: 'Flat' },
+  { id: 'bass', label: 'Bass' },
+  { id: 'vocal', label: 'Vocal' },
+  { id: 'electronic', label: 'Electronic' },
+];
+
+const PRESET_GAINS = {
+  flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  bass: [6, 5, 4, 2, 0, -1, -2, 0, 1, 2],
+  vocal: [-2, -1, 0, 2, 4, 4, 3, 1, 0, -1],
+  electronic: [5, 4, 2, 0, -2, 0, 1, 3, 4, 5],
+};
+
+function formatFreq(freq) {
+  return freq >= 1000 ? `${freq / 1000}k` : String(freq);
+}
+
+function formatDb(gain) {
+  if (Math.abs(gain) < 0.05) return '0';
+  const sign = gain > 0 ? '+' : '';
+  return `${sign}${gain.toFixed(1)}`;
+}
+
+function gainFillStyle(gain) {
+  const pct = (Math.abs(gain) / 12) * 50;
+  if (gain >= 0) {
+    return { bottom: '50%', height: `${pct}%` };
+  }
+  return { top: '50%', height: `${pct}%` };
+}
+
+function buildCurvePaths(gains, width, height) {
+  const padX = 14;
+  const padY = 10;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const midY = padY + innerH / 2;
+  const maxDelta = innerH / 2;
+
+  const points = gains.map((g, i) => {
+    const x = padX + (i / (gains.length - 1)) * innerW;
+    const y = midY - (g / 12) * maxDelta;
+    return { x, y };
+  });
+
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const area = `${line} L ${points[points.length - 1].x.toFixed(1)} ${midY} L ${points[0].x.toFixed(1)} ${midY} Z`;
+  return { line, area };
+}
+
 export default function Equalizer({ audioCtx, audioRef, onClose }) {
+  const curveId = useId().replace(/:/g, '');
   const [nodes, setNodes] = useState([]);
-  const [gains, setGains] = useState([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  const frequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  const [gains, setGains] = useState(() => [...PRESET_GAINS.flat]);
+  const [activePreset, setActivePreset] = useState('flat');
 
   useEffect(() => {
     if (!audioCtx || !audioRef.current || !audioRef.current._sourceNode) return;
 
-    // Check if we already have EQ nodes attached to audioRef
     if (!audioRef.current._eqNodes) {
-      const eqNodes = frequencies.map(freq => {
+      const eqNodes = FREQUENCIES.map((freq) => {
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'peaking';
         filter.frequency.value = freq;
@@ -21,107 +73,126 @@ export default function Equalizer({ audioCtx, audioRef, onClose }) {
         return filter;
       });
 
-      // Currently chain is: source -> analyser -> destination
-      // We'll insert between source and analyser.
-      
       const sourceNode = audioRef.current._sourceNode;
       const analyser = audioRef.current._analyser;
-      
+
       if (sourceNode && analyser) {
         sourceNode.disconnect();
-        
         sourceNode.connect(eqNodes[0]);
-        for (let i = 0; i < eqNodes.length - 1; i++) {
+        for (let i = 0; i < eqNodes.length - 1; i += 1) {
           eqNodes[i].connect(eqNodes[i + 1]);
         }
         eqNodes[eqNodes.length - 1].connect(analyser);
-        
         audioRef.current._eqNodes = eqNodes;
         setNodes(eqNodes);
       }
     } else {
       setNodes(audioRef.current._eqNodes);
-      setGains(audioRef.current._eqNodes.map(n => n.gain.value));
+      setGains(audioRef.current._eqNodes.map((n) => n.gain.value));
+      setActivePreset('custom');
     }
   }, [audioCtx, audioRef]);
+
+  const applyGains = (newGains) => {
+    setGains(newGains);
+    nodes.forEach((n, i) => {
+      if (n) n.gain.value = newGains[i];
+    });
+  };
 
   const handleGainChange = (index, value) => {
     const newGains = [...gains];
     newGains[index] = value;
-    setGains(newGains);
-    
-    if (nodes[index]) {
-      nodes[index].gain.value = value;
-    }
+    applyGains(newGains);
+    setActivePreset('custom');
   };
 
   const applyPreset = (preset) => {
-    let newGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    if (preset === 'bass') newGains = [6, 5, 4, 2, 0, -1, -2, 0, 1, 2];
-    if (preset === 'vocal') newGains = [-2, -1, 0, 2, 4, 4, 3, 1, 0, -1];
-    if (preset === 'electronic') newGains = [5, 4, 2, 0, -2, 0, 1, 3, 4, 5];
-    
-    setGains(newGains);
-    nodes.forEach((n, i) => n.gain.value = newGains[i]);
+    applyGains([...PRESET_GAINS[preset]]);
+    setActivePreset(preset);
   };
 
+  const curve = useMemo(() => buildCurvePaths(gains, 360, 72), [gains]);
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 50 }}
-      className="glass-panel"
-      style={{
-        position: 'fixed',
-        bottom: '100px',
-        right: '24px',
-        width: '400px',
-        padding: '24px',
-        borderRadius: '24px',
-        zIndex: 100,
-        boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-      }}
+    <motion.div
+      initial={{ opacity: 0, y: 28, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 28, scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+      className="eq-panel glass-panel"
+      data-testid="equalizer-panel"
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.2rem' }}>
-          <Sliders size={20} /> Equalizer
+      <div className="eq-panel__glow" aria-hidden />
+
+      <div className="eq-panel__head">
+        <div className="eq-panel__title">
+          <span className="eq-panel__icon">
+            <Sliders size={18} />
+          </span>
+          <span>Equalizer</span>
         </div>
-        <button onClick={onClose} style={{ color: 'var(--text-muted)' }}><X size={20} /></button>
+        <button type="button" className="eq-panel__close" onClick={onClose} aria-label="Close">
+          <X size={18} />
+        </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
-        <button onClick={() => applyPreset('flat')} className="btn-secondary" style={{ flex: 1, padding: '6px', fontSize: '0.85rem' }}>Flat</button>
-        <button onClick={() => applyPreset('bass')} className="btn-secondary" style={{ flex: 1, padding: '6px', fontSize: '0.85rem' }}>Bass</button>
-        <button onClick={() => applyPreset('vocal')} className="btn-secondary" style={{ flex: 1, padding: '6px', fontSize: '0.85rem' }}>Vocal</button>
-        <button onClick={() => applyPreset('electronic')} className="btn-secondary" style={{ flex: 1, padding: '6px', fontSize: '0.85rem' }}>Electronic</button>
+      <div className="eq-panel__presets">
+        {PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={`eq-preset${activePreset === preset.id ? ' eq-preset--active' : ''}`}
+            onClick={() => applyPreset(preset.id)}
+          >
+            {preset.label}
+          </button>
+        ))}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', height: '150px' }}>
-        {frequencies.map((freq, i) => (
-          <div key={freq} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', position: 'relative', width: '20px' }}>
-              <input 
-                type="range" 
-                min="-12" 
-                max="12" 
-                step="0.1" 
-                value={gains[i]} 
+      <div className="eq-panel__curve-wrap">
+        <svg className="eq-panel__curve" viewBox="0 0 360 72" preserveAspectRatio="none" aria-hidden>
+          <defs>
+            <linearGradient id={`eq-fill-${curveId}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent-solid)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--accent-solid)" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id={`eq-line-${curveId}`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#6a11cb" />
+              <stop offset="100%" stopColor="var(--accent-solid)" />
+            </linearGradient>
+          </defs>
+          <line x1="14" y1="36" x2="346" y2="36" className="eq-panel__curve-zero" />
+          <path d={curve.area} fill={`url(#eq-fill-${curveId})`} />
+          <path d={curve.line} fill="none" stroke={`url(#eq-line-${curveId})`} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+
+      <div className="eq-panel__bands">
+        {FREQUENCIES.map((freq, i) => (
+          <div key={freq} className="eq-band">
+            <span className={`eq-band__db${gains[i] !== 0 ? ' eq-band__db--active' : ''}`}>
+              {formatDb(gains[i])}
+            </span>
+            <div className="eq-band__track">
+              <div className="eq-band__track-bg" />
+              <div className="eq-band__zero" />
+              <div
+                className={`eq-band__fill${gains[i] >= 0 ? ' eq-band__fill--boost' : ' eq-band__fill--cut'}`}
+                style={gainFillStyle(gains[i])}
+              />
+              <input
+                type="range"
+                className="eq-band__range"
+                min="-12"
+                max="12"
+                step="0.1"
+                value={gains[i]}
+                aria-label={`${formatFreq(freq)} Hz`}
                 onChange={(e) => handleGainChange(i, parseFloat(e.target.value))}
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%) rotate(-90deg)',
-                  width: '120px',
-                  height: '4px',
-                  accentColor: 'var(--accent-solid)',
-                  cursor: 'pointer'
-                }}
               />
             </div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              {freq >= 1000 ? `${freq/1000}k` : freq}
-            </div>
+            <span className="eq-band__freq">{formatFreq(freq)}</span>
           </div>
         ))}
       </div>

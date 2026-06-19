@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -72,6 +73,68 @@ def _stream_urls_from_dash(root: ET.Element) -> tuple[list[str], str]:
     return urls, codecs
 
 
+def manifest_lossless_meta(manifest: PlaybackManifest) -> tuple[int | None, int | None]:
+    """Sample rate / bit depth from API fields or DASH/BTS manifest body."""
+    sr = manifest.sample_rate
+    bd = manifest.bit_depth
+    if sr and bd:
+        return sr, bd
+    try:
+        decoded = _decode_manifest(manifest)
+    except Exception:
+        return sr, bd
+    if isinstance(decoded, dict):
+        if not sr:
+            raw_sr = decoded.get("sampleRate") or decoded.get("sample_rate")
+            if raw_sr is not None:
+                try:
+                    sr = int(raw_sr)
+                except (TypeError, ValueError):
+                    pass
+        if not bd:
+            raw_bd = decoded.get("bitDepth") or decoded.get("bit_depth")
+            if raw_bd is not None:
+                try:
+                    bd = int(raw_bd)
+                except (TypeError, ValueError):
+                    pass
+        return sr, bd
+    ns = {"mpd": "urn:mpeg:dash:schema:mpd:2011"}
+    repr_el = decoded.find(".//mpd:Representation", ns)
+    if repr_el is not None and not sr:
+        rate = repr_el.get("audioSamplingRate")
+        if rate:
+            try:
+                sr = int(rate)
+            except (TypeError, ValueError):
+                pass
+    return sr, bd
+
+
+def manifest_inspect(manifest: PlaybackManifest) -> dict:
+    """Decode manifest — mime, codecs, segment count (DASH FLAC often comes in chunks)."""
+    decoded = _decode_manifest(manifest)
+    if isinstance(decoded, dict):
+        return {
+            "kind": "bts",
+            "mime": decoded.get("mimeType") or manifest.manifest_mime_type,
+            "codecs": decoded.get("codecs", "") or "",
+            "segments": len(decoded.get("urls") or []),
+            "extension": extension_for(
+                decoded.get("codecs", "") or "",
+                decoded.get("mimeType", "") or "",
+            ),
+        }
+    urls, codecs = _stream_urls_from_dash(decoded)
+    return {
+        "kind": "dash",
+        "mime": manifest.manifest_mime_type,
+        "codecs": codecs or "",
+        "segments": len(urls),
+        "extension": extension_for(codecs or "", ""),
+    }
+
+
 def extension_for(codecs: str, mime: str) -> str:
     c = codecs.lower()
     if "flac" in c:
@@ -120,6 +183,9 @@ def download_track(
     # Download into a temp .mp4 first, then remux
     tmp_dest = dest_no_ext.with_suffix(".tmp.mp4")
     _stream_to_file(client, urls, tmp_dest, on_progress)
+    if on_progress:
+        seg_size = tmp_dest.stat().st_size
+        on_progress(seg_size, seg_size)
     dest = dest_no_ext.with_suffix(ext)
     dest = _remux(tmp_dest, dest)
     return dest
@@ -184,21 +250,46 @@ def _stream_to_file(
     n_media = max(1, len(urls) - 1)
     media_written = 0
     media_done = 0
+    chunk_size = 256 * 1024
+
+    def _download_segment(url: str) -> bytes:
+        parts: list[bytes] = []
+        with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            for chunk in resp.iter_bytes(chunk_size=chunk_size):
+                parts.append(chunk)
+        return b"".join(parts)
+
     with dest.open("wb") as f:
-        for i, url in enumerate(urls):
-            seg_start = written
-            with client.stream("GET", url) as resp:
-                resp.raise_for_status()
-                for chunk in resp.iter_bytes(chunk_size=64 * 1024):
-                    f.write(chunk)
-                    written += len(chunk)
-                    if on_progress:
-                        on_progress(written, total_bytes)
-            if i > 0:
+        init_blob = _download_segment(urls[0])
+        f.write(init_blob)
+        written += len(init_blob)
+        if on_progress:
+            on_progress(written, total_bytes)
+
+        if len(urls) > 1:
+            seg_blobs: list[bytes | None] = [None] * (len(urls) - 1)
+            with ThreadPoolExecutor(max_workers=min(8, len(urls) - 1)) as pool:
+                future_map = {
+                    pool.submit(_download_segment, url): idx
+                    for idx, url in enumerate(urls[1:])
+                }
+                for fut in as_completed(future_map):
+                    idx = future_map[fut]
+                    seg_blobs[idx] = fut.result()
+
+            for i, blob in enumerate(seg_blobs):
+                if blob is None:
+                    continue
+                seg_start = written
+                f.write(blob)
+                written += len(blob)
+                if on_progress:
+                    on_progress(written, total_bytes)
                 media_written += written - seg_start
                 media_done += 1
                 if media_done >= n_media:
-                    total_bytes = written  # all media segments done — exact size
+                    total_bytes = written
                 else:
                     init_bytes = written - media_written
                     total_bytes = init_bytes + round(media_written / media_done * n_media)

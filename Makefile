@@ -1,4 +1,14 @@
-.PHONY: test lint e2e e2e-api build up down deploy
+.PHONY: test lint e2e e2e-api build up down deploy hooks migrate migrate-stamp
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Installed .githooks/pre-commit (runs ruff + eslint before each commit)."
+
+migrate:
+	uv run alembic upgrade head
+
+migrate-stamp:
+	uv run alembic stamp head
 
 test:
 	uv run pytest tests/ -q -k "not remote_flow_live"

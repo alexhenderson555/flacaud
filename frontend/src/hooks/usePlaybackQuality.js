@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { getCachedAudioUrl } from '../utils/cache';
+import { getCachedAudioUrl, prefetchAudioToCache } from '../utils/cache';
 import { getMediaToken } from '../utils/mediaToken';
 import {
   ALL_UI_QUALITIES,
@@ -168,6 +168,10 @@ export function usePlaybackQuality({
         const bypass = isDownloaded ? 'false' : 'true';
         const mt = await getMediaToken();
         url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${mt}`;
+        void prefetchAudioToCache(
+          { ...currentTrack, provider: currentTrack.provider || 'tidal' },
+          playbackQuality,
+        );
       }
       setCurrentAudioSrc(url);
     };
@@ -248,6 +252,10 @@ export function usePlaybackQuality({
     if (!url) {
       const bypass = downloadedTracksRef.current.has(String(nextTrack.provider_id)) ? 'false' : 'true';
       url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${await getMediaToken()}`;
+      void prefetchAudioToCache(
+        { ...nextTrack, provider: nextTrack.provider || 'tidal' },
+        playbackQuality,
+      );
     }
     setPreloadAudioSrc(url);
   }, [playbackQuality, qualitiesReady, downloadedTracksRef]);

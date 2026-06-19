@@ -1,14 +1,14 @@
 {
-  "short_name": "FlacAudio",
-  "name": "FlacAudio DJ Player",
+  "short_name": "FlacAud",
+  "name": "FlacAud",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/flacaud_logo.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/logo.png",
+      "src": "/flacaud_logo.png",
       "type": "image/png",
       "sizes": "512x512"
     }

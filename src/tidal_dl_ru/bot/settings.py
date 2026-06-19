@@ -5,7 +5,7 @@ import os
 
 def _default_public_api_base() -> str:
     """Public URL for user-facing download links (ZIP); not the internal Docker hostname."""
-    return os.environ.get("TIDALDLRU_PUBLIC_API_BASE", "https://proshli.ru").rstrip("/")
+    return os.environ.get("TIDALDLRU_PUBLIC_API_BASE", "https://flacaud.ru").rstrip("/")
 
 
 class BotSettings:

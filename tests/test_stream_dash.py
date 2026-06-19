@@ -67,9 +67,10 @@ async def _fake_to_thread(fn, *args, **kwargs):
     }
 
 
-async def _fake_ensure(urls, tmp_path, final_path, min_bytes=65536):
+async def _fake_ensure(urls, tmp_path, fmp4_path, final_path, bytes_required=0):
     final_path.parent.mkdir(parents=True, exist_ok=True)
-    final_path.write_bytes(b"\x00" * max(min_bytes, 65536))
+    size = max(bytes_required, 65536) if bytes_required else 65536
+    final_path.write_bytes(b"\x00" * size)
     return final_path
 
 

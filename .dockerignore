@@ -1,0 +1,19 @@
+# Smaller/faster Docker builds — context is mostly pyproject + src + frontend/dist
+.git
+.github
+.cursor
+frontend/node_modules
+frontend/src
+frontend/e2e
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+.venv
+*.md
+tests
+reference-vault
+taxi
+personal-site
+# scripts/ must stay in context — Dockerfile.api COPY scripts (migrations, smoke, etc.)
+*.tar.gz
+app.tar.gz

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FlacAud">
+  <defs>
+    <linearGradient id="fa-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+    <linearGradient id="fa-accent" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f83600"/>
+      <stop offset="100%" stop-color="#f9d423"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComponentTransfer in="blur" result="glow1">
+        <feFuncA type="linear" slope="0.8"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode in="glow1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <rect width="512" height="512" rx="128" fill="#040406"/>
+  <rect width="512" height="512" rx="128" fill="url(#fa-grad)" opacity="0.05"/>
+  
+  <g transform="translate(146, 130)" filter="url(#glow)">
+    <!-- Main stem of F -->
+    <rect x="0" y="0" width="48" height="252" rx="24" fill="url(#fa-grad)"/>
+    <!-- Top bar of F -->
+    <rect x="72" y="0" width="148" height="48" rx="24" fill="url(#fa-grad)"/>
+    <!-- Middle bar of F -->
+    <rect x="72" y="84" width="96" height="48" rx="24" fill="url(#fa-accent)"/>
+    
+    <!-- Decorative equalizer bars representing DJ / audio -->
+    <rect x="72" y="168" width="48" height="48" rx="24" fill="url(#fa-grad)" opacity="0.6"/>
+    <rect x="144" y="168" width="48" height="84" rx="24" fill="url(#fa-grad)" opacity="0.9"/>
+  </g>
+</svg>

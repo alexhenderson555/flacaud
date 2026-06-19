@@ -11,6 +11,7 @@ services:
       retries: 3
 
   api:
+    image: ${FLACAUD_API_IMAGE:-flacaud/flacaud-api}:${FLACAUD_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -19,20 +20,36 @@ services:
       - "${API_PORT:-8001}:8000"
     environment:
       TIDALDLRU_ENV: production
-      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-INFO}
+      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-DEBUG}
       TIDALDLRU_LOG_FORMAT: ${TIDALDLRU_LOG_FORMAT:-json}
       REDIS_URL: redis://redis:6379/0
       TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_JWT_SECRET: ${TIDALDLRU_JWT_SECRET:?Set TIDALDLRU_JWT_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
       TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
+      TIDALDLRU_STREAM_CACHE_DIR: /var/lib/tidal-dl-ru/stream-cache
       TIDALDLRU_DB_PATH: /var/lib/tidal-dl-ru/db/flacaudio.db
       DATABASE_URL: ${DATABASE_URL:-}
       TIDALDLRU_PKCE_CLIENT_ID: ${TIDALDLRU_PKCE_CLIENT_ID:-}
       TIDALDLRU_PKCE_CLIENT_SECRET: ${TIDALDLRU_PKCE_CLIENT_SECRET:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TIDALDLRU_PUBLIC_API_BASE: ${TIDALDLRU_PUBLIC_API_BASE:-https://flacaud.ru}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      TIDALDLRU_EMAIL_FROM: ${TIDALDLRU_EMAIL_FROM:-FlacAud <noreply@flacaud.ru>}
+      TIDALDLRU_OPS_API_KEY: ${TIDALDLRU_OPS_API_KEY:-}
+      TIDALDLRU_FORWARDED_ALLOW_IPS: ${TIDALDLRU_FORWARDED_ALLOW_IPS:-172.16.0.0/12,127.0.0.1,10.0.0.0/8}
+      TIDALDLRU_STREAM_CACHE_MAX_BYTES: ${TIDALDLRU_STREAM_CACHE_MAX_BYTES:-8589934592}
+      TIDALDLRU_SMTP_HOST: ${TIDALDLRU_SMTP_HOST:-}
+      TIDALDLRU_SMTP_PORT: ${TIDALDLRU_SMTP_PORT:-587}
+      TIDALDLRU_SMTP_USER: ${TIDALDLRU_SMTP_USER:-}
+      TIDALDLRU_SMTP_PASSWORD: ${TIDALDLRU_SMTP_PASSWORD:-}
+      TIDALDLRU_SMTP_FROM: ${TIDALDLRU_SMTP_FROM:-}
+      TIDALDLRU_SMTP_TLS: ${TIDALDLRU_SMTP_TLS:-true}
+      SPOTIPY_CLIENT_ID: ${SPOTIPY_CLIENT_ID:-}
+      SPOTIPY_CLIENT_SECRET: ${SPOTIPY_CLIENT_SECRET:-}
     volumes:
       - jobs-data:/var/lib/tidal-dl-ru/jobs
+      - stream-cache:/var/lib/tidal-dl-ru/stream-cache
       - db-data:/var/lib/tidal-dl-ru/db
       - pool-data:/root/.config/tidal-dl-ru
     depends_on:
@@ -46,19 +63,21 @@ services:
       start_period: 40s
 
   worker:
+    image: ${FLACAUD_WORKER_IMAGE:-flacaud/flacaud-worker}:${FLACAUD_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.worker
     restart: unless-stopped
     environment:
       TIDALDLRU_ENV: production
-      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-INFO}
+      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-DEBUG}
       TIDALDLRU_LOG_FORMAT: ${TIDALDLRU_LOG_FORMAT:-json}
       REDIS_URL: redis://redis:6379/0
       TIDALDLRU_SIGNING_SECRET: ${TIDALDLRU_SIGNING_SECRET:?Set TIDALDLRU_SIGNING_SECRET in .env}
       TIDALDLRU_POOL_KEY: ${TIDALDLRU_POOL_KEY:-}
       TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
       TIDALDLRU_ARQ_MAX_JOBS: ${TIDALDLRU_ARQ_MAX_JOBS:-2}
+      TIDALDLRU_STREAM_CACHE_MAX_BYTES: ${TIDALDLRU_STREAM_CACHE_MAX_BYTES:-8589934592}
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
       OPENBLAS_NUM_THREADS: "2"
@@ -66,6 +85,8 @@ services:
       TIDALDLRU_PKCE_CLIENT_SECRET: ${TIDALDLRU_PKCE_CLIENT_SECRET:-}
       TIDALDLRU_AUDD_TOKEN: ${TIDALDLRU_AUDD_TOKEN:-}
       TIDALDLRU_DEEPL_KEY: ${TIDALDLRU_DEEPL_KEY:-}
+      SPOTIPY_CLIENT_ID: ${SPOTIPY_CLIENT_ID:-}
+      SPOTIPY_CLIENT_SECRET: ${SPOTIPY_CLIENT_SECRET:-}
     volumes:
       - jobs-data:/var/lib/tidal-dl-ru/jobs
       - pool-data:/root/.config/tidal-dl-ru
@@ -74,6 +95,7 @@ services:
         condition: service_healthy
 
   bot:
+    image: ${FLACAUD_BOT_IMAGE:-flacaud/flacaud-bot}:${FLACAUD_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -83,8 +105,8 @@ services:
       TIDALDLRU_ENV: production
       TIDALDLRU_BOT_TOKEN: ${TIDALDLRU_BOT_TOKEN:?Set TIDALDLRU_BOT_TOKEN}
       TIDALDLRU_API_BASE: http://api:8000
-      TIDALDLRU_PUBLIC_API_BASE: ${TIDALDLRU_PUBLIC_API_BASE:-https://proshli.ru}
-      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-INFO}
+      TIDALDLRU_PUBLIC_API_BASE: ${TIDALDLRU_PUBLIC_API_BASE:-https://flacaud.ru}
+      TIDALDLRU_LOG_LEVEL: ${TIDALDLRU_LOG_LEVEL:-DEBUG}
       TIDALDLRU_LOG_FORMAT: ${TIDALDLRU_LOG_FORMAT:-json}
     depends_on:
       api:
@@ -93,5 +115,6 @@ services:
 volumes:
   redis-data:
   jobs-data:
+  stream-cache:
   db-data:
   pool-data:

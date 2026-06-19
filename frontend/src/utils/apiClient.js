@@ -2,6 +2,8 @@
  * Fetch wrapper: timeout, clearer errors, optional auth header.
  */
 
+import { getAccessToken } from './tokenStorage';
+
 const DEFAULT_TIMEOUT_MS = 25000;
 
 export class ApiError extends Error {
@@ -27,7 +29,7 @@ async function apiFetchOnce(path, options) {
 
   const headers = new Headers(extraHeaders);
   if (auth) {
-    const token = localStorage.getItem('tidal-token');
+    const token = getAccessToken();
     if (token) headers.set('Authorization', `Bearer ${token}`);
   }
 
@@ -77,8 +79,29 @@ export async function parseJsonSafe(res) {
   }
 }
 
+export function codeFromBody(body) {
+  if (!body || typeof body !== 'object') return undefined;
+  const detail = body.detail;
+  if (detail && typeof detail === 'object' && detail.code) return detail.code;
+  if (typeof body.code === 'string') return body.code;
+  return undefined;
+}
+
+export function detailFromBody(body) {
+  if (!body || typeof body !== 'object') return undefined;
+  const detail = body.detail;
+  if (detail && typeof detail === 'object' && detail.message) return detail.message;
+  if (typeof detail === 'string') return detail;
+  return undefined;
+}
+
 export function messageForApiError(err, lang = 'en') {
   if (!(err instanceof ApiError)) return lang === 'ru' ? 'Ошибка сети' : 'Network error';
+  if (err.code === 'stream_failed') {
+    return lang === 'ru'
+      ? 'Не удалось запустить воспроизведение — попробуйте другой трек или качество'
+      : 'Could not start playback — try another track or quality';
+  }
   if (err.code === 'timeout') {
     return lang === 'ru' ? 'Таймаут — сервер не ответил, попробуйте снова' : err.message;
   }
@@ -88,4 +111,45 @@ export function messageForApiError(err, lang = 'en') {
       : err.message;
   }
   return err.message;
+}
+
+export async function apiGetJson(path, options = {}) {
+  const res = await apiFetch(path, { ...options, method: 'GET' });
+  return parseJsonSafe(res);
+}
+export async function apiPostJson(path, body, options = {}) {
+  const res = await apiFetch(path, {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    body: JSON.stringify(body),
+  });
+  return parseJsonSafe(res);
+}
+export async function apiPutJson(path, body, options = {}) {
+  const res = await apiFetch(path, {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    body: JSON.stringify(body),
+  });
+  return parseJsonSafe(res);
+}
+export async function apiDeleteJson(path, options = {}) {
+  const res = await apiFetch(path, { ...options, method: 'DELETE' });
+  return parseJsonSafe(res);
+}
+
+export async function apiPatchJson(path, body, options = {}) {
+  const res = await apiFetch(path, {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    body: JSON.stringify(body),
+  });
+  return parseJsonSafe(res);
+}
+
+export async function apiDelete(path, options = {}) {
+  return apiFetch(path, { ...options, method: 'DELETE' });
 }

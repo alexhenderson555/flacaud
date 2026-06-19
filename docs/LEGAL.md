@@ -1,6 +1,6 @@
 # Terms of Use (summary)
 
-By using tidal-dl-ru you confirm that:
+By using FlacAud you confirm that:
 
 1. You hold a valid subscription to any streaming service you download from.
 2. You use downloads for personal backup only, not redistribution.
@@ -11,7 +11,7 @@ See [DISCLAIMER.md](../DISCLAIMER.md) for the full disclaimer.
 ## Privacy
 
 - We store account credentials (hashed passwords), download quotas, and library metadata in the user database.
-- JWT session tokens expire after 7 days.
+- JWT access tokens expire after about 1 hour; refresh sessions use httpOnly cookies (up to 30 days).
 - Media URLs use short-lived signed tokens (`mt=`), not long-lived JWTs in query strings.
 - Payment data is processed by YooKassa; we do not store card numbers.
 

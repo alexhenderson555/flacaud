@@ -32,7 +32,15 @@ jobs:
             git fetch origin
             git reset --hard origin/${{ github.ref_name }}
             cd frontend && npm ci && npm run build && cd ..
-            docker compose build api worker bot
-            docker compose up -d --remove-orphans
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+            if grep -q '^TIDAL_USE_POSTGRES=1' .env 2>/dev/null || grep -q '^DATABASE_URL=postgresql' .env 2>/dev/null; then
+              COMPOSE="$COMPOSE -f docker-compose.postgres.yml"
+            fi
+            $COMPOSE build api worker bot
+            $COMPOSE up -d --remove-orphans
+            $COMPOSE up -d caddy
+            $COMPOSE restart caddy api bot
             sleep 15
-            curl -sf http://127.0.0.1:8001/healthz | grep -q '"ok": true\|"ok":true'
+            DOMAIN="${DOMAIN:-flacaud.ru}"
+            curl -sf "https://${DOMAIN}/healthz" | grep -q '"ok": true\|"ok":true' || \
+              curl -sf http://127.0.0.1:8001/healthz | grep -q '"ok": true\|"ok":true'

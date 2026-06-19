@@ -1,73 +1,98 @@
 import { Link, NavLink } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ListMusic, User, Waves, Repeat, Radio, Flame, Disc, Heart, Menu, X,
+  Search, ListMusic, User, Repeat, Radio, Flame, Disc, Menu, X, Heart,
 } from 'lucide-react';
+import { BRAND_LOGO_SRC, BRAND_NAME } from '../../brand';
+
+function navClass(isActive, extra = '') {
+  return ({ isActive }) => (isActive ? `nav-item active ${extra}`.trim() : `nav-item ${extra}`.trim());
+}
+
+const MOBILE_MORE_LINKS = [
+  { to: '/recommendations', icon: Flame, labelKey: 'recommendations' },
+  { to: '/playlists', icon: ListMusic, labelKey: 'playlists' },
+  { to: '/sync', icon: Repeat, labelKey: 'transfer' },
+  { to: '/analyzer', icon: ListMusic, labelKey: 'setAnalyzer' },
+  { to: '/set-library', icon: Disc, labelKey: 'setLibrary' },
+  { to: '/splitter', icon: Disc, labelKey: 'stemSplitter' },
+];
 
 export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen }) {
+  const closeMenu = () => setIsMobileMenuOpen(false);
+
   return (
     <>
       <nav className="sidebar">
         <Link to="/search" className="brand" style={{ textDecoration: 'none' }}>
           <img
-            src="/logo.png"
-            alt="FlacAudio"
-            style={{ width: '32px', height: '32px', borderRadius: '8px' }}
-            onError={(e) => {
-              e.target.style.display = 'none';
-              if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
-            }}
+            src={BRAND_LOGO_SRC}
+            alt={`${BRAND_NAME} logo`}
+            className="brand-logo"
           />
-          <Waves size={28} color="var(--accent-solid)" style={{ display: 'none' }} />
-          <h1><span className="text-gradient">Flac</span>Audio</h1>
+          <h1 className="text-gradient">{BRAND_NAME}</h1>
         </Link>
 
         <div className="nav-links">
-          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '16px' }}>Discover</div>
-          <NavLink to="/search" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+          <div className="sidebar-section-label hide-on-mobile">Discover</div>
+          <NavLink to="/search" className={navClass()}>
             <Search size={20} />
             <span>{t('search')}</span>
           </NavLink>
-          <NavLink to="/recommendations" className={({ isActive }) => (isActive ? 'nav-item active hide-on-mobile' : 'nav-item hide-on-mobile')}>
+          <NavLink to="/recommendations" className={navClass('', 'hide-on-mobile')}>
             <Flame size={20} />
             <span>{t('recommendations')}</span>
           </NavLink>
-          <NavLink to="/radio" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+          <NavLink to="/genreverse" className={navClass()}>
             <Radio size={20} />
             <span>{t('radio')}</span>
           </NavLink>
 
-          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '24px' }}>{t('myMusic')}</div>
-          <NavLink to="/library" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+          <div className="sidebar-section-label hide-on-mobile">{t('myMusic')}</div>
+          <NavLink to="/library" className={navClass()}>
             <Heart size={20} />
             <span>{t('library')}</span>
           </NavLink>
-          <NavLink to="/playlists" className={({ isActive }) => (isActive ? 'nav-item active hide-on-mobile' : 'nav-item hide-on-mobile')}>
+          <NavLink to="/playlists" className={navClass('', 'hide-on-mobile')}>
             <ListMusic size={20} />
             <span>{t('playlists')}</span>
           </NavLink>
-          <NavLink to="/sync" className={({ isActive }) => (isActive ? 'nav-item active nav-item-sync hide-on-mobile' : 'nav-item hide-on-mobile')}>
+          <NavLink to="/sync" className={navClass('', 'hide-on-mobile nav-item-sync')}>
             <Repeat size={20} />
             <span>{t('transfer')}</span>
           </NavLink>
 
-          <div className="hide-on-mobile" style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: '24px' }}>{t('proTools')}</div>
-          <NavLink to="/analyzer" className={({ isActive }) => (isActive ? 'nav-item active hide-on-mobile' : 'nav-item hide-on-mobile')}>
+          <div className="sidebar-section-label hide-on-mobile">{t('proTools')}</div>
+          <NavLink to="/analyzer" className={navClass('', 'hide-on-mobile')}>
             <ListMusic size={20} />
             <span>{t('setAnalyzer')}</span>
           </NavLink>
-          <NavLink to="/splitter" className={({ isActive }) => (isActive ? 'nav-item active hide-on-mobile' : 'nav-item hide-on-mobile')}>
+          <NavLink to="/set-library" className={navClass('', 'hide-on-mobile')}>
+            <Disc size={20} />
+            <span>{t('setLibrary')}</span>
+          </NavLink>
+          <NavLink to="/splitter" className={navClass('', 'hide-on-mobile')}>
             <Disc size={20} />
             <span>{t('stemSplitter')}</span>
           </NavLink>
-          <NavLink to="/account" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+
+          <NavLink to="/account" className={navClass('', 'nav-item-account mobile-only')}>
             <User size={20} />
             <span>{t('account')}</span>
           </NavLink>
+
           <div className="nav-item mobile-only" onClick={() => setIsMobileMenuOpen(true)}>
             <Menu size={20} />
             <span>{t('more')}</span>
           </div>
+        </div>
+
+        <div className="sidebar-footer hide-on-mobile">
+          <div className="sidebar-section-label">{t('account')}</div>
+          <NavLink to="/account" className={navClass('', 'nav-item-account')}>
+            <User size={20} />
+            <span>{t('account')}</span>
+          </NavLink>
         </div>
       </nav>
 
@@ -75,45 +100,30 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
         {isMobileMenuOpen && (
           <motion.div
             className="mobile-menu-overlay mobile-only"
-            initial={{ opacity: 0, y: 50 }}
+            initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            onClick={() => setIsMobileMenuOpen(false)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(10, 10, 16, 0.95)',
-              backdropFilter: 'blur(20px)',
-              zIndex: 100,
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '40px 24px',
-            }}
+            exit={{ opacity: 0, y: 40 }}
+            onClick={closeMenu}
           >
-            <div style={{ alignSelf: 'flex-end', marginBottom: '30px' }}>
-              <button type="button" onClick={() => setIsMobileMenuOpen(false)} style={{ color: '#fff', background: 'rgba(255,255,255,0.1)', padding: '12px', borderRadius: '50%' }}>
-                <X size={24} />
+            <div className="mobile-menu-overlay__header" onClick={(e) => e.stopPropagation()}>
+              <h2 className="mobile-menu-overlay__title">{t('moreOptions')}</h2>
+              <button type="button" className="mobile-menu-overlay__close" onClick={closeMenu} aria-label="Close">
+                <X size={22} />
               </button>
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '30px', color: 'var(--text-primary)' }}>{t('moreOptions')}</div>
-            <div className="mobile-menu-content" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <NavLink to="/sync" className="nav-item" onClick={() => setIsMobileMenuOpen(false)} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '16px', flexDirection: 'row', justifyContent: 'flex-start' }}>
-                <Repeat size={24} />
-                <span style={{ fontSize: '1.1rem', marginLeft: '16px', fontWeight: 500 }}>{t('transfer')}</span>
-              </NavLink>
-              <NavLink to="/playlists" className="nav-item" onClick={() => setIsMobileMenuOpen(false)} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '16px', flexDirection: 'row', justifyContent: 'flex-start' }}>
-                <ListMusic size={24} />
-                <span style={{ fontSize: '1.1rem', marginLeft: '16px', fontWeight: 500 }}>{t('playlists')}</span>
-              </NavLink>
-              <NavLink to="/recommendations" className="nav-item" onClick={() => setIsMobileMenuOpen(false)} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '16px', flexDirection: 'row', justifyContent: 'flex-start' }}>
-                <Flame size={24} />
-                <span style={{ fontSize: '1.1rem', marginLeft: '16px', fontWeight: 500 }}>{t('recommendations')}</span>
-              </NavLink>
-              <NavLink to="/splitter" className="nav-item" onClick={() => setIsMobileMenuOpen(false)} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '16px', flexDirection: 'row', justifyContent: 'flex-start' }}>
-                <Disc size={24} />
-                <span style={{ fontSize: '1.1rem', marginLeft: '16px', fontWeight: 500 }}>{t('stemSplitter')}</span>
-              </NavLink>
-            </div>
+            <nav className="mobile-menu-grid" onClick={(e) => e.stopPropagation()} aria-label={t('moreOptions')}>
+              {MOBILE_MORE_LINKS.map(({ to, icon: Icon, labelKey }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) => `mobile-menu-grid__item${isActive ? ' active' : ''}`}
+                  onClick={closeMenu}
+                >
+                  <Icon size={22} color="var(--accent-solid)" />
+                  <span>{t(labelKey)}</span>
+                </NavLink>
+              ))}
+            </nav>
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,0 +1,36 @@
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.spin {
+  animation: spin 2s linear infinite;
+}
+
+.spinner {
+  animation: spin 1.2s linear infinite;
+}
+
+.radio-hero-icon {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+}

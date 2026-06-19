@@ -10,6 +10,7 @@ Core dependency: numpy. Optional: aubio (pip install tidal-dl-ru[dj]).
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -17,6 +18,8 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 try:
     import aubio as _aubio  # type: ignore[import-untyped]
@@ -411,7 +414,7 @@ def export_rekordbox_xml(
       - duration_s: int (optional)
     """
     root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
-    product = ET.SubElement(root, "PRODUCT", Name="tidal-dl-ru", Version="0.1.0")
+    product = ET.SubElement(root, "PRODUCT", Name="FlacAud", Version="0.1.0")
     collection = ET.SubElement(root, "COLLECTION", Entries=str(len(tracks)))
 
     for i, t in enumerate(tracks, 1):
@@ -467,6 +470,6 @@ def read_bpm_key(path: Path):
             if "TKEY" in audio:
                 key = audio["TKEY"].text[0]
     except Exception as e:
-        print(f"Error reading tags: {e}")
+        logger.debug("Error reading tags from %s: %s", path, e)
     return bpm, key
 

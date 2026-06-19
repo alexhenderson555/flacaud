@@ -15,6 +15,7 @@ export default defineConfig({
   },
   use: {
     baseURL,
+    hasTouch: false,
     trace: 'on-first-retry',
     // The PWA service worker uses a NetworkOnly handler for /api/*, and
     // service-worker-initiated requests bypass page.route() mocks (Playwright

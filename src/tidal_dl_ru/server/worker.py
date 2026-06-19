@@ -20,6 +20,7 @@ configure_logging("worker")
 log = logging.getLogger(__name__)
 
 import httpx
+from arq import cron
 from arq.connections import RedisSettings
 
 from tidal_dl_ru.core.lyrics import fetch_synced_lrc, write_sidecar
@@ -27,6 +28,9 @@ from tidal_dl_ru.core.models import Quality, Track
 from tidal_dl_ru.core.router import find_provider
 from tidal_dl_ru.providers.base import ProviderError
 from tidal_dl_ru.server import jobs as job_state
+from tidal_dl_ru.server.disk_cleanup import disk_cleanup_task
+from tidal_dl_ru.server.subscription_lifecycle import expire_due_subscriptions
+from tidal_dl_ru.server.subscription_notify import notify_expiring_subscriptions
 from tidal_dl_ru.server.files import sign_file
 from tidal_dl_ru.server.settings import settings
 from tidal_dl_ru.tagging import tag_file
@@ -82,6 +86,8 @@ def _download_sync(
     base = album_dir / _filename(track)
 
     def cb(written: int, total: Optional[int]) -> None:
+        if job_state.is_cancelled(job_id):
+            raise RuntimeError("Job cancelled by user or timeout.")
         job_state.update_track(
             job_id, idx, status="downloading", bytes_written=written, bytes_total=total
         )
@@ -97,14 +103,14 @@ def _download_sync(
         )
         return None
 
-    # Tag + lyrics (best-effort)
+    # Tags + cover always; synced lyrics/LRC sidecar only when lyrics=True (slow).
+    job_state.update_track(job_id, idx, status="tagging")
     http = httpx.Client(timeout=60.0, follow_redirects=True)
     try:
         lrc = fetch_synced_lrc(track) if lyrics else None
         tag_file(path, track, http, lyrics=lrc)
         if lrc:
             write_sidecar(lrc, path)
-        # Karaoke: translate LRC to Russian.
         if karaoke and lrc:
             import asyncio as _asyncio
 
@@ -113,7 +119,6 @@ def _download_sync(
                 _asyncio.run(translate_lrc_to_file(lrc, path))
             except Exception:
                 pass
-        # DJ analysis: BPM + key detection.
         if dj_analyze:
             from tidal_dl_ru.core.dj import analyze_and_tag
             try:
@@ -133,7 +138,19 @@ def _download_sync(
         bytes_total=path.stat().st_size,
         file_token=token,
     )
-    job_state.mark_downloaded(track.provider_id, rel_path)
+    requested = quality.value if hasattr(quality, "value") else str(quality)
+    delivered = job_state.infer_delivered_ui_quality(path, requested)
+    job_state.set_job_quality(job_id, delivered)
+    job_status = job_state.load(job_id)
+    job_state.mark_downloaded(
+        track.provider_id,
+        rel_path,
+        title=track.title,
+        artist=track.artists[0] if track.artists else None,
+        quality=delivered,
+        job_id=job_id,
+        owner_id=job_status.owner_id if job_status else None,
+    )
     return path
 
 
@@ -158,7 +175,9 @@ async def download_url(
         extra={"event": "job_start", "job_id": job_id},
     )
     try:
-        provider = find_provider(url)
+        from tidal_dl_ru.core.transfer_router import find_transfer_provider
+
+        provider = find_transfer_provider(url)
         if provider is None:
             job_state.mark_failed(job_id, "No provider matches this URL.")
             return {"ok": False, "error": "no provider"}
@@ -256,13 +275,52 @@ async def download_url(
 async def analyze_set(ctx: dict, job_id: str, url: str) -> dict:
     log.info("analyze_set_start job_id=%s", job_id, extra={"event": "analyze_set_start", "job_id": job_id})
     from tidal_dl_ru.core.set_analyzer import analyze_set_task
-    return await analyze_set_task(job_id, url)
+
+    try:
+        return await analyze_set_task(job_id, url)
+    except Exception as e:
+        status = job_state.load(job_id)
+        if status and status.set_tracks:
+            n = len(status.set_tracks)
+            job_state.update_analysis(
+                job_id,
+                phase="done",
+                percent=100,
+                label=f"Partial result ({n} tracks): {e}",
+                tracks_found=n,
+            )
+            job_state.mark_done(job_id)
+            log.warning(
+                "analyze_set_partial job_id=%s tracks=%s error=%s",
+                job_id,
+                n,
+                e,
+                extra={"event": "analyze_set_partial", "job_id": job_id},
+            )
+            return {"ok": True, "count": n, "partial": True}
+        job_state.mark_failed(job_id, f"{type(e).__name__}: {e}")
+        raise
+
+
+async def subscription_expiry_notify(ctx) -> dict:
+    count = await asyncio.to_thread(notify_expiring_subscriptions)
+    return {"sent": count}
+
+
+async def subscription_expire_due(ctx) -> dict:
+    count = await asyncio.to_thread(expire_due_subscriptions)
+    return {"expired": count}
 
 
 class WorkerSettings:
     """Run with: `arq tidal_dl_ru.server.worker.WorkerSettings`"""
 
-    functions = [download_url, analyze_set]
+    functions = [download_url, analyze_set, subscription_expiry_notify, subscription_expire_due]
+    cron_jobs = [
+        cron(disk_cleanup_task, hour={3, 15}, minute=0),
+        cron(subscription_expiry_notify, hour={10}, minute=0),
+        cron(subscription_expire_due, hour={4}, minute=30),
+    ]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     max_jobs = settings.arq_max_jobs
     job_timeout = 60 * 60  # 1 hour for big albums

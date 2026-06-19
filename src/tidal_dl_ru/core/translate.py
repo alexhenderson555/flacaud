@@ -101,11 +101,15 @@ async def translate_texts(
             if source_lang:
                 data["source_lang"] = source_lang
 
-            resp = await client.post(
-                f"{DEEPL_API}/translate",
-                json=data,
-                headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"},
-            )
+            try:
+                resp = await client.post(
+                    f"{DEEPL_API}/translate",
+                    json=data,
+                    headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"},
+                )
+            except httpx.RequestError as exc:
+                raise TranslationError(f"DeepL API network error: {exc}") from exc
+
             if resp.status_code != 200:
                 raise TranslationError(
                     f"DeepL API error {resp.status_code}: {resp.text[:200]}"

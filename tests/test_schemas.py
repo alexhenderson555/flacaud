@@ -2,6 +2,7 @@
 
 from tidal_dl_ru.core.models import Quality
 from tidal_dl_ru.server.schemas import (
+    AnalysisProgress,
     JobCreate,
     JobStatus,
     PoolHealth,
@@ -16,7 +17,7 @@ class TestJobCreate:
     def test_defaults(self):
         j = JobCreate(url="https://tidal.com/browse/track/123")
         assert j.quality == Quality.LOSSLESS
-        assert j.lyrics is True
+        assert j.lyrics is False
         assert j.karaoke is False
         assert j.dj_analyze is False
 
@@ -52,6 +53,21 @@ class TestTrackProgress:
         assert tp.bytes_total is None
         assert tp.file_token is None
         assert tp.error is None
+
+
+class TestAnalysisProgress:
+    def test_fields(self):
+        ap = AnalysisProgress(
+            phase="scan",
+            percent=40,
+            segments_done=5,
+            segments_total=100,
+            tracks_found=2,
+            label="Analyzing… 40%",
+        )
+        assert ap.phase == "scan"
+        assert ap.percent == 40
+        assert ap.segments_total == 100
 
 
 class TestJobStatus:

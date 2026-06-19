@@ -3,18 +3,26 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Music, Heart, User, Download, Radio, Sparkles,
-  ListMusic, Mic2, Sliders, Disc, ListOrdered, Play, Pause, Wand2, Scissors,
+  ListMusic, Mic2, Sliders, Disc, ListOrdered, Play, Pause, Wand2, Scissors, History,
+  Shuffle, Repeat, Repeat1, FileText, Shield,
 } from 'lucide-react';
+import { REPEAT_ALL, REPEAT_ONE } from '../utils/playbackModes';
+import { readRecentlyPlayed } from '../utils/recentlyPlayed';
+import { PLAYER_HOTKEYS, withHotkey } from '../utils/playerHotkeys';
 
 const NAV = [
   { id: 'nav-search', title: 'Search & Shazam', keywords: 'find music', icon: Search, path: '/search' },
   { id: 'nav-library', title: 'My Library', keywords: 'liked saved', icon: Heart, path: '/library' },
   { id: 'nav-recs', title: 'Recommendations', keywords: 'discover for you', icon: Sparkles, path: '/recommendations' },
-  { id: 'nav-radio', title: 'Track Radio', keywords: 'similar stations', icon: Radio, path: '/radio' },
+  { id: 'nav-genreverse', title: 'Genreverse', keywords: 'genre radio vibes stations', icon: Radio, path: '/genreverse' },
+  { id: 'nav-radio', title: 'Track Radio', keywords: 'similar track station', icon: Radio, path: '/search' },
   { id: 'nav-analyzer', title: 'Set Analyzer', keywords: 'dj mix youtube', icon: Wand2, path: '/analyzer' },
+  { id: 'nav-sets', title: 'Set Library', keywords: 'dj sets mix library saved', icon: ListMusic, path: '/sets' },
   { id: 'nav-stems', title: 'Stem Splitter', keywords: 'vocals isolate', icon: Scissors, path: '/splitter' },
   { id: 'nav-sync', title: 'Transfer Music', keywords: 'import playlist', icon: Download, path: '/sync' },
   { id: 'nav-account', title: 'Account Settings', keywords: 'profile quality theme', icon: User, path: '/account' },
+  { id: 'nav-terms', title: 'Terms of Use', keywords: 'legal terms conditions', icon: FileText, path: '/terms' },
+  { id: 'nav-privacy', title: 'Privacy Policy', keywords: 'legal privacy data gdpr', icon: Shield, path: '/privacy' },
 ];
 
 function buildCommands({
@@ -29,6 +37,10 @@ function buildCommands({
   currentTrack,
   isPlaying,
   onTogglePlay,
+  shuffleEnabled = false,
+  repeatMode = 'off',
+  onToggleShuffle,
+  onCycleRepeat,
 }) {
   const t = (en, ru) => (lang === 'ru' ? ru : en);
   const wrap = (fn) => () => { fn(); onClose(); };
@@ -37,19 +49,45 @@ function buildCommands({
   if (currentTrack) {
     playback.push({
       id: 'play-toggle',
-      title: isPlaying ? t('Pause', 'Пауза') : t('Play', 'Воспроизвести'),
+      title: withHotkey(isPlaying ? t('Pause', 'Пауза') : t('Play', 'Воспроизвести'), PLAYER_HOTKEYS.playPause),
       subtitle: `${currentTrack.artists?.[0] || ''} — ${currentTrack.title}`,
       icon: isPlaying ? Pause : Play,
       action: wrap(onTogglePlay),
     });
   }
 
+  const modes = [];
+  if (onToggleShuffle) {
+    modes.push({
+      id: 'toggle-shuffle',
+      title: shuffleEnabled ? t('Shuffle off', 'Выключить shuffle') : t('Shuffle on', 'Включить shuffle'),
+      keywords: 's random',
+      icon: Shuffle,
+      action: wrap(onToggleShuffle),
+    });
+  }
+  if (onCycleRepeat) {
+    const repeatTitle = repeatMode === REPEAT_ONE
+      ? t('Repeat: one', 'Повтор: один')
+      : repeatMode === REPEAT_ALL
+        ? t('Repeat: all', 'Повтор: всё')
+        : t('Repeat: off', 'Повтор: выкл');
+    modes.push({
+      id: 'cycle-repeat',
+      title: repeatTitle,
+      keywords: 'r loop',
+      icon: repeatMode === REPEAT_ONE ? Repeat1 : Repeat,
+      action: wrap(onCycleRepeat),
+    });
+  }
+
   const panels = [
-    { id: 'toggle-queue', title: t('Toggle Queue', 'Очередь'), keywords: 'q up next', icon: ListOrdered, action: wrap(onToggleQueue) },
-    { id: 'toggle-lyrics', title: t('Toggle Lyrics', 'Текст песни'), keywords: 'l karaoke sing', icon: Music, action: wrap(onToggleLyrics) },
-    { id: 'toggle-eq', title: t('Toggle Equalizer', 'Эквалайзер'), keywords: 'e audio', icon: Sliders, action: wrap(onToggleEq) },
-    { id: 'toggle-dj', title: t('Toggle DJ Tools', 'DJ-панель'), keywords: 'd bpm key', icon: Disc, action: wrap(onToggleDj) },
-    { id: 'toggle-karaoke', title: t('Toggle Karaoke', 'Караоке'), keywords: 'k fullscreen', icon: Mic2, action: wrap(onToggleKaraoke) },
+    ...modes,
+    { id: 'toggle-queue', title: withHotkey(t('Toggle Queue', 'Очередь'), PLAYER_HOTKEYS.queue), keywords: 'q up next', icon: ListOrdered, action: wrap(onToggleQueue) },
+    { id: 'toggle-lyrics', title: withHotkey(t('Toggle Lyrics', 'Текст песни'), PLAYER_HOTKEYS.lyrics), keywords: 'k lyrics text sing', icon: Music, action: wrap(onToggleLyrics) },
+    { id: 'toggle-eq', title: withHotkey(t('Toggle Equalizer', 'Эквалайзер'), PLAYER_HOTKEYS.eq), keywords: 'e audio', icon: Sliders, action: wrap(onToggleEq) },
+    { id: 'toggle-dj', title: withHotkey(t('Toggle DJ Tools', 'DJ-панель'), PLAYER_HOTKEYS.dj), keywords: 'd bpm key', icon: Disc, action: wrap(onToggleDj) },
+    { id: 'toggle-karaoke', title: withHotkey(t('Toggle Karaoke', 'Караоке'), PLAYER_HOTKEYS.karaoke), keywords: 'c karaoke fullscreen', icon: Mic2, action: wrap(onToggleKaraoke) },
   ];
 
   const nav = NAV.map((n) => ({
@@ -76,6 +114,10 @@ export default function CommandPalette({
   onToggleDj,
   onToggleKaraoke,
   onPlayTrack,
+  shuffleEnabled = false,
+  repeatMode = 'off',
+  onToggleShuffle,
+  onCycleRepeat,
 }) {
   const [query, setQuery] = useState('');
   const [library, setLibrary] = useState([]);
@@ -111,12 +153,40 @@ export default function CommandPalette({
       currentTrack,
       isPlaying,
       onTogglePlay: onTogglePlay || (() => {}),
+      shuffleEnabled,
+      repeatMode,
+      onToggleShuffle,
+      onCycleRepeat,
     }),
     [
       lang, navigate, onClose, onToggleQueue, onToggleLyrics, onToggleEq,
       onToggleDj, onToggleKaraoke, onPlayTrack, currentTrack, isPlaying, onTogglePlay,
+      shuffleEnabled, repeatMode, onToggleShuffle, onCycleRepeat,
     ],
   );
+
+  const recentResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const recentLabel = lang === 'ru' ? 'Недавно слушали' : 'Recently played';
+    const list = readRecentlyPlayed();
+    const filtered = q
+      ? list.filter((t) => {
+        const title = (t.title || '').toLowerCase();
+        const artists = (t.artists || []).join(' ').toLowerCase();
+        return title.includes(q) || artists.includes(q);
+      })
+      : list;
+    return filtered.slice(0, q ? 8 : 6).map((t) => ({
+      id: `recent-${t.provider_id}`,
+      title: `${(t.artists || []).join(', ')} — ${t.title}`,
+      subtitle: recentLabel,
+      icon: History,
+      action: () => {
+        onPlayTrack?.(t, list);
+        onClose();
+      },
+    }));
+  }, [query, lang, onPlayTrack, onClose]);
 
   const libraryResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -158,10 +228,10 @@ export default function CommandPalette({
 
   const results = useMemo(() => {
     if (!query.trim()) {
-      return [...commands.playback, ...commands.panels, ...commands.nav];
+      return [...commands.playback, ...recentResults, ...commands.panels, ...commands.nav];
     }
-    return [...commands.playback, ...filteredPanels, ...filteredNav, ...libraryResults];
-  }, [query, commands, filteredPanels, filteredNav, libraryResults]);
+    return [...commands.playback, ...recentResults, ...filteredPanels, ...filteredNav, ...libraryResults];
+  }, [query, commands, recentResults, filteredPanels, filteredNav, libraryResults]);
 
   useEffect(() => {
     setSelectedIdx(0);
@@ -240,7 +310,7 @@ export default function CommandPalette({
               ref={inputRef}
               type="text"
               data-testid="command-palette-input"
-              placeholder={lang === 'ru' ? 'Команда или поиск в библиотеке…' : 'Type a command or search library…'}
+              placeholder={lang === 'ru' ? 'Команда или поиск в медиатеке…' : 'Type a command or search library…'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={{

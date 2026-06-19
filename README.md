@@ -1,65 +1,69 @@
-# Tidal-DL-RU
+# FlacAud (tidal-dl-ru)
 
-Advanced high-fidelity DJ and Music Player Web Engine — FLAC from Tidal and other sources, Telegram bot, PWA.
+![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker)
 
-## Quick start
+**FlacAud** — это передовая музыкальная платформа, разработанная для ценителей качественного звука. Проект предоставляет инструменты для загрузки Lossless-аудио, непрерывного воспроизведения и мощной обработки звука с использованием машинного обучения.
 
+## 🚀 Ключевые особенности
+
+- **Lossless загрузка**: Поддержка скачивания треков в максимальном качестве (FLAC, ALAC) без потери аудиоданных.
+- **ML Stem Splitting**: Интеграция с алгоритмами машинного обучения (Demucs) для разделения аудиодорожек на изолированные стемы (вокал, ударные, бас и другие инструменты).
+- **Gapless Playback**: Идеально плавное, непрерывное воспроизведение треков без пауз и задержек между ними, реализованное с использованием продвинутых Web Audio API техник.
+- **3D WebGL Party Mode**: Завораживающие 3D-визуализации, реагирующие на звук в реальном времени, работающие прямо в браузере.
+- **Кроссплатформенная синхронизация**: Мгновенная синхронизация вашей медиатеки, плейлистов и настроек между всеми устройствами.
+
+## 🛠 Стек технологий
+
+Проект построен на основе современного, высокопроизводительного стека:
+
+### Frontend
+- **React 19** + **Vite**: Быстрый рендеринг и мгновенная сборка.
+- **Zustand**: Легковесное и предсказуемое управление глобальным состоянием приложения.
+- **react-three-fiber**: Декларативный 3D-рендеринг для WebGL визуализаций (Party Mode).
+- **@tanstack/react-virtual**: Эффективный рендеринг огромных списков треков и плейлистов без падения производительности.
+- **framer-motion**: Плавные, физически корректные анимации пользовательского интерфейса.
+
+### Backend & ML
+- **FastAPI**: Высокопроизводительный асинхронный веб-фреймворк для API.
+- **SQLModel**: Интуитивно понятный ORM, объединяющий возможности SQLAlchemy и валидацию Pydantic.
+- **ARQ + Redis**: Надежная и быстрая система асинхронных очередей для обработки фоновых задач.
+- **aubio & Demucs**: Мощные ML-модели и библиотеки для глубокого анализа аудио и разделения треков на стемы.
+
+### Инфраструктура
+- **Docker & Docker Compose**: Полная изоляция среды разработки и простота развертывания.
+
+## ⚙️ Установка и развертывание
+
+Проект легко разворачивается с помощью Docker. Убедитесь, что у вас установлены **Docker** и **Docker Compose**.
+
+### Шаг 1: Клонирование репозитория
+```bash
+git clone https://github.com/yourusername/tidal-dl-ru.git
+cd tidal-dl-ru
+```
+
+### Шаг 2: Настройка переменных окружения
+Создайте файл `.env` в корневой директории проекта и скопируйте в него содержимое из шаблона (если имеется), либо настройте необходимые переменные:
 ```bash
 cp .env.example .env
-# Set TIDALDLRU_JWT_SECRET, TIDALDLRU_SIGNING_SECRET, TIDALDLRU_BOT_TOKEN
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-
-cd frontend && npm install && npm run build && cd ..
-docker compose up -d --build
-# → http://localhost:8001
 ```
+*Не забудьте указать ключи API, пароли для БД и настройки подключения к Redis.*
 
-Dev frontend: `cd frontend && npm run dev` (proxies `/api` to `:8000`).
-
-## Production checklist
-
-- [ ] `TIDALDLRU_ENV=production` (set in compose)
-- [ ] Strong `TIDALDLRU_JWT_SECRET` + `TIDALDLRU_SIGNING_SECRET`
-- [ ] TLS: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` + `DOMAIN` in `.env`
-- [ ] Postgres (optional): `docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d`
-- [ ] SSH deploy only — **never commit passwords** (`scripts/deploy.py`)
-- [ ] GitHub secrets: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`
-- [ ] Backups: `ops/backup-db.sh`
-- [ ] Legal: [docs/LEGAL.md](docs/LEGAL.md)
-
-## Architecture
-
-| Layer | Stack |
-|-------|--------|
-| API / Bot | FastAPI, slim `Dockerfile.api` (~no torch) |
-| Worker | ARQ + demucs, `Dockerfile.worker` |
-| Queue | Redis |
-| DB | SQLite (default) or Postgres via `DATABASE_URL` |
-| Frontend | React 19, Vite, PWA |
-
-Security: JWT auth, short-lived media tokens, rate limits on login/search, SSRF-safe image proxy, security headers.
-
-## Commands
-
+### Шаг 3: Запуск проекта
+Используйте Docker Compose для сборки и запуска всех сервисов:
 ```bash
-make test          # pytest
-make lint          # ruff
-make e2e           # Playwright (toast + progress)
-make e2e-api       # live remote API flow
-make deploy        # DEPLOY_HOST + DEPLOY_SSH_KEY
+docker-compose up --build -d
 ```
 
-## Ops
+### Шаг 4: Доступ к приложению
+- **Frontend клиент**: [http://localhost:3000](http://localhost:3000)
+- **Backend API документация (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-See [ops/RUNBOOK.md](ops/RUNBOOK.md).
+## 📄 Документация
 
-## Testing
+Более подробная техническая информация об архитектуре проекта, взаимодействии компонентов и ML-моделях доступна в файле [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-```bash
-pytest tests/
-E2E_RUN_LIVE=1 pytest tests/test_remote_flow_live.py
-python scripts/e2e_remote_flow.py
-cd frontend && npm run e2e
-```
-
-CI runs on every push/PR (`.github/workflows/ci.yml`); deploy after green CI on `master` (`.github/workflows/deploy.yml`).
+---
+*Проект разработан для демонстрации продвинутых архитектурных навыков, интеграции ML-решений в современные веб-приложения и создания сложных высоконагруженных пользовательских интерфейсов.*

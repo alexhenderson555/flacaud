@@ -26,7 +26,15 @@ async def split_audio_demucs(input_path: str, output_dir: str) -> SplitResult:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    stdout, stderr = await process.communicate()
+    try:
+        stdout, stderr = await process.communicate()
+    except asyncio.CancelledError:
+        logger.warning(f"Demucs task cancelled for {input_path}, killing process.")
+        try:
+            process.kill()
+        except OSError:
+            pass
+        raise
 
     if process.returncode != 0:
         logger.error(f"Demucs failed with code {process.returncode}: {stderr.decode(errors='ignore')}")

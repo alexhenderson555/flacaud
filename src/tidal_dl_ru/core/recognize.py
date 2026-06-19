@@ -6,12 +6,15 @@ Docs: https://docs.audd.io/
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
 
 AUDD_API = "https://api.audd.io/"
 AUDD_TOKEN = os.environ.get("TIDALDLRU_AUDD_TOKEN", "")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,7 +53,7 @@ async def recognize_audio(audio_bytes: bytes, content_type: str = "audio/ogg") -
             try:
                 seg = AudioSegment.from_file(audio_io, format=fmt)
             except Exception as e:
-                print(f"Warning: failed to decode as {fmt}, trying auto-guess. Error: {e}")
+                logger.warning("Failed to decode as %s, trying auto-guess: %s", fmt, e)
                 audio_io.seek(0)
                 seg = AudioSegment.from_file(audio_io)
 
@@ -68,7 +71,7 @@ async def recognize_audio(audio_bytes: bytes, content_type: str = "audio/ogg") -
 
     response = await asyncio.to_thread(_run_shazam)
 
-    print("Shazam API raw response length:", len(response) if response else 0)
+    logger.debug("Shazam API raw response length: %s", len(response) if response else 0)
 
     if not response or len(response) < 2:
         return None
@@ -76,7 +79,7 @@ async def recognize_audio(audio_bytes: bytes, content_type: str = "audio/ogg") -
     data = response[1]
 
     if "matches" not in data or not data["matches"]:
-        print("Shazam found no matches. Possibly too quiet or not enough audio.")
+        logger.info("Shazam found no matches (quiet clip or unrecognized audio)")
         return None
 
     track = data.get("track")

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { routeAuthMe, SEARCH_INPUT } from './helpers.js';
+import { installE2EAuth, installPlayerStubs, startSearchPlayback } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',
@@ -9,16 +9,14 @@ const TRACK = {
   cover_url: 'https://via.placeholder.com/64',
   source_url: 'https://tidal.com/track/777001',
   quality: 'LOSSLESS',
+  duration_s: 180,
 };
 
 test('add to library from player updates library page immediately', async ({ page }) => {
   let libraryItems = [];
 
-  await routeAuthMe(page);
-
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-lib-token');
-  });
+  await installE2EAuth(page);
+  await installPlayerStubs(page, { searchTracks: [TRACK] });
 
   await page.route('**/api/library', async (route) => {
     if (route.request().method() === 'GET') {
@@ -35,42 +33,8 @@ test('add to library from player updates library page immediately', async ({ pag
     await route.continue();
   });
 
-  await page.route('**/api/playlists', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-
-  await page.route('**/api/downloads', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-
-  await page.route('**/api/search', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ tracks: [TRACK] }),
-    });
-  });
-
-  await page.route('**/api/auth/media-token', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'mtok' }) });
-  });
-  await page.route('**/api/quality/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ quality: 'LOW' }) });
-  });
-  await page.route('**/api/stream/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'audio/mp4',
-      body: Buffer.alloc(64, 1),
-      headers: { 'Content-Length': '64' },
-    });
-  });
-
   await page.goto('/search');
-  await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
-  await page.waitForTimeout(800);
-  await page.getByTitle('Play Preview').first().click();
-  await page.waitForTimeout(500);
+  await startSearchPlayback(page, { providerId: '777001', query: 'e2e', title: 'E2E Library Track' });
 
   await page.goto('/library');
   await expect(page.getByText(/library is empty|ваша медиатека/i)).toBeVisible({ timeout: 10000 });
@@ -82,7 +46,7 @@ test('add to library from player updates library page immediately', async ({ pag
 test('create playlist and add track via modal', async ({ page }) => {
   let playlists = [];
 
-  await routeAuthMe(page);
+  await installE2EAuth(page);
 
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-pl-token');
@@ -153,7 +117,7 @@ test('sequential playback requests next stream url', async ({ page }) => {
   ];
   const streamLog = [];
 
-  await routeAuthMe(page);
+  await installE2EAuth(page);
 
   await page.addInitScript(() => {
     localStorage.setItem('tidal-token', 'e2e-play-token');

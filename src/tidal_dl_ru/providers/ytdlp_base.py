@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Optional
@@ -8,16 +9,20 @@ import yt_dlp
 
 from tidal_dl_ru.core.models import Quality, Track
 from tidal_dl_ru.providers.base import ProgressCb, Provider, ProviderError
+from tidal_dl_ru.providers.tidal_match import match_tracks_to_tidal
 
+logger = logging.getLogger(__name__)
+
+_SKIP_TITLE_PREFIXES = (
+    "[private video]",
+    "[deleted video]",
+    "[unavailable video]",
+    "[video unavailable]",
+)
 
 def _info_to_track(info: dict, provider: str) -> Track:
     """Map a yt-dlp info dict to a universal Track."""
-    title = info.get("track") or info.get("title") or ""
-    artists_field = info.get("artists") or info.get("artist") or info.get("uploader") or ""
-    if isinstance(artists_field, str):
-        artists = [a.strip() for a in re.split(r"[,;&]| feat\.? ", artists_field) if a.strip()]
-    else:
-        artists = list(artists_field)
+    title, artists = _resolve_entry_metadata(info)
     album = info.get("album")
     album_artist = info.get("album_artist")
     track_no = int(info.get("track_number") or 1)
@@ -28,11 +33,12 @@ def _info_to_track(info: dict, provider: str) -> Track:
     if release_date and len(release_date) == 8 and release_date.isdigit():
         release_date = f"{release_date[:4]}-{release_date[4:6]}-{release_date[6:]}"
     cover = info.get("thumbnail")
+    isrc = info.get("isrc")
     return Track(
         provider=provider,
-        provider_id=info.get("id", ""),
+        provider_id=str(info.get("id", "")),
         title=title,
-        artists=artists or [info.get("uploader") or "Unknown"],
+        artists=artists,
         album=album,
         album_artist=album_artist,
         track_number=track_no,
@@ -42,16 +48,76 @@ def _info_to_track(info: dict, provider: str) -> Track:
         year=int(year) if year else None,
         release_date=release_date if isinstance(release_date, str) else None,
         cover_url=cover,
-        source_url=info.get("webpage_url"),
+        isrc=isrc if isinstance(isrc, str) else None,
+        source_url=info.get("webpage_url") or info.get("original_url"),
     )
 
 
-class YtDlpProvider(Provider):
-    """Base for any service yt-dlp can extract.
+def _parse_creator_title(raw_title: str) -> tuple[str, list[str]]:
+    """YouTube-style 'Artist - Title' in a single string."""
+    title = (raw_title or "").strip()
+    for sep in (" - ", " – ", " | ", " — "):
+        if sep in title:
+            left, right = title.split(sep, 1)
+            left, right = left.strip(), right.strip()
+            if left and right and len(left) < 80:
+                return right, [left]
+    return title, []
 
-    Subclasses set `name`, `display_name`, and `URL_PATTERN`. Override
-    `format_selector` if the default `bestaudio` isn't what you want.
-    """
+
+def _artists_from_entry(entry: dict) -> list[str]:
+    artists_field = entry.get("artist") or entry.get("artists") or entry.get("uploader") or entry.get("channel") or ""
+    if isinstance(artists_field, str):
+        return [a.strip() for a in re.split(r"[,;&]| feat\.? ", artists_field) if a.strip()]
+    return [str(a).strip() for a in artists_field if str(a).strip()]
+
+
+def _is_generic_artist(name: str) -> bool:
+    n = _normalize_text(name)
+    if n in {"unknown", "various artists", "topic"}:
+        return True
+    return n.endswith(" topic") or n.endswith("- topic")
+
+
+def _resolve_entry_metadata(entry: dict) -> tuple[str, list[str]]:
+    title = _entry_title(entry)
+    artists = _artists_from_entry(entry)
+    if title:
+        parsed_title, parsed_artists = _parse_creator_title(title)
+        if parsed_artists and (
+            not artists
+            or _is_generic_artist(artists[0])
+            or _normalize_text(artists[0]) != _normalize_text(parsed_artists[0])
+        ):
+            return parsed_title, parsed_artists
+    if not artists:
+        artists = ["Unknown"]
+    return title, artists
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").lower().strip())
+
+
+def _entry_title(entry: dict) -> str:
+    return (entry.get("track") or entry.get("title") or "").strip()
+
+
+def _is_unavailable_entry(entry: dict | None) -> bool:
+    if not entry or not isinstance(entry, dict):
+        return True
+    if entry.get("is_live"):
+        return True
+    title = _entry_title(entry).lower()
+    if not title:
+        return False
+    if title in _SKIP_TITLE_PREFIXES:
+        return True
+    return any(title.startswith(prefix) for prefix in _SKIP_TITLE_PREFIXES)
+
+
+class YtDlpCatalogProvider(Provider):
+    """Expand playlists via yt-dlp, then match tracks to the Tidal catalog."""
 
     URL_PATTERN: re.Pattern[str]
     format_selector: str = "bestaudio/best"
@@ -59,34 +125,123 @@ class YtDlpProvider(Provider):
     def supports(self, url: str) -> bool:
         return bool(self.URL_PATTERN.search(url))
 
-    def _ydl_opts(self, *, quiet: bool = True) -> dict:
+    def _ydl_opts(self, *, quiet: bool = True, flat: bool = False) -> dict:
         return {
             "quiet": quiet,
             "no_warnings": quiet,
             "skip_download": True,
-            "extract_flat": False,
+            "extract_flat": flat,
+            "ignoreerrors": True,
             "format": self.format_selector,
         }
 
-    def expand(self, url: str) -> list[Track]:
+    def _entry_to_track(self, entry: dict, provider: str) -> Track:
+        """Map a full or flat yt-dlp entry to Track (no extra network)."""
+        if entry.get("duration") is not None or entry.get("track") or entry.get("album"):
+            return _info_to_track(entry, provider)
+        title, artists = _resolve_entry_metadata(entry)
+        duration = entry.get("duration")
+        return Track(
+            provider=provider,
+            provider_id=str(entry.get("id", "")),
+            title=title,
+            artists=artists,
+            duration_s=int(duration) if duration else None,
+            source_url=entry.get("url") or entry.get("webpage_url"),
+        )
+
+    def _extract_raw_tracks(self, url: str) -> tuple[list[Track], Optional[str], str, int]:
         try:
-            with yt_dlp.YoutubeDL(self._ydl_opts()) as ydl:
+            with yt_dlp.YoutubeDL(self._ydl_opts(flat=True)) as ydl:
                 info = ydl.extract_info(url, download=False)
         except yt_dlp.DownloadError as exc:
             raise ProviderError(f"{self.display_name}: {exc}") from exc
+
         if info is None:
-            return []
+            return [], None, "unknown", 0
+
+        title = info.get("playlist_title") or info.get("album") or info.get("title")
+        kind = "playlist" if info.get("_type") in ("playlist", "multi_video") else "track"
+
         if info.get("_type") in ("playlist", "multi_video"):
-            entries = [e for e in (info.get("entries") or []) if e]
-            tracks: list[Track] = []
-            for e in entries:
-                # Each entry may be a thin reference; resolve if missing core fields.
-                if "url" in e and not e.get("title"):
-                    with yt_dlp.YoutubeDL(self._ydl_opts()) as ydl:
-                        e = ydl.extract_info(e["url"], download=False) or e
-                tracks.append(_info_to_track(e, self.name))
-            return tracks
-        return [_info_to_track(info, self.name)]
+            entries = [e for e in (info.get("entries") or []) if e and isinstance(e, dict)]
+            tracks: list[Track | None] = []
+            missing_meta: list[tuple[int, dict]] = []
+            skipped = 0
+
+            for idx, entry in enumerate(entries):
+                if _is_unavailable_entry(entry):
+                    skipped += 1
+                    logger.info("%s: skipping unavailable playlist entry %s", self.name, entry.get("id"))
+                    continue
+                if not _entry_title(entry):
+                    missing_meta.append((len(tracks), entry))
+                    tracks.append(None)
+                else:
+                    tracks.append(self._entry_to_track(entry, self.name))
+
+            if missing_meta:
+                with yt_dlp.YoutubeDL(self._ydl_opts()) as ydl:
+                    for idx, entry in missing_meta:
+                        video_url = entry.get("url") or entry.get("webpage_url")
+                        if not video_url:
+                            skipped += 1
+                            continue
+                        try:
+                            full = ydl.extract_info(video_url, download=False)
+                        except yt_dlp.DownloadError as exc:
+                            logger.info(
+                                "%s: skipping unavailable entry %s: %s",
+                                self.name,
+                                entry.get("id"),
+                                exc,
+                            )
+                            skipped += 1
+                            continue
+                        if not full or _is_unavailable_entry(full) or not _entry_title(full):
+                            skipped += 1
+                            continue
+                        tracks[idx] = _info_to_track(full, self.name)
+
+            available = [t for t in tracks if t is not None and (t.title or "").strip()]
+            if skipped:
+                logger.info("%s: skipped %s unavailable playlist entries", self.name, skipped)
+            if not available:
+                raise ProviderError(
+                    f"{self.display_name}: no available tracks found at URL"
+                    + (f" ({skipped} unavailable)" if skipped else "")
+                )
+            return available, title, "playlist", skipped
+
+        if _is_unavailable_entry(info) or not _entry_title(info):
+            raise ProviderError(f"{self.display_name}: track is unavailable")
+        return [self._entry_to_track(info, self.name)], title, kind, 0
+
+    def extract_raw_tracks(self, url: str) -> tuple[list[Track], Optional[str], str, int]:
+        """Read source metadata without Tidal matching. Returns (tracks, title, kind, skipped_unavailable)."""
+        return self._extract_raw_tracks(url)
+
+    def expand(self, url: str) -> list[Track]:
+        raw, _title, _kind, _skipped = self._extract_raw_tracks(url)
+        if not raw:
+            raise ProviderError(f"{self.display_name}: no tracks found at URL")
+        matched, unmatched = match_tracks_to_tidal(raw)
+        if not matched:
+            raise ProviderError(
+                f"{self.display_name}: could not match any tracks on Tidal"
+                + (f" ({unmatched} unmatched)" if unmatched else "")
+            )
+        return matched
+
+    def expand_with_stats(self, url: str) -> tuple[list[Track], Optional[str], str, int, int]:
+        raw, title, kind, _skipped = self._extract_raw_tracks(url)
+        matched, unmatched = match_tracks_to_tidal(raw)
+        if not matched:
+            raise ProviderError(
+                f"{self.display_name}: could not match any tracks on Tidal"
+                + (f" ({len(raw)} source tracks)" if raw else "")
+            )
+        return matched, title, kind, len(raw), unmatched
 
     def download(
         self,
@@ -95,46 +250,9 @@ class YtDlpProvider(Provider):
         quality: Quality,
         on_progress: Optional[ProgressCb] = None,
     ) -> Path:
-        if not track.source_url:
-            raise ProviderError(f"{self.name}: track has no source_url; cannot download")
+        from tidal_dl_ru.core.router import get_provider_by_name
 
-        dest_no_ext.parent.mkdir(parents=True, exist_ok=True)
-
-        # yt-dlp picks the extension based on the chosen format. Use a template that
-        # writes to a known path; we'll discover the actual extension after download.
-        out_template = str(dest_no_ext) + ".%(ext)s"
-
-        downloaded_path: dict[str, Optional[Path]] = {"p": None}
-
-        def progress_hook(d: dict) -> None:
-            if d.get("status") == "downloading" and on_progress:
-                total = d.get("total_bytes") or d.get("total_bytes_estimate")
-                done = d.get("downloaded_bytes") or 0
-                on_progress(done, total)
-            elif d.get("status") == "finished":
-                fn = d.get("filename")
-                if fn:
-                    downloaded_path["p"] = Path(fn)
-
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "outtmpl": out_template,
-            "format": self.format_selector,
-            "progress_hooks": [progress_hook],
-            "noprogress": True,
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([track.source_url])
-
-        path = downloaded_path["p"]
-        if path is None or not path.exists():
-            # Fallback: glob for the file
-            for ext in (".m4a", ".opus", ".mp3", ".webm", ".ogg", ".flac"):
-                candidate = dest_no_ext.with_suffix(ext)
-                if candidate.exists():
-                    path = candidate
-                    break
-        if path is None or not path.exists():
-            raise ProviderError(f"{self.name}: download finished but file not found")
-        return path
+        tidal = get_provider_by_name("tidal")
+        if tidal is None:
+            raise ProviderError("Tidal provider unavailable for download")
+        return tidal.download(track, dest_no_ext, quality, on_progress)

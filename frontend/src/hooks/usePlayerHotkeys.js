@@ -16,13 +16,18 @@ export function usePlayerHotkeys({
   closeAllPanels,
   setVolume,
   setIsCommandPaletteOpen,
+  toggleShuffle,
+  cycleRepeat,
+  toggleLike,
+  startTrackRadio,
 }) {
   useEffect(() => {
     if (!enabled) return undefined;
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
         if (e.key === 'Escape') document.activeElement?.blur?.();
-        return;
+        const paletteToggle = e.code === 'KeyK' && (e.ctrlKey || e.metaKey);
+        if (!paletteToggle) return;
       }
 
       switch (e.code) {
@@ -86,8 +91,10 @@ export function usePlayerHotkeys({
           closeAllPanels();
           break;
         case 'KeyL':
-          e.preventDefault();
-          toggleOverlay('lyrics');
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            if (currentTrack) toggleLike?.(currentTrack);
+          }
           break;
         case 'KeyQ':
           e.preventDefault();
@@ -105,7 +112,19 @@ export function usePlayerHotkeys({
             setIsCommandPaletteOpen((prev) => !prev);
           } else {
             e.preventDefault();
+            toggleOverlay('lyrics');
+          }
+          break;
+        case 'KeyC':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
             toggleOverlay('karaoke');
+          }
+          break;
+        case 'KeyP':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            toggleOverlay('party');
           }
           break;
         case 'KeyD':
@@ -130,6 +149,24 @@ export function usePlayerHotkeys({
             setVolume((v) => (v > 0 ? 0 : parseFloat(localStorage.getItem('tidal-volume') || '1') || 1));
           }
           break;
+        case 'KeyS':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            toggleShuffle?.();
+          }
+          break;
+        case 'KeyR':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            cycleRepeat?.();
+          }
+          break;
+        case 'KeyT':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            if (currentTrack) startTrackRadio?.(currentTrack);
+          }
+          break;
         case 'Slash':
           if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault();
@@ -144,7 +181,19 @@ export function usePlayerHotkeys({
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [
-    enabled, currentTrack, isPlaying, playNext, playPrevious, toggleOverlay,
-    closeAllPanels, setVolume, setIsCommandPaletteOpen, audioRef,
+    enabled,
+    currentTrack,
+    isPlaying,
+    playNext,
+    playPrevious,
+    toggleOverlay,
+    closeAllPanels,
+    setVolume,
+    setIsCommandPaletteOpen,
+    toggleShuffle,
+    cycleRepeat,
+    toggleLike,
+    startTrackRadio,
+    audioRef,
   ]);
 }

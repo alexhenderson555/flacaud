@@ -25,13 +25,14 @@ describe('qualityPrefs', () => {
 
   it('maps badge labels', () => {
     expect(qualityBadgeLabel('HI_RES_LOSSLESS')).toBe('MAX');
-    expect(qualityBadgeLabel('LOSSLESS')).toBe('FLAC');
+    expect(qualityBadgeLabel('LOSSLESS')).toBe('Lossless');
   });
 
-  it('clamps free plan to LOW', () => {
-    expect(clampQualityToPlan('LOSSLESS', 'free')).toBe('LOW');
-    expect(isQualityAllowedForPlan('HIGH', 'free')).toBe(false);
-    expect(pickQualityForPlan('LOSSLESS', ['LOW', 'HIGH', 'LOSSLESS'], 'free')).toBe('LOW');
+  it('clamps free plan to 320k (HIGH)', () => {
+    expect(clampQualityToPlan('LOSSLESS', 'free')).toBe('HIGH');
+    expect(isQualityAllowedForPlan('LOSSLESS', 'free')).toBe(false);
+    expect(isQualityAllowedForPlan('HIGH', 'free')).toBe(true);
+    expect(pickQualityForPlan('LOSSLESS', ['LOW', 'HIGH', 'LOSSLESS'], 'free')).toBe('HIGH');
   });
 
   it('allows lifetime MAX when track supports it', () => {

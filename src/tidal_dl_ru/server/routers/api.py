@@ -1,9 +1,11 @@
+import asyncio
 import ipaddress
 import logging
 import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from tidal_dl_ru.bot.users import Plan
@@ -19,6 +21,9 @@ from tidal_dl_ru.providers.tidal.auth import (
     save_tokens,
 )
 from tidal_dl_ru.server.activation_codes import redeem_code
+from tidal_dl_ru.server.metrics import collect_metrics, collect_prometheus_metrics
+from tidal_dl_ru.server.metrics_auth import require_metrics_access
+from tidal_dl_ru.server.ops_auth import require_ops_access
 from tidal_dl_ru.server.payments import create_payment, process_webhook
 from tidal_dl_ru.server.schemas import PoolHealth
 
@@ -26,10 +31,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/api/metrics")
+def app_metrics(request: Request) -> dict:
+    """Process metrics for ops (uptime, recommendation cache)."""
+    require_ops_access(request)
+    return collect_metrics()
+
+
+@router.get("/api/metrics/prometheus")
+def app_metrics_prometheus(request: Request) -> PlainTextResponse:
+    require_metrics_access(request)
+    return PlainTextResponse(collect_prometheus_metrics(), media_type="text/plain; version=0.0.4")
+
+
+@router.get("/internal/metrics/prometheus")
+def internal_metrics_prometheus(request: Request) -> PlainTextResponse:
+    """Prometheus scrape target on the Docker network (no ops key)."""
+    require_metrics_access(request)
+    return PlainTextResponse(collect_prometheus_metrics(), media_type="text/plain; version=0.0.4")
+
+
 @router.get("/api/logs")
-def get_app_logs():
-    if os.path.exists("app.log"):
-        with open("app.log", "r", encoding="utf-8") as f:
+def get_app_logs(request: Request):
+    require_ops_access(request)
+    log_path = os.environ.get("TIDALDLRU_LOG_FILE", "app.log")
+    if os.path.exists(log_path):
+        with open(log_path, "r", encoding="utf-8") as f:
             return {"logs": f.read()}
     return {"logs": "No logs found."}
 
@@ -60,7 +87,8 @@ async def yookassa_webhook(request: Request) -> dict:
         raise HTTPException(status_code=403, detail="Invalid IP format")
 
     body = await request.json()
-    ok = process_webhook(body)
+    # process_webhook does blocking httpx + DB I/O; offload so it doesn't stall the event loop.
+    ok = await asyncio.to_thread(process_webhook, body)
     return {"ok": ok}
 
 class PaymentCreateRequest(BaseModel):
@@ -91,14 +119,17 @@ async def api_create_payment(req: PaymentCreateRequest, current_user: User = Dep
         raise HTTPException(status_code=400, detail="Invalid plan")
 
     return_url = os.environ.get("TIDALDLRU_PAYMENT_RETURN_URL", "http://localhost:5173/account")
+    # create_payment makes a blocking httpx call; offload it off the event loop.
     if current_user.telegram_id:
-        url = create_payment(
+        url = await asyncio.to_thread(
+            create_payment,
             plan_enum,
             return_url=return_url,
             telegram_id=current_user.telegram_id,
         )
     else:
-        url = create_payment(
+        url = await asyncio.to_thread(
+            create_payment,
             plan_enum,
             return_url=return_url,
             user_id=current_user.id,
@@ -110,7 +141,8 @@ async def api_create_payment(req: PaymentCreateRequest, current_user: User = Dep
     return {"url": url}
 
 @router.get("/api/pool/health", response_model=PoolHealth)
-def pool_health() -> PoolHealth:
+def pool_health(request: Request) -> PoolHealth:
+    require_ops_access(request)
     c = tidal_pool.pool_size()
     return PoolHealth(
         total=c["total"],

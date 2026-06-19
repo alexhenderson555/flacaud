@@ -1,253 +1,102 @@
+"""Media FastAPI routes: image proxy (SSRF-safe), signed file downloads, lyrics,
+downloads registry, per-track quality probe, and audio streaming endpoints.
+
+The streaming/quality pipeline internals live in ``tidal_dl_ru.server.streaming``;
+this module is the thin route layer over them.
+"""
+
 import asyncio
-import collections
 import ipaddress
 import logging
 import socket
-import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 
 from tidal_dl_ru.core.router import get_provider_by_name
-from tidal_dl_ru.database.auth import get_media_user
+from tidal_dl_ru.database.auth import get_current_user, get_media_user
 from tidal_dl_ru.database.models import User
-from tidal_dl_ru.plan_limits import cap_stream_quality
-from tidal_dl_ru.providers.tidal.download import download_track
-from tidal_dl_ru.providers.tidal.models import AudioQuality
+from tidal_dl_ru.plan_limits import (
+    cap_stream_quality,
+)
 from tidal_dl_ru.server import jobs as job_state
 from tidal_dl_ru.server.files import verify_file
+from tidal_dl_ru.server.metrics import record_stream_error
 from tidal_dl_ru.server.range_file import ranged_file_response
-from tidal_dl_ru.server.settings import settings
+from tidal_dl_ru.server.streaming import (
+    TidalStreamUnavailable,
+    _api_detail,
+    _bts_cache_path,
+    _dash_file_media_type,
+    _dash_stream_bytes_needed,
+    _delivered_stream_meta,
+    _ensure_bts_cache,
+    _ensure_dash_cache,
+    _find_merged_dash_file,
+    _quality_to_enum,
+    _requires_full_file_before_play,
+    _resolve_dash_stream_cached,
+    _schedule_bts_warm,
+    _schedule_dash_warm,
+    _serve_bts_progressive,
+    _stream_cache_dir,
+)
 
 logger = logging.getLogger(__name__)
+
+
 router = APIRouter()
 
 
-stream_locks = collections.defaultdict(asyncio.Lock)
-_dash_cache_jobs: dict[str, asyncio.Task] = {}
-_MIN_CACHE_BYTES = 65536
-_HOP_HEADERS = frozenset(
-    {
-        "content-encoding",
-        "transfer-encoding",
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "upgrade",
-    }
-)
+_UI_QUALITY_ORDER = ("HIGH", "LOSSLESS", "HI_RES")
 
-# UI quality id -> Tidal AudioQuality probe order (highest first)
-_QUALITY_PROBE = (
-    (AudioQuality.HI_RES_LOSSLESS, "HI_RES"),
-    (AudioQuality.LOSSLESS, "LOSSLESS"),
-    (AudioQuality.HIGH, "HIGH"),
-    (AudioQuality.LOW, "LOW"),
-)
-_UI_QUALITY_ORDER = ("LOW", "HIGH", "LOSSLESS", "HI_RES")
 
 # Tidal manifest probe is expensive (up to 4 API calls). Cache per track briefly.
 _PROBE_CACHE_TTL_SEC = 600
+
+
+_PROBE_RATE_LIMIT_TTL_SEC = 30
+
+
 _PROBE_CACHE_MAX = 800
-_quality_probe_cache: dict[str, tuple[float, dict]] = {}
+
+
+_quality_probe_cache: dict[str, tuple[float, dict, float]] = {}
 
 
 def _probe_cache_get(track_id: str) -> dict | None:
     entry = _quality_probe_cache.get(track_id)
     if not entry:
         return None
-    ts, data = entry
-    if time.time() - ts > _PROBE_CACHE_TTL_SEC:
+    ts, data, ttl = entry
+    if time.time() - ts > ttl:
         _quality_probe_cache.pop(track_id, None)
         return None
     return data
 
 
 def _probe_cache_set(track_id: str, data: dict) -> None:
+    if data.get("probe_complete") is False:
+        if not data.get("rate_limited"):
+            return
+        ttl = _PROBE_RATE_LIMIT_TTL_SEC
+    else:
+        ttl = _PROBE_CACHE_TTL_SEC
     if len(_quality_probe_cache) >= _PROBE_CACHE_MAX:
         oldest = min(_quality_probe_cache, key=lambda k: _quality_probe_cache[k][0])
         _quality_probe_cache.pop(oldest, None)
-    _quality_probe_cache[track_id] = (time.time(), data)
+    _quality_probe_cache[track_id] = (time.time(), data, ttl)
 
 
-def _qname(q) -> str:
-    return getattr(q, "name", str(q)).upper()
+def _probe_tidal_qualities(client, track_id: str, *, manifest_client=None) -> dict:
+    from tidal_dl_ru.providers.tidal.quality_probe import probe_tidal_qualities
 
+    return probe_tidal_qualities(client, track_id, manifest_client=manifest_client)
 
-def _probe_tidal_qualities(client, track_id: str) -> dict:
-    """Return available UI qualities and actual Tidal manifest quality per level."""
-    available: list[str] = []
-    actual: dict[str, str] = {}
-    for enum_q, ui_q in _QUALITY_PROBE:
-        try:
-            manifest = client.get_playback_manifest(track_id, enum_q)
-            if ui_q not in available:
-                available.append(ui_q)
-            actual[ui_q] = _qname(manifest.audio_quality)
-        except Exception:
-            continue
-    available.sort(key=lambda q: _UI_QUALITY_ORDER.index(q) if q in _UI_QUALITY_ORDER else 0)
-    max_quality = "LOW"
-    for _, ui_q in _QUALITY_PROBE:
-        if ui_q in available:
-            max_quality = ui_q
-            break
-    return {
-        "available": available or ["LOW"],
-        "max_quality": max_quality,
-        "actual": actual,
-    }
-
-
-async def _download_dash_segments(urls: list[str], tmp_path: Path, final_path: Path) -> None:
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as dash_client:
-            with tmp_path.open("wb") as cache_f:
-                for url in urls:
-                    async with dash_client.stream("GET", url) as seg_resp:
-                        seg_resp.raise_for_status()
-                        async for chunk in seg_resp.aiter_bytes(chunk_size=65536):
-                            cache_f.write(chunk)
-        tmp_path.replace(final_path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
-
-
-async def _ensure_dash_cache(
-    urls: list[str],
-    tmp_path: Path,
-    final_path: Path,
-    min_bytes: int = _MIN_CACHE_BYTES,
-) -> Path:
-    if final_path.exists():
-        return final_path
-
-    key = str(final_path)
-    task = _dash_cache_jobs.get(key)
-    if task is None or task.done():
-        _dash_cache_jobs[key] = asyncio.create_task(
-            _download_dash_segments(urls, tmp_path, final_path)
-        )
-        task = _dash_cache_jobs[key]
-
-    needed = max(_MIN_CACHE_BYTES, min_bytes)
-
-    for _ in range(600):
-        if final_path.exists():
-            return final_path
-        if tmp_path.exists() and tmp_path.stat().st_size >= needed:
-            return tmp_path
-        if task.done():
-            if final_path.exists():
-                return final_path
-            err = task.exception()
-            if err:
-                raise err
-            break
-        await asyncio.sleep(0.1)
-
-    if tmp_path.exists() and tmp_path.stat().st_size > 0:
-        return tmp_path
-    raise HTTPException(status_code=504, detail="Stream cache timeout")
-
-
-def _range_bytes_needed(request: Request) -> int:
-    rh = request.headers.get("range")
-    if not rh or not rh.lower().startswith("bytes="):
-        return _MIN_CACHE_BYTES
-    spec = rh.split("=", 1)[1].strip().split(",", 1)[0].strip()
-    if spec.startswith("-"):
-        return _MIN_CACHE_BYTES
-    _, _, end_s = spec.partition("-")
-    if end_s:
-        try:
-            return max(_MIN_CACHE_BYTES, int(end_s) + 1)
-        except ValueError:
-            pass
-    return _MIN_CACHE_BYTES
-
-
-async def _proxy_bts_stream(url: str, request: Request, extra_headers: dict) -> StreamingResponse:
-    req_headers: dict[str, str] = {}
-    if rh := request.headers.get("range"):
-        req_headers["Range"] = rh
-
-    client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0))
-    upstream = await client.send(client.build_request("GET", url, headers=req_headers), stream=True)
-
-    headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_HEADERS}
-    headers["Accept-Ranges"] = "bytes"
-    headers["Access-Control-Allow-Origin"] = "*"
-    headers["Access-Control-Expose-Headers"] = "Content-Range, Accept-Ranges, X-Actual-Quality, Content-Length"
-    headers.update(extra_headers)
-
-    async def _stream_generator():
-        try:
-            async for chunk in upstream.aiter_bytes(chunk_size=65536):
-                yield chunk
-        finally:
-            await upstream.aclose()
-            await client.aclose()
-
-    media_type = headers.get("content-type", "audio/mp4")
-    return StreamingResponse(
-        _stream_generator(),
-        status_code=upstream.status_code,
-        headers=headers,
-        media_type=media_type,
-    )
-
-
-def _resolve_tidal_stream(p, track_id: str, q_enum: AudioQuality) -> dict:
-    import base64
-    import json
-
-    with p._client() as c:
-        qualities_to_try = [q_enum]
-        if q_enum == getattr(AudioQuality, "HI_RES_LOSSLESS", None):
-            qualities_to_try += [AudioQuality.LOSSLESS, AudioQuality.HIGH, AudioQuality.LOW]
-        elif q_enum == AudioQuality.LOSSLESS:
-            qualities_to_try += [AudioQuality.HIGH, AudioQuality.LOW]
-        elif q_enum == AudioQuality.HIGH:
-            qualities_to_try += [AudioQuality.LOW]
-
-        dash_manifest = None
-        dash_quality = None
-
-        # Prefer direct BTS URLs (byte-range seekable CDN) over DASH chunk concat.
-        for q in qualities_to_try:
-            try:
-                manifest = c.get_playback_manifest(track_id, q)
-                if manifest.manifest_mime_type == "application/vnd.tidal.bts":
-                    raw = base64.b64decode(manifest.manifest)
-                    data = json.loads(raw)
-                    urls = data.get("urls", [])
-                    if urls:
-                        return {"type": "redirect", "url": urls[0], "actual_quality": manifest.audio_quality}
-                if manifest.manifest_mime_type == "application/dash+xml" and dash_manifest is None:
-                    dash_manifest = manifest
-                    dash_quality = manifest.audio_quality
-            except Exception:
-                continue
-
-        if dash_manifest is not None:
-            return {"type": "dash_stream", "manifest": dash_manifest, "actual_quality": dash_quality}
-
-        manifest = c.get_playback_manifest(track_id, AudioQuality.LOW)
-        if manifest.manifest_mime_type == "application/dash+xml":
-            return {"type": "dash_stream", "manifest": manifest, "actual_quality": manifest.audio_quality}
-        cache_dir = Path(tempfile.gettempdir()) / "tidal_stream_cache"
-        tmp_dest = cache_dir / f"{track_id}_{AudioQuality.LOW.name}"
-        final_path = download_track(c._http, manifest, tmp_dest)
-        return {"type": "file", "path": final_path, "actual_quality": manifest.audio_quality}
 
 @router.get("/api/image-proxy")
 async def image_proxy(url: str):
@@ -276,21 +125,51 @@ async def image_proxy(url: str):
         ):
             raise HTTPException(status_code=400, detail="Blocked address")
 
-    # follow_redirects stays off so a 30x can't bounce us to an internal host.
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-        r = await client.get(url)
+    allowed_suffixes = (".tidal.com", ".tidalcdn.com")
+    host = (parsed.hostname or "").lower()
+    if not (host.endswith(allowed_suffixes) or host in ("tidal.com",)):
+        raise HTTPException(status_code=400, detail="Host not allowed")
+
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, max_redirects=5) as client:
+        try:
+            r = await client.get(url)
+        except httpx.HTTPError:
+            raise HTTPException(status_code=502, detail="Upstream image fetch failed")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Upstream image unavailable")
         headers = {
             "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=86400"
+            "Cache-Control": "public, max-age=86400",
         }
-        return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"), headers=headers)
+        return Response(
+            content=r.content,
+            media_type=r.headers.get("content-type", "image/jpeg"),
+            headers=headers,
+        )
+
+
+def _media_type_for_audio_path(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext == ".flac":
+        return "audio/flac"
+    if ext in (".m4a", ".mp4"):
+        return "audio/mp4"
+    if ext == ".mp3":
+        return "audio/mpeg"
+    return "application/octet-stream"
+
 
 @router.get("/api/files/{token}")
 def get_file(token: str) -> FileResponse:
     path: Path | None = verify_file(token)
     if path is None:
         raise HTTPException(status_code=404, detail="file not found or token expired")
-    return FileResponse(path, filename=path.name)
+    return FileResponse(
+        path,
+        filename=path.name,
+        media_type=_media_type_for_audio_path(path),
+    )
+
 
 @router.get("/api/lyrics")
 async def get_lyrics(
@@ -313,7 +192,13 @@ async def get_lyrics(
     resolved_isrc = isrc
     resolved_version = version
 
-    if provider == "tidal" and provider_id:
+    has_lyrics_metadata = bool(
+        resolved_title.strip()
+        and resolved_artist.strip()
+        and (resolved_isrc or resolved_duration)
+    )
+
+    if provider == "tidal" and provider_id and not has_lyrics_metadata:
         p = get_provider_by_name("tidal")
         if p:
             def _enrich():
@@ -321,9 +206,9 @@ async def get_lyrics(
                     return c.get_track(provider_id)
 
             try:
-                tidal_track = await asyncio.wait_for(asyncio.to_thread(_enrich), timeout=10.0)
+                tidal_track = await asyncio.wait_for(asyncio.to_thread(_enrich), timeout=5.0)
                 if tidal_track.artists:
-                    resolved_artist = tidal_track.artists[0].name
+                    resolved_artist = ", ".join(a.name for a in tidal_track.artists if a.name)
                 elif tidal_track.artist:
                     resolved_artist = tidal_track.artist.name
                 resolved_title = tidal_track.title or resolved_title
@@ -362,18 +247,24 @@ async def get_lyrics(
         )
 
     try:
-        lines = await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=18.0)
+        lines = await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=20.0)
     except asyncio.TimeoutError:
         logger.info("Lyrics lookup timed out for %s - %s", resolved_artist, resolved_title)
         lines = []
     return {"lyrics": lines}
 
+
 @router.get("/api/downloads")
-def get_downloads() -> dict[str, str]:
-    return job_state.get_downloaded_registry()
+def get_downloads(current_user: User = Depends(get_current_user)) -> dict[str, str | dict]:
+    return job_state.get_downloaded_registry_for_owner(current_user.id)
+
 
 @router.get("/api/quality/{provider}/{track_id}/available")
-async def get_available_qualities(provider: str, track_id: str):
+async def get_available_qualities(
+    provider: str,
+    track_id: str,
+    current_user: User = Depends(get_media_user),
+):
     """Probe Tidal for every quality tier; used to enable/disable the player switcher."""
     p = get_provider_by_name(provider)
     if not p:
@@ -385,8 +276,8 @@ async def get_available_qualities(provider: str, track_id: str):
             return cached
 
         def _probe():
-            with p._client() as c:
-                return _probe_tidal_qualities(c, track_id)
+            with p._client() as client:
+                return _probe_tidal_qualities(client, track_id, manifest_client=client)
 
         result = await asyncio.to_thread(_probe)
         _probe_cache_set(track_id, result)
@@ -396,49 +287,111 @@ async def get_available_qualities(provider: str, track_id: str):
 
 
 @router.get("/api/quality/{provider}/{track_id}")
-async def get_track_quality(provider: str, track_id: str, quality: str = "HI_RES"):
+async def get_track_quality(
+    provider: str,
+    track_id: str,
+    quality: str = "HI_RES",
+    current_user: User = Depends(get_media_user),
+):
     p = get_provider_by_name(provider)
     if not p:
         raise HTTPException(status_code=400, detail="Provider not found")
 
     if provider == "tidal":
-        try:
-            if quality.upper() == "HI_RES":
-                q_enum = getattr(AudioQuality, "HI_RES_LOSSLESS", AudioQuality.LOSSLESS)
-            else:
-                q_enum = AudioQuality[quality.upper()]
-        except KeyError:
-            q_enum = AudioQuality.LOW
+        ui = cap_stream_quality(quality, current_user.effective_plan)
 
-        def _get_q():
-            with p._client() as c:
-                probe = _probe_tidal_qualities(c, track_id)
-                ui = quality.upper()
-                if ui in probe["actual"]:
-                    return probe["actual"][ui]
-                if ui == "HI_RES" and "HI_RES" in probe["available"]:
-                    return probe["actual"].get("HI_RES", probe["max_quality"])
-                # Fallback: best at or below requested tier
-                req_idx = _UI_QUALITY_ORDER.index(ui) if ui in _UI_QUALITY_ORDER else 0
-                for q in reversed(_UI_QUALITY_ORDER[: req_idx + 1]):
-                    if q in probe["actual"]:
-                        return probe["actual"][q]
-                return probe["actual"].get(probe["max_quality"], AudioQuality.LOW.name)
+        def _get_meta():
+            with p._client() as client:
+                return _delivered_stream_meta(
+                    track_id, ui, current_user.effective_plan, client=client,
+                )
 
-        actual_q = await asyncio.to_thread(_get_q)
-        return {"quality": _qname(actual_q) if not isinstance(actual_q, str) else actual_q.upper()}
+        meta = await asyncio.to_thread(_get_meta)
+        return meta
 
-    return {"quality": quality}
+    return {"quality": quality, "sample_rate": None, "bit_depth": None}
 
-@router.get("/api/stream/{provider}/{track_id}")
-async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_media_user), quality: str = "LOW", bypass_registry: str = "false"):
+
+@router.get("/api/stream/{provider}/{track_id}/ready")
+async def stream_track_ready(
+    provider: str,
+    track_id: str,
+    current_user: User = Depends(get_media_user),
+    quality: str = "LOSSLESS",
+    bypass_registry: str = "false",
+):
+    """Lightweight poll — merged cache exists. Kicks warm on miss (for clients that use this)."""
     if bypass_registry.lower() != "true":
         registry = job_state.get_downloaded_registry()
-        if track_id in registry:
-            full_path = settings.jobs_dir / registry[track_id]
-            if full_path.exists():
-                media_type = "audio/flac" if full_path.suffix.lower() == ".flac" else "audio/mp4"
-                return ranged_file_response(full_path, request, media_type)
+        reg_file = job_state.registry_file_for_quality(registry, track_id, quality)
+        if reg_file is not None:
+            return {"ready": True, "source": "registry"}
+
+    if provider != "tidal":
+        return {"ready": False}
+
+    quality = cap_stream_quality(quality, current_user.effective_plan)
+    q_enum = _quality_to_enum(quality)
+    cache_dir = _stream_cache_dir()
+    merged = _find_merged_dash_file(cache_dir, track_id, q_enum)
+    if merged is not None:
+        return {"ready": True, "source": "cache", "bytes": merged.stat().st_size}
+
+    # Passive poll must still start the merge — otherwise clients spin forever.
+    await warm_stream_track(provider, track_id, current_user, quality)
+    return {"ready": False}
+
+
+@router.post("/api/stream/{provider}/{track_id}/warm")
+async def warm_stream_track(
+    provider: str,
+    track_id: str,
+    current_user: User = Depends(get_media_user),
+    quality: str = "LOSSLESS",
+):
+    """Begin DASH cache fill before playback (lossless only — BTS needs no warm)."""
+    p = get_provider_by_name(provider)
+    if not p:
+        raise HTTPException(status_code=400, detail="Provider not found")
+    if provider != "tidal":
+        return {"status": "noop", "mode": "unsupported"}
+
+    quality = cap_stream_quality(quality, current_user.effective_plan)
+    q_enum = _quality_to_enum(quality)
+    cache_dir = _stream_cache_dir()
+
+    try:
+        dash = await _resolve_dash_stream_cached(
+            p, track_id, q_enum, cache_dir, current_user.effective_plan,
+        )
+    except Exception as exc:
+        logger.debug("warm resolve failed track=%s: %s", track_id, exc)
+        return {"status": "unavailable"}
+
+    res = dash["res"]
+    if res["type"] == "redirect":
+        cache_path = _bts_cache_path(cache_dir, track_id, q_enum, res["url"])
+        _schedule_bts_warm(res["url"], cache_path)
+        if _requires_full_file_before_play(q_enum):
+            return {"status": "warming", "mode": "bts_cache"}
+        return {"status": "warming", "mode": "bts_progressive"}
+    if res["type"] != "dash_stream":
+        return {"status": "noop", "mode": res["type"]}
+
+    _schedule_dash_warm(
+        dash["urls"], dash["tmp_path"], dash["fmp4_path"], dash["final_path"],
+    )
+    return {"status": "warming", "mode": "dash_stream"}
+
+
+@router.get("/api/stream/{provider}/{track_id}")
+async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_media_user), quality: str = "HIGH", bypass_registry: str = "false"):
+    if bypass_registry.lower() != "true":
+        registry = job_state.get_downloaded_registry()
+        reg_file = job_state.registry_file_for_quality(registry, track_id, quality)
+        if reg_file is not None:
+            media_type = "audio/flac" if reg_file.suffix.lower() == ".flac" else "audio/mp4"
+            return ranged_file_response(reg_file, request, media_type)
 
     p = get_provider_by_name(provider)
     if not p:
@@ -446,60 +399,109 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
 
     if provider == "tidal":
         quality = cap_stream_quality(quality, current_user.effective_plan)
+        q_enum = _quality_to_enum(quality)
+
+        cache_dir = _stream_cache_dir()
+
         try:
-            if quality.upper() == "HI_RES":
-                q_enum = getattr(AudioQuality, "HI_RES_LOSSLESS", AudioQuality.LOSSLESS)
-            else:
-                q_enum = AudioQuality[quality.upper()]
-        except KeyError:
-            q_enum = AudioQuality.LOW
+            merged = _find_merged_dash_file(cache_dir, track_id, q_enum)
+            if merged is not None:
+                return ranged_file_response(
+                    merged, request, _dash_file_media_type(merged),
+                )
 
-        cache_dir = Path(tempfile.gettempdir()) / "tidal_stream_cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        lock = stream_locks[track_id]
-        try:
-            async with lock:
-                for ext in [".m4a", ".flac", ".mp4", ".eac3"]:
-                    cached_file = cache_dir / f"{track_id}_{q_enum.name}{ext}"
-                    if cached_file.exists():
-                        media_type = "audio/flac" if ext == ".flac" else "audio/mp4"
-                        return ranged_file_response(cached_file, request, media_type)
-
-                res = await asyncio.to_thread(_resolve_tidal_stream, p, track_id, q_enum)
-
-            aq = res.get("actual_quality")
+            dash = await _resolve_dash_stream_cached(
+                p, track_id, q_enum, cache_dir, current_user.effective_plan,
+            )
+            res = dash["res"]
+            aq = dash.get("actual_quality") or res.get("actual_quality")
             quality_hdr = {"X-Actual-Quality": getattr(aq, "name", str(aq))} if aq else {}
+            manifest = res.get("manifest") if res.get("type") == "dash_stream" else None
+            if manifest is not None and manifest.sample_rate:
+                quality_hdr["X-Sample-Rate"] = str(manifest.sample_rate)
+            if manifest is not None and manifest.bit_depth:
+                quality_hdr["X-Bit-Depth"] = str(manifest.bit_depth)
+
+            stream_mode = res["type"]
+            quality_hdr["X-Stream-Mode"] = stream_mode
+            logger.info(
+                "stream track=%s quality=%s mode=%s user_plan=%s",
+                track_id,
+                quality,
+                stream_mode,
+                current_user.effective_plan,
+            )
 
             if res["type"] == "redirect":
-                return await _proxy_bts_stream(res["url"], request, quality_hdr)
+                if _requires_full_file_before_play(q_enum):
+                    cache_path = _bts_cache_path(cache_dir, track_id, q_enum, res["url"])
+                    serve_path = await _ensure_bts_cache(res["url"], cache_path)
+                    return ranged_file_response(
+                        serve_path,
+                        request,
+                        _dash_file_media_type(serve_path),
+                        quality_hdr,
+                    )
+                return await _serve_bts_progressive(
+                    res["url"],
+                    _bts_cache_path(cache_dir, track_id, q_enum, res["url"]),
+                    request,
+                    quality_hdr,
+                )
 
             if res["type"] == "dash_stream":
-                from tidal_dl_ru.providers.tidal.download import (
-                    _decode_manifest,
-                    _stream_urls_from_dash,
-                    extension_for,
-                )
-
-                decoded = _decode_manifest(res["manifest"])
-                urls, codecs = _stream_urls_from_dash(decoded)
-                ext = extension_for(codecs, res["manifest"].manifest_mime_type)
-                cache_key = getattr(aq, "name", str(aq)).upper() if aq else q_enum.name
-                final_path = cache_dir / f"{track_id}_{cache_key}{ext}"
-                tmp_path = final_path.with_suffix(final_path.suffix + ".part")
-                media_type = "audio/flac" if ext == ".flac" else "audio/mp4"
+                urls = dash["urls"]
+                tmp_path = dash["tmp_path"]
+                fmp4_path = dash["fmp4_path"]
+                final_path = dash["final_path"]
+                file_media_type = dash["file_media_type"]
 
                 serve_path = await _ensure_dash_cache(
-                    urls, tmp_path, final_path, _range_bytes_needed(request)
+                    urls,
+                    tmp_path,
+                    fmp4_path,
+                    final_path,
+                    _dash_stream_bytes_needed(request),
                 )
-                return ranged_file_response(serve_path, request, media_type, quality_hdr)
+                if not serve_path.is_file() or serve_path in (tmp_path, fmp4_path):
+                    record_stream_error("not_ready")
+                    raise HTTPException(
+                        status_code=503,
+                        detail=_api_detail("stream_not_ready", "Stream not ready"),
+                    )
+                return ranged_file_response(
+                    serve_path,
+                    request,
+                    _dash_file_media_type(serve_path),
+                    quality_hdr,
+                )
 
             media_type = "audio/flac" if str(res["path"]).endswith(".flac") else "audio/mp4"
             return ranged_file_response(Path(res["path"]), request, media_type, quality_hdr)
         except HTTPException:
             raise
+        except TidalStreamUnavailable as e:
+            logger.info("Streaming error: %s", e)
+            record_stream_error("rate_limited" if e.rate_limited else "failed")
+            if e.rate_limited:
+                raise HTTPException(
+                    status_code=503,
+                    detail=_api_detail(
+                        "tidal_rate_limited",
+                        "Tidal is rate limiting playback — retry in a few seconds",
+                    ),
+                    headers={"Retry-After": "2"},
+                ) from e
+            raise HTTPException(
+                status_code=503,
+                detail=_api_detail("stream_failed", "Could not prepare stream"),
+            ) from e
         except Exception as e:
             logger.info(f"Streaming error: {e}")
-            raise HTTPException(status_code=500, detail="Internal Server Error")
+            record_stream_error("failed")
+            raise HTTPException(
+                status_code=503,
+                detail=_api_detail("stream_failed", "Could not prepare stream"),
+            ) from e
 
     raise HTTPException(status_code=400, detail="Streaming not supported for this provider")

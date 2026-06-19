@@ -1,23 +1,39 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { appDict } from '../locales/appDict';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { fetchLyricsForTrack, getCachedLyrics, getActiveLyricIndex } from '../utils/lyrics';
+import {
+  fetchLyricsForTrack,
+  getCachedLyrics,
+  invalidateLyricsEmptyCache,
+} from '../utils/lyrics';
+import { useLyricsActiveIndex } from '../hooks/useLyricsActiveIndex';
 
-export default function LyricsView({ currentTrack, audioRef, onClose }) {
+export default function LyricsView({
+  currentTrack,
+  audioRef,
+  getMainAudioEl,
+  progress = 0,
+  onClose,
+  lang = 'en',
+}) {
+  const t = useMemo(() => (k) => appDict[lang]?.[k] || appDict.en[k] || k, [lang]);
   const [lyrics, setLyrics] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeIdx, setActiveIdx] = useState(-1);
-  const activeIdxRef = useRef(-1);
   const containerRef = useRef(null);
+  const activeIdx = useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progress });
 
   useEffect(() => {
     if (!currentTrack) return;
 
     const cached = getCachedLyrics(currentTrack);
-    if (cached !== null) {
+    if (cached !== null && cached.length > 0) {
       setLyrics(cached);
       setIsLoading(false);
       return;
+    }
+    if (cached !== null && cached.length === 0) {
+      invalidateLyricsEmptyCache(currentTrack);
     }
 
     let cancelled = false;
@@ -39,43 +55,28 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
   }, [currentTrack]);
 
   useEffect(() => {
-    if (lyrics.length > 0) {
-      activeIdxRef.current = 0;
-      setActiveIdx(0);
-    }
-  }, [lyrics]);
-
-  useEffect(() => {
-    if (lyrics.length === 0 || !audioRef?.current) return;
-
-    let rafId;
-    const update = () => {
-      if (audioRef.current) {
-        const newIdx = getActiveLyricIndex(lyrics, audioRef.current.currentTime);
-        if (newIdx !== activeIdxRef.current) {
-          activeIdxRef.current = newIdx;
-          setActiveIdx(newIdx);
-        }
-      }
-      rafId = requestAnimationFrame(update);
-    };
-    rafId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(rafId);
-  }, [lyrics, audioRef]);
-
-  useEffect(() => {
     if (activeIdx >= 0 && containerRef.current) {
       const activeEl = containerRef.current.children[activeIdx];
       if (activeEl) {
-        const containerCenter = containerRef.current.clientHeight / 2;
-        const scrollTarget = activeEl.offsetTop - containerCenter + (activeEl.clientHeight / 2);
-        containerRef.current.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+        const container = containerRef.current;
+        const pad = 56;
+        let scrollTarget;
+        if (activeIdx <= 1) {
+          scrollTarget = Math.max(0, activeEl.offsetTop - pad);
+        } else {
+          const containerCenter = container.clientHeight / 2;
+          scrollTarget = activeEl.offsetTop - containerCenter + (activeEl.clientHeight / 2);
+        }
+        container.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
       }
     }
   }, [activeIdx]);
 
   return (
     <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('lyricsPanelTitle')}
       initial={{ y: '100%' }}
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
@@ -94,7 +95,9 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
       }}
     >
       <button
+        type="button"
         onClick={onClose}
+        aria-label={t('lyricsClose')}
         style={{
           position: 'absolute',
           top: '24px',
@@ -124,15 +127,15 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
             maxWidth: '800px',
             overflowY: 'auto',
             textAlign: 'center',
-            paddingBottom: '50vh',
+            padding: '40vh 0',
             scrollBehavior: 'smooth',
           }}
           className="hide-scrollbar"
         >
           {isLoading ? (
-            <div style={{ fontSize: '2rem', color: 'var(--text-muted)' }}>Searching for lyrics...</div>
+            <div style={{ fontSize: '2rem', color: 'var(--text-muted)' }}>{t('lyricsLoading')}</div>
           ) : lyrics.length === 0 ? (
-            <div style={{ fontSize: '2rem', color: 'var(--text-muted)' }}>No synced lyrics found</div>
+            <div style={{ fontSize: '2rem', color: 'var(--text-muted)' }}>{t('lyricsEmpty')}</div>
           ) : (
             lyrics.map((line, idx) => {
               const isActive = activeIdx === idx;
@@ -141,17 +144,31 @@ export default function LyricsView({ currentTrack, audioRef, onClose }) {
                   key={idx}
                   data-testid={isActive ? 'lyric-line-active' : `lyric-line-${idx}`}
                   style={{
-                    fontSize: isActive ? 'clamp(2rem, 8vw, 3.5rem)' : 'clamp(1.5rem, 6vw, 2.5rem)',
-                    fontWeight: 700,
-                    color: isActive ? 'white' : 'var(--text-muted)',
-                    opacity: isActive ? 1 : 0.5,
                     marginBottom: '32px',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    textShadow: isActive ? '0 0 40px rgba(255,255,255,0.2)' : 'none',
-                    lineHeight: 1.2,
+                    minHeight: 'clamp(2.8rem, 7vw, 4.2rem)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 12px',
                   }}
                 >
-                  {line.text}
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      fontSize: 'clamp(1.5rem, 5vw, 2.4rem)',
+                      fontWeight: 700,
+                      color: isActive ? 'white' : 'var(--text-muted)',
+                      opacity: isActive ? 1 : 0.5,
+                      transform: isActive ? 'scale(1.12)' : 'scale(1)',
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, color 0.3s ease',
+                      textShadow: isActive ? '0 0 40px rgba(255,255,255,0.2)' : 'none',
+                      lineHeight: 1.25,
+                      maxWidth: '100%',
+                    }}
+                  >
+                    {line.text}
+                  </span>
                 </div>
               );
             })

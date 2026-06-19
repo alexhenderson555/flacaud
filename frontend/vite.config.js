@@ -27,20 +27,20 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'FlacAudio DJ Player',
-        short_name: 'FlacAudio',
+        name: 'FlacAud',
+        short_name: 'FlacAud',
         theme_color: '#0a0a10',
         background_color: '#0a0a10',
         display: 'standalone',
         start_url: '/',
         icons: [
           {
-            src: '/logo.png',
+            src: '/flacaud_logo.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/logo.png',
+            src: '/flacaud_logo.png',
             sizes: '512x512',
             type: 'image/png'
           }

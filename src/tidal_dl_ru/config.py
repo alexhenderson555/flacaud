@@ -5,14 +5,15 @@ from pathlib import Path
 
 from platformdirs import user_config_dir, user_downloads_dir
 
-APP_NAME = "tidal-dl-ru"
+APP_NAME = "FlacAud"
 
-CONFIG_DIR = Path(user_config_dir(APP_NAME))
+# Stable config directory id — must match docker volume `pool-data:/root/.config/tidal-dl-ru`.
+CONFIG_DIR = Path(user_config_dir("tidal-dl-ru"))
 TOKENS_FILE = CONFIG_DIR / "tokens.json"
 POOL_DB_FILE = CONFIG_DIR / "pool.db"
 POOL_KEY_FILE = CONFIG_DIR / "pool.key"
 
-DEFAULT_DOWNLOAD_DIR = Path(user_downloads_dir()) / "TidalDL"
+DEFAULT_DOWNLOAD_DIR = Path(user_downloads_dir()) / "FlacAud"
 
 # Tidal PKCE client (Android, from tidalapi / python-tidal).
 # Grants full LOSSLESS / HI_RES access on HiFi Plus subscriptions.

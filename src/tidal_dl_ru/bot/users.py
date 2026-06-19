@@ -19,6 +19,8 @@ class Plan(str, Enum):
     FREE = "free"
     BASIC = "basic"
     PRO = "pro"
+    BASIC_ANNUAL = "basic_annual"
+    PRO_ANNUAL = "pro_annual"
     LIFETIME = "lifetime"
 
 
@@ -27,12 +29,16 @@ PLAN_LIMITS = {
     Plan.FREE: 3,
     Plan.BASIC: 50,
     Plan.PRO: 200,
+    Plan.BASIC_ANNUAL: 50,
+    Plan.PRO_ANNUAL: 200,
     Plan.LIFETIME: 200,
 }
 
 PLAN_PRICES = {
     Plan.BASIC: "199₽/мес",
     Plan.PRO: "399₽/мес",
+    Plan.BASIC_ANNUAL: "1910₽/год",
+    Plan.PRO_ANNUAL: "3830₽/год",
     Plan.LIFETIME: "4990₽ навсегда",
 }
 

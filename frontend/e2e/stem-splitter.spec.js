@@ -1,15 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { routeAuthMe } from './helpers.js';
+import { installE2EAuth } from './helpers.js';
 
 test('stem splitter starts job and shows stems when done', async ({ page }) => {
   const jobId = `e2e-stem-${Date.now()}`;
 
-  await routeAuthMe(page);
-
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-stem');
-    window.__E2E_DISABLE_AUTOSAVE__ = true;
-  });
+  await installE2EAuth(page, { token: 'e2e-stem' });
 
   await page.route('**/api/jobs', async (route) => {
     if (route.request().method() === 'POST') {

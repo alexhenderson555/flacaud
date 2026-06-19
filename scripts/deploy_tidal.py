@@ -1,31 +1,55 @@
 #!/usr/bin/env python3
-"""Deploy tidal-dl-ru ONLY to 46.17.102.157 (proshli.ru). Never touches VPN on 151.
+"""Deploy FlacAud to production (flacaud.ru). Never touches VPN on 151.
 
 Usage:
   set TIDAL_SSH_PASSWORD=...
+  set TIDAL_HOST or DEPLOY_HOST in .env
   python scripts/deploy_tidal.py
-
-Uses DEPLOY_HOST from env/.env if set, else 46.17.102.157.
 """
 from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
-# Never run VPN maintenance from this entrypoint
-os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST", "46.17.102.157"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env", override=True)
+except ImportError:
+    pass
+
+sys.path.insert(0, str(ROOT / "scripts"))
+from _ops_env import tidal_host  # noqa: E402
+
+os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST") or tidal_host(required=False) or "")
 os.environ.pop("VPN_FIX", None)
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-
-from scripts.repair_servers import deploy_tidal_server, smoke_tidal  # noqa: E402
+from scripts.repair_servers import (  # noqa: E402
+    deploy_tidal_server,
+    smoke_tidal,
+    verify_password_reset_mail_ready,
+)
 
 
 def main() -> None:
-    print(f"Deploy tidal only -> {os.environ.get('TIDAL_HOST', '46.17.102.157')} (VPN host NOT contacted)")
+    host = os.environ.get("TIDAL_HOST") or tidal_host()
+    tag = (os.environ.get("FLACAUD_TAG") or "").strip() or "auto"
+    print(f"Deploy tidal only -> {host} (VPN 151.x NOT contacted; VPN_FIX ignored)")
+    print(f"Registry mode enabled (FLACAUD_TAG={tag})")
+    if os.environ.get("VPN_FIX"):
+        print("Note: VPN_FIX is set but deploy_tidal.py never calls fix_vpn_server().")
+    if os.environ.get("VPN_SSH_PASSWORD"):
+        from scripts.check_vpn import main as check_vpn  # noqa: PLC0415
+
+        print("Pre-deploy read-only VPN check…")
+        check_vpn()
     deploy_tidal_server()
     smoke_tidal()
+    verify_password_reset_mail_ready()
     print("Tidal deploy complete.")
 
 

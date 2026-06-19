@@ -6,6 +6,8 @@ import { Search as SearchIcon, Download, Mic, Play, Pause, Heart, Zap, ImagePlus
 import { cacheAudioTrack } from '../utils/cache';
 import PlaylistModal from '../components/PlaylistModal';
 import { suggestSearchCorrection, fixKeyboardLayout } from '../utils/searchQueryFix';
+import { tracksForPlaylistApi } from '../utils/playlistApi';
+import { getAccessToken } from '../utils/tokenStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const dict = {
@@ -28,6 +30,7 @@ const dict = {
     genMore: 'Generate 10 More',
     aiDesc: 'Let AI curate the perfect 10-track playlist based on your mood or prompt.',
     saveAiPlaylist: 'Save Playlist to Library',
+    saveSearchPlaylist: 'Save results as playlist',
     loadMore: 'Load more',
     didYouMean: 'Did you mean',
     searching: 'Searching…',
@@ -50,6 +53,7 @@ const dict = {
     btnGenerating: 'Генерация...',
     aiDesc: 'ИИ соберет идеальный плейлист из 10 треков по вашему описанию.',
     saveAiPlaylist: 'Сохранить плейлист',
+    saveSearchPlaylist: 'Сохранить результаты в плейлист',
     loadMore: 'Ещё',
     didYouMean: 'Возможно, вы имели в виду',
     searching: 'Поиск…',
@@ -126,6 +130,55 @@ function Search() {
 
   const togglePlay = (track, playlistContext = null) => {
     playerContextTogglePlay(track, playlistContext);
+  };
+
+  const getAuthToken = () => getAccessToken() || localStorage.getItem('tidal-token') || '';
+
+  const saveTracksAsPlaylist = async (tracks, name) => {
+    const token = getAuthToken();
+    if (!tracks?.length || !token) {
+      showToast(lang === 'ru' ? 'Войдите, чтобы сохранить плейлист' : 'Sign in to save playlist');
+      return;
+    }
+    const res = await fetch('/api/playlists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name }),
+    });
+    const created = await res.json();
+    if (!res.ok) throw new Error(created.detail || 'Failed to create playlist');
+    const update = await fetch(`/api/playlists/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ tracks: tracksForPlaylistApi(tracks) }),
+    });
+    if (!update.ok) {
+      const err = await update.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to save tracks');
+    }
+    showToast(lang === 'ru' ? 'Плейлист сохранён' : 'Playlist saved');
+  };
+
+  const saveSearchResultsAsPlaylist = async () => {
+    const trimmed = query.trim();
+    const name = trimmed
+      ? (lang === 'ru' ? `Поиск: ${trimmed}` : `Search: ${trimmed}`)
+      : (lang === 'ru' ? 'Результаты поиска' : 'Search results');
+    try {
+      await saveTracksAsPlaylist(realResults, name);
+    } catch (err) {
+      showToast(err.message || (lang === 'ru' ? 'Не удалось сохранить' : 'Save failed'));
+    }
+  };
+
+  const saveAiResultsAsPlaylist = async () => {
+    const trimmed = aiQuery.trim();
+    const name = trimmed ? `${trimmed} Mix` : (lang === 'ru' ? 'ИИ микс' : 'AI Mix');
+    try {
+      await saveTracksAsPlaylist(aiResults, name);
+    } catch (err) {
+      showToast(err.message || (lang === 'ru' ? 'Не удалось сохранить' : 'Save failed'));
+    }
   };
 
   useEffect(() => {
@@ -547,7 +600,21 @@ function Search() {
           transition={{ duration: 0.4 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px' }}
         >
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>{t('results')}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: 0 }}>{t('results')}</h2>
+            {realResults.length > 0 && (
+              <button
+                type="button"
+                className="btn-secondary"
+                data-testid="save-search-playlist-btn"
+                onClick={saveSearchResultsAsPlaylist}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 16px' }}
+              >
+                <Plus size={16} aria-hidden />
+                {t('saveSearchPlaylist')}
+              </button>
+            )}
+          </div>
           {querySuggestion && (
             <button
               type="button"
@@ -654,7 +721,12 @@ function Search() {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{aiQuery} Mix</h2>
-            <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 24px', background: 'var(--accent-gradient)' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={saveAiResultsAsPlaylist}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 24px', background: 'var(--accent-gradient)' }}
+            >
               <Heart size={16} /> {t('saveAiPlaylist')}
             </button>
           </div>

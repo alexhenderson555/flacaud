@@ -114,6 +114,18 @@ class TidalClient:
             types="TRACKS",
         )
 
+    def search_artists(self, query: str, limit: int = 10, offset: int = 0) -> list[Artist]:
+        data = self._get(
+            "/search",
+            query=query,
+            limit=limit,
+            offset=offset,
+            types="ARTISTS",
+        )
+        block = data.get("artists", {})
+        items = block.get("items", [])
+        return [Artist.model_validate(it) for it in items]
+
     def get_track(self, track_id: str | int) -> Track:
         data = self._get(f"/tracks/{track_id}")
         return Track.model_validate(data)
@@ -125,6 +137,12 @@ class TidalClient:
     def get_album_tracks(self, album_id: str | int) -> list[Track]:
         data = self._get(f"/albums/{album_id}/tracks", limit=999)
         return [Track.model_validate(item) for item in data.get("items", [])]
+
+    def get_playlist(self, playlist_uuid: str):
+        from tidal_dl_ru.providers.tidal.models import Playlist
+
+        data = self._get(f"/playlists/{playlist_uuid}")
+        return Playlist.model_validate(data)
 
     def get_playlist_tracks(self, playlist_uuid: str) -> list[Track]:
         items: list[Track] = []
@@ -154,6 +172,65 @@ class TidalClient:
         data = self._get(f"/artists/{artist_id}/toptracks", limit=20)
         return [Track.model_validate(item) for item in data.get("items", [])]
 
+    def get_similar_artists(self, artist_id: str | int, limit: int = 20) -> list[Artist]:
+        """Artists in a similar style (not the same artist's top tracks)."""
+        data = self._get(f"/artists/{artist_id}/similar", limit=limit)
+        return [Artist.model_validate(item) for item in data.get("items", [])]
+
+    def _items_to_tracks(self, data: dict) -> list[Track]:
+        items = data.get("items") or data.get("tracks") or []
+        out: list[Track] = []
+        for entry in items:
+            raw = entry.get("item") if isinstance(entry, dict) and "item" in entry else entry
+            if not isinstance(raw, dict):
+                continue
+            try:
+                out.append(Track.model_validate(raw))
+            except Exception:
+                continue
+        return out
+
+    def get_track_radio(self, track_id: str | int, limit: int = 30) -> list[Track]:
+        """Tidal track radio — style-matched succession."""
+        data = self._get(f"/tracks/{track_id}/radio", limit=limit)
+        return self._items_to_tracks(data)
+
+    def get_artist_radio(self, artist_id: str | int, limit: int = 30) -> list[Track]:
+        """Tidal artist radio station (style blend, not top-hits list)."""
+        try:
+            data = self._get(f"/artists/{artist_id}/radio", limit=limit)
+            return self._items_to_tracks(data)
+        except httpx.HTTPStatusError:
+            return []
+
+    def get_similar_tracks(self, track_id: str | int, limit: int = 30) -> list[Track]:
+        for path in (f"/tracks/{track_id}/similarTracks", f"/tracks/{track_id}/similar"):
+            try:
+                data = self._get(path, limit=limit)
+                parsed = self._items_to_tracks(data)
+                if parsed:
+                    return parsed
+            except httpx.HTTPStatusError:
+                continue
+        return []
+
+    def get_track_mix_tracks(self, track_id: str | int, limit: int = 30) -> list[Track]:
+        """Editorial TRACK_MIX playlist for a seed track."""
+        meta = self._get(f"/tracks/{track_id}")
+        mixes = meta.get("mixes") or {}
+        mix_id = mixes.get("TRACK_MIX") or mixes.get("trackMix")
+        if not mix_id:
+            return []
+        for path in (f"/mixes/{mix_id}/items", f"/mixes/{mix_id}/tracks"):
+            try:
+                data = self._get(path, limit=limit)
+                parsed = self._items_to_tracks(data)
+                if parsed:
+                    return parsed
+            except httpx.HTTPStatusError:
+                continue
+        return []
+
     def search_by_isrc(self, isrc: str) -> Optional[Track]:
         """Find a track by ISRC. Returns None if not found."""
         data = self._get("/search", query=isrc, limit=1, types="TRACKS")
@@ -164,7 +241,7 @@ class TidalClient:
         track = Track.model_validate(items[0])
         if track.isrc and track.isrc.upper() == isrc.upper():
             return track
-        return track  # Best match even if ISRC doesn't match exactly.
+        return None
 
     # ---- streams ----
 

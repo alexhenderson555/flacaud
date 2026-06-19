@@ -41,6 +41,7 @@ class Track(TidalModel):
     duration: int
     track_number: int = Field(alias="trackNumber")
     volume_number: int = Field(default=1, alias="volumeNumber")
+    stream_start_date: Optional[str] = Field(default=None, alias="streamStartDate")
     isrc: Optional[str] = None
     explicit: bool = False
     artist: Optional[Artist] = None

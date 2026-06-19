@@ -31,11 +31,33 @@ alex.txt
 logs.txt
 remote_*.txt
 tidal_login_url.txt
+deploy-log*.txt
+probe_out.txt
+_*.txt
+_device_flow.json
 
 # Frontend test artifacts
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
+frontend/dist-before-jun18-exact/
+frontend/dist-jun18-exact/
+frontend/dist-pre-rollback/
+frontend/dist-recovered/
+.coverage
+Account-mbDUfmE7.js
+old_bundle.js
+check.js
+coverr.js
+scrape.js
+recovery.js
+recovered_*.js
+restored_*.jsx
+scratch_*.js
+deploy-*.txt
+matches.txt
+new_universe.txt
+pytest-last.txt
 
 # Legacy insecure deploy script (removed — use scripts/deploy.py)
 deploy_fast.py

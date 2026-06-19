@@ -47,6 +47,88 @@ class TestJobsRequireAuth:
         assert client.get("/api/jobs/whatever/zip").status_code == 401
 
 
+class TestJobHistory:
+    def test_mine_requires_auth(self):
+        assert client.get("/api/jobs/mine").status_code == 401
+
+    def test_mine_lists_owner_jobs(self, monkeypatch):
+        app.dependency_overrides[get_current_user] = lambda: _user(5)
+        monkeypatch.setattr(
+            job_state,
+            "list_jobs_for_owner",
+            lambda uid, limit=40: [
+                JobStatus(
+                    job_id="j1",
+                    owner_id=uid,
+                    job_type="download",
+                    status="done",
+                    quality="LOSSLESS",
+                    created_at=1.0,
+                    updated_at=2.0,
+                    total_tracks=1,
+                    done_tracks=1,
+                    tracks=[],
+                )
+            ],
+        )
+        r = client.get("/api/jobs/mine")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert data[0]["job_id"] == "j1"
+
+
+class TestJobCancel:
+    def test_cancel_requires_auth(self):
+        assert client.post("/api/jobs/abc/cancel").status_code == 401
+
+    def test_cancel_analyze_set(self, monkeypatch):
+        states = {
+            "abc": JobStatus(
+                job_id="abc",
+                owner_id=1,
+                job_type="analyze_set",
+                status="running",
+                created_at=0.0,
+                updated_at=0.0,
+            )
+        }
+
+        def _load(jid):
+            return states.get(jid)
+
+        def _mark_cancelled(jid, reason="Cancelled by user"):
+            s = states.get(jid)
+            if s is None or s.status in ("done", "failed", "cancelled"):
+                return False
+            s.status = "cancelled"
+            return True
+
+        monkeypatch.setattr(job_state, "load", _load)
+        monkeypatch.setattr(job_state, "mark_cancelled", _mark_cancelled)
+        app.dependency_overrides[get_current_user] = lambda: _user(1)
+
+        r = client.post("/api/jobs/abc/cancel")
+        assert r.status_code == 200
+        assert r.json()["status"] == "cancelled"
+
+    def test_cancel_rejects_download_jobs(self, monkeypatch):
+        monkeypatch.setattr(
+            job_state,
+            "load",
+            lambda jid: JobStatus(
+                job_id=jid,
+                owner_id=1,
+                job_type="download",
+                status="running",
+                created_at=0.0,
+                updated_at=0.0,
+            ),
+        )
+        app.dependency_overrides[get_current_user] = lambda: _user(1)
+        assert client.post("/api/jobs/abc/cancel").status_code == 400
+
+
 class TestJobOwnership:
     def test_other_users_job_is_forbidden(self, monkeypatch):
         _stub_job(monkeypatch, owner_id=1)

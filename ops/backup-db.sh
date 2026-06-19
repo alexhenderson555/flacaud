@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
-# Backup SQLite user DB from the running api container.
+# Backup SQLite or Postgres user DB from the running api container.
 set -euo pipefail
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/tidal-dl-ru}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/tidal-dl-ru}"
 mkdir -p "$BACKUP_DIR"
 cd "$DEPLOY_PATH"
-docker compose exec -T api cat /var/lib/tidal-dl-ru/db/flacaudio.db > "$BACKUP_DIR/flacaudio-$STAMP.db"
-echo "Saved $BACKUP_DIR/flacaudio-$STAMP.db"
+
+COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+
+if grep -q '^DATABASE_URL=postgresql' .env 2>/dev/null; then
+  echo "Postgres mode — pg_dump via postgres service"
+  docker compose -f docker-compose.yml -f docker-compose.postgres.yml exec -T postgres \
+    pg_dump -U "${POSTGRES_USER:-tidal}" "${POSTGRES_DB:-tidaldl}" \
+    > "$BACKUP_DIR/tidaldl-$STAMP.sql"
+  echo "Saved $BACKUP_DIR/tidaldl-$STAMP.sql"
+else
+  $COMPOSE exec -T api cat /var/lib/tidal-dl-ru/db/flacaudio.db > "$BACKUP_DIR/flacaudio-$STAMP.db"
+  echo "Saved $BACKUP_DIR/flacaudio-$STAMP.db"
+fi

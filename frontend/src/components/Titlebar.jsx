@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BRAND_NAME } from '../brand';
 
 export default function Titlebar() {
   const [isTauri, setIsTauri] = useState(false);
@@ -67,7 +68,7 @@ export default function Titlebar() {
         />
       </div>
       <div data-tauri-drag-region style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-        FlacAudio
+        {BRAND_NAME}
       </div>
     </div>
   );

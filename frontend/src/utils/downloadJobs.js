@@ -1,5 +1,8 @@
 /** Track server download jobs shown in DownloadToast (bottom-right). */
 
+import { apiGetJson, apiPostJson } from './apiClient';
+import { prefetchAudioToCache } from './cache';
+
 const QUEUE_KEY = 'tidal-queue-jobs';
 // Jobs whose finished file was already auto-saved to the user's machine. Persisted
 // in localStorage so a reload or re-login never re-downloads what already completed.
@@ -79,10 +82,21 @@ export function removeDownloadJob(jobId) {
 export async function retryDownloadJob(jobMeta) {
   if (!jobMeta?.provider_id && !jobMeta?.url) return null;
   const url = jobMeta.url || `https://tidal.com/track/${jobMeta.provider_id}`;
-  return startDownloadJob({ url, quality: jobMeta.quality || 'LOSSLESS' });
+  return startDownloadJob({
+    url,
+    quality: jobMeta.quality || 'LOSSLESS',
+    track: jobMeta.provider_id
+      ? { provider: jobMeta.provider || 'tidal', provider_id: jobMeta.provider_id }
+      : null,
+  });
 }
 
-export async function startDownloadJob({ url, quality = 'LOSSLESS', jobType = 'download' }) {
+export async function startDownloadJob({
+  url,
+  quality = 'LOSSLESS',
+  jobType = 'download',
+  track = null,
+}) {
   const token = localStorage.getItem('tidal-token') || '';
   const res = await fetch('/api/jobs', {
     method: 'POST',
@@ -94,5 +108,30 @@ export async function startDownloadJob({ url, quality = 'LOSSLESS', jobType = 'd
     throw new Error(data.detail || 'Failed to start download');
   }
   enqueueDownloadJob(data.job_id);
+  if (track?.provider_id) {
+    void prefetchAudioToCache(
+      { ...track, provider: track.provider || 'tidal' },
+      quality,
+    );
+  }
   return data;
+}
+
+export async function cancelJob(jobId, lang = 'en') {
+  return apiPostJson(`/api/jobs/${jobId}/cancel`, {}, { auth: true, lang });
+}
+
+export const DOWNLOAD_REGISTRY_REFRESH = 'tidal-download-registry-refresh';
+
+export const DOWNLOAD_JOB_STARTED = new EventTarget();
+export function requestDownloadRegistryRefresh() {
+  DOWNLOAD_JOB_STARTED.dispatchEvent(new Event('refresh'));
+  window.dispatchEvent(new Event(DOWNLOAD_REGISTRY_REFRESH));
+}
+export async function fetchJobStatus(jobId) {
+  try {
+    return await apiGetJson(`/api/jobs/${jobId}`, { auth: true });
+  } catch {
+    return null;
+  }
 }

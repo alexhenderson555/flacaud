@@ -1,0 +1,38 @@
+groups:
+  - name: flacaud
+    rules:
+      - alert: FlacAudHealthDown
+        expr: flacaud_health_ok == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: FlacAud /healthz reports unhealthy
+          description: Database or Redis check failed for 2+ minutes.
+
+      - alert: FlacAudDiskHigh
+        expr: flacaud_disk_used_ratio > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: FlacAud disk usage above 85%
+          description: Stream cache or job volume may need cleanup.
+
+      - alert: FlacAudStreamErrorsHigh
+        expr: increase(flacaud_stream_errors_total[15m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Elevated stream errors
+          description: More than 50 stream errors in 15 minutes.
+
+      - alert: FlacAudTidalPoolLow
+        expr: flacaud_tidal_pool_healthy < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tidal token pool unhealthy
+          description: No healthy Tidal accounts in pool — streaming may fail.

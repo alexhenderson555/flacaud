@@ -1,4 +1,4 @@
-"""Async HTTP client for the tidal-dl-ru FastAPI backend."""
+"""Async HTTP client for the FlacAud FastAPI backend."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class APIClient:
         self,
         url: str,
         quality: str = "LOSSLESS",
-        lyrics: bool = True,
+        lyrics: bool = False,
         karaoke: bool = False,
         dj_analyze: bool = False,
         match_tidal: bool = False,

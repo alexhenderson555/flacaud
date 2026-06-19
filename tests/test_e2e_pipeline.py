@@ -84,9 +84,14 @@ class _StubProvider:
 
 
 def _install_provider(monkeypatch, stub: _StubProvider) -> None:
-    """Point both the route's and the worker's find_provider at the stub."""
+    """Point job enqueue + worker download at the stub provider."""
     monkeypatch.setattr("tidal_dl_ru.server.routers.jobs.find_provider", lambda url: stub)
+    monkeypatch.setattr("tidal_dl_ru.core.transfer_router.find_transfer_provider", lambda url: stub)
     monkeypatch.setattr(worker_mod, "find_provider", lambda url: stub)
+    monkeypatch.setattr(
+        "tidal_dl_ru.core.router.get_provider_by_name",
+        lambda name: stub if name == stub.name else None,
+    )
 
 
 @pytest.fixture
@@ -249,7 +254,6 @@ def live_auth(tmp_path, monkeypatch):
     """
     from sqlmodel import SQLModel, create_engine
 
-    import tidal_dl_ru.database.auth as auth_mod
     import tidal_dl_ru.database.database as db_mod
     import tidal_dl_ru.database.models  # noqa: F401 — register tables
 
@@ -258,7 +262,6 @@ def live_auth(tmp_path, monkeypatch):
         connect_args={"check_same_thread": False},
     )
     monkeypatch.setattr(db_mod, "engine", engine)
-    monkeypatch.setattr(auth_mod, "engine", engine)
     SQLModel.metadata.create_all(engine)
 
     server = FakeServer()

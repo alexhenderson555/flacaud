@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 
 from aiogram import Bot, F, Router
@@ -22,6 +24,7 @@ from tidal_dl_ru.bot.users import (
 )
 from tidal_dl_ru.server.payments import create_payment
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -29,24 +32,24 @@ def _job_zip_url(job_id: str) -> str:
     return f"{bot_settings.public_api_base}/api/jobs/{job_id}/zip"
 
 
-# Matches URLs from any supported provider.
-_URL_RE = re.compile(
+# Tidal track/album/playlist URLs (download + library transfer).
+_TIDAL_URL_RE = re.compile(
+    r"https?://(?:www\.)?tidal\.com/\S+",
+    re.IGNORECASE,
+)
+
+# YouTube / SoundCloud DJ sets — analyzed via yt-dlp, not catalog providers.
+_SET_URL_RE = re.compile(
     r"https?://(?:"
-    r"(?:www\.)?tidal\.com|"
-    r"music\.youtube\.com|(?:www\.)?youtube\.com|youtu\.be|"
-    r"(?:www\.)?soundcloud\.com|"
-    r"[\w-]+\.bandcamp\.com"
+    r"(?:www\.)?youtube\.com|youtu\.be|"
+    r"(?:www\.)?soundcloud\.com|snd\.sc"
     r")/\S+",
     re.IGNORECASE,
 )
 
 HELP_TEXT = (
-    "🎵 <b>tidal-dl-ru</b> — скачивай музыку в FLAC\n\n"
-    "Просто отправь ссылку на трек или альбом:\n"
-    "• Tidal\n"
-    "• YouTube Music\n"
-    "• SoundCloud\n"
-    "• Bandcamp\n\n"
+    "🎵 <b>FlacAud</b> — скачивай музыку в FLAC\n\n"
+    "Просто отправь ссылку на трек или плейлист Tidal.\n\n"
     "Команды:\n"
     "/start — приветствие\n"
     "/help — эта справка\n"
@@ -54,8 +57,8 @@ HELP_TEXT = (
     "/subscribe — тарифы\n"
     "/karaoke — вкл/выкл перевод текста на русский\n"
     "/dj — вкл/выкл BPM + тональность\n"
-    "/split <ссылка> — разделить трек на вокал и музыку\n"
-    "/analyze <ссылка> — распознать треки в DJ-сете\n"
+    "/split <ссылка Tidal> — разделить трек на вокал и музыку\n"
+    "/analyze <ссылка YouTube/SoundCloud> — распознать треки в DJ-сете\n"
     "\n🎤 Отправь голосовое — распознаю и скачаю трек!"
 )
 
@@ -231,7 +234,7 @@ async def cmd_pay(message: Message) -> None:
         return
 
     get_or_create(tg_user.id, username=tg_user.username, first_name=tg_user.first_name)
-    url = create_payment(plan, telegram_id=tg_user.id)
+    url = await asyncio.to_thread(create_payment, plan, telegram_id=tg_user.id)
     if url is None:
         await message.answer(
             "⚠️ Оплата временно недоступна. Попробуйте позже.",
@@ -248,20 +251,20 @@ async def cmd_pay(message: Message) -> None:
 
 @router.message(Command("sync"))
 async def cmd_sync(message: Message, api: APIClient) -> None:
-    """Sync a playlist from any service to Tidal FLAC."""
+    """Download a Tidal playlist/album to FLAC (library transfer)."""
     tg_user = message.from_user
     if not tg_user:
         return
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
-        await message.answer("Использование: /sync <ссылка на плейлист>")
+        await message.answer("Использование: /sync <ссылка на плейлист или альбом Tidal>")
         return
 
     url = parts[1]
-    url_match = _URL_RE.search(url)
+    url_match = _TIDAL_URL_RE.search(url)
     if not url_match:
-        await message.answer("Неверный URL.")
+        await message.answer("Нужна ссылка на Tidal (плейлист, альбом или трек).")
         return
     url = url_match.group(0)
 
@@ -278,11 +281,12 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
             url,
             karaoke=user_rec.karaoke_enabled,
             dj_analyze=user_rec.dj_enabled,
-            match_tidal=True,
+            match_tidal=False,
             user_id=user_rec.id,
         )
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка: {e}")
+    except Exception:
+        logger.exception("bot handler error")
+        await status_msg.edit_text("❌ Произошла ошибка. Попробуйте позже.")
         return
 
     await status_msg.edit_text(f"⬇️ Скачиваю... (job: <code>{job.job_id}</code>)", parse_mode="HTML")
@@ -329,13 +333,13 @@ async def cmd_split(message: Message, api: APIClient) -> None:
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
-        await message.answer("Использование: /split <ссылка на трек>")
+        await message.answer("Использование: /split <ссылка на трек Tidal>")
         return
 
     url = parts[1]
-    url_match = _URL_RE.search(url)
+    url_match = _TIDAL_URL_RE.search(url)
     if not url_match:
-        await message.answer("Неверный URL.")
+        await message.answer("Нужна ссылка на трек Tidal.")
         return
     url = url_match.group(0)
 
@@ -356,8 +360,9 @@ async def cmd_split(message: Message, api: APIClient) -> None:
             split=True,
             user_id=user_rec.id,
         )
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка: {e}")
+    except Exception:
+        logger.exception("bot handler error")
+        await status_msg.edit_text("❌ Произошла ошибка. Попробуйте позже.")
         return
 
     try:
@@ -401,9 +406,9 @@ async def cmd_analyze(message: Message, api: APIClient) -> None:
         return
 
     url = parts[1]
-    url_match = _URL_RE.search(url)
+    url_match = _SET_URL_RE.search(url)
     if not url_match:
-        await message.answer("Неверный URL.")
+        await message.answer("Нужна ссылка на YouTube или SoundCloud микс.")
         return
     url = url_match.group(0)
 
@@ -417,8 +422,9 @@ async def cmd_analyze(message: Message, api: APIClient) -> None:
 
     try:
         job = await api.create_job(url, job_type="analyze_set", user_id=user_rec.id)
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка: {e}")
+    except Exception:
+        logger.exception("bot handler error")
+        await status_msg.edit_text("❌ Произошла ошибка. Попробуйте позже.")
         return
 
     try:
@@ -447,14 +453,14 @@ async def cmd_analyze(message: Message, api: APIClient) -> None:
     await status_msg.edit_text(text, parse_mode="HTML")
 
 
-@router.message(F.text.regexp(_URL_RE))
+@router.message(F.text.regexp(_TIDAL_URL_RE))
 async def handle_url(message: Message, api: APIClient) -> None:
-    """User sent a URL — check limits, create a download job, send the result."""
+    """User sent a Tidal URL — check limits, create a download job, send the result."""
     tg_user = message.from_user
     if not tg_user:
         return
 
-    url_match = _URL_RE.search(message.text or "")
+    url_match = _TIDAL_URL_RE.search(message.text or "")
     if not url_match:
         return
     url = url_match.group(0)
@@ -481,8 +487,9 @@ async def handle_url(message: Message, api: APIClient) -> None:
             dj_analyze=user_rec.dj_enabled,
             user_id=user_rec.id,
         )
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка: {e}")
+    except Exception:
+        logger.exception("bot handler error")
+        await status_msg.edit_text("❌ Произошла ошибка. Попробуйте позже.")
         return
 
     await status_msg.edit_text(
@@ -521,8 +528,9 @@ async def handle_url(message: Message, api: APIClient) -> None:
             doc = BufferedInputFile(content, filename=filename)
             await message.answer_document(doc, caption=f"🎵 {track.title}")
             sent += 1
-        except Exception as e:
-            await message.answer(f"⚠️ Ошибка при отправке {track.title}: {e}")
+        except Exception:
+            logger.exception("bot send-track error")
+            await message.answer(f"⚠️ Не удалось отправить {track.title}.")
 
     # Record extra downloads for albums (first one already counted).
     if sent > 1:
@@ -577,8 +585,9 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
         buf = BytesIO()
         await bot.download_file(file.file_path, buf)
         audio_bytes = buf.getvalue()
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка загрузки: {e}")
+    except Exception:
+        logger.exception("bot recognize-download error")
+        await status_msg.edit_text("❌ Ошибка загрузки. Попробуйте позже.")
         return
 
     # Recognize via AudD.
@@ -621,8 +630,9 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
             )
             search_resp.raise_for_status()
             tracks = search_resp.json().get("tracks", [])
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка поиска: {e}")
+    except Exception:
+        logger.exception("bot search error")
+        await status_msg.edit_text("❌ Ошибка поиска. Попробуйте позже.")
         return
 
     if not tracks:
@@ -648,8 +658,9 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
     try:
         job = await api.create_job(source_url, user_id=user_rec.id)
         final = await api.wait_for_job(job.job_id, user_id=user_rec.id)
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка скачивания: {e}")
+    except Exception:
+        logger.exception("bot download error")
+        await status_msg.edit_text("❌ Ошибка скачивания. Попробуйте позже.")
         return
 
     if final.status == "failed":
@@ -670,8 +681,9 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
                     f"✅ {result.artist} — {result.title} — отправлено!"
                 )
                 return
-            except Exception as e:
-                await status_msg.edit_text(f"❌ Ошибка отправки: {e}")
+            except Exception:
+                logger.exception("bot send error")
+                await status_msg.edit_text("❌ Ошибка отправки.")
                 return
 
     await status_msg.edit_text("❌ Не удалось отправить файл.")
