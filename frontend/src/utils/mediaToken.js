@@ -1,6 +1,6 @@
 import { apiFetch } from './apiClient';
 import { isBackgroundPaused } from './authBusy';
-import { getAccessToken } from './tokenStorage';
+import { clearAccessToken, getAccessToken } from './tokenStorage';
 
 // Short-lived media token for media URLs that ride in a query string
 // (<audio src>, <a href> downloads) — so the long-lived 7-day session JWT
@@ -28,7 +28,7 @@ export async function getMediaToken({ force = false } = {}) {
     const res = await apiFetch('/api/auth/media-token', { auth: true, timeoutMs: 15000, retries: 1 });
     if (!res.ok) {
       if (res.status === 401) {
-        localStorage.removeItem('tidal-token');
+        clearAccessToken();
         _token = '';
         _exp = 0;
         window.dispatchEvent(new CustomEvent('tidal-auth-expired', {
@@ -49,4 +49,11 @@ export async function getMediaToken({ force = false } = {}) {
 export function clearMediaToken() {
   _token = '';
   _exp = 0;
+}
+
+/** Mint or reuse a media token; retries once after force-refresh. */
+export async function resolveMediaTokenForStream({ force = false } = {}) {
+  let mt = await getMediaToken({ force });
+  if (!mt && !force) mt = await getMediaToken({ force: true });
+  return mt;
 }

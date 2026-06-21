@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getCachedAudioUrl, prefetchAudioToCache } from '../utils/cache';
-import { getMediaToken } from '../utils/mediaToken';
+import { clearMediaToken, getMediaToken, resolveMediaTokenForStream } from '../utils/mediaToken';
 import {
   ALL_UI_QUALITIES,
   lowerQualityTier,
@@ -42,6 +42,8 @@ export function usePlaybackQuality({
   const pendingSeekRef = useRef(null);
   const pendingPlayAfterSeekRef = useRef(false);
   const streamFallbackAttemptedRef = useRef(null);
+  const mediaAuthRetryRef = useRef(null);
+  const [streamRetryNonce, setStreamRetryNonce] = useState(0);
 
   const setPlaybackQuality = useCallback((q) => {
     setPlaybackQualityState(q);
@@ -152,6 +154,11 @@ export function usePlaybackQuality({
     : '';
 
   useEffect(() => {
+    mediaAuthRetryRef.current = null;
+    streamFallbackAttemptedRef.current = null;
+  }, [trackKey]);
+
+  useEffect(() => {
     if (!enabled) {
       setCurrentAudioSrc('');
       setPreloadAudioSrc('');
@@ -166,7 +173,11 @@ export function usePlaybackQuality({
       if (!url) {
         const isDownloaded = downloadedTracksRef.current.has(String(currentTrack.provider_id));
         const bypass = isDownloaded ? 'false' : 'true';
-        const mt = await getMediaToken();
+        const mt = await resolveMediaTokenForStream();
+        if (!mt) {
+          setCurrentAudioSrc('');
+          return;
+        }
         url = `/api/stream/${currentTrack.provider}/${currentTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${mt}`;
         void prefetchAudioToCache(
           { ...currentTrack, provider: currentTrack.provider || 'tidal' },
@@ -176,7 +187,7 @@ export function usePlaybackQuality({
       setCurrentAudioSrc(url);
     };
     updateAudioSrc();
-  }, [enabled, trackKey, playbackQuality, qualitiesReady, downloadRegistryTick, downloadedTracksRef, currentTrack]);
+  }, [enabled, trackKey, playbackQuality, qualitiesReady, downloadRegistryTick, downloadedTracksRef, currentTrack, streamRetryNonce]);
 
   const restorePendingSeek = useCallback(() => {
     if (pendingSeekRef.current == null || !audioRef?.current) return;
@@ -212,31 +223,42 @@ export function usePlaybackQuality({
 
   const handleStreamError = useCallback(() => {
     const key = `${currentTrack?.provider_id}-${playbackQuality}`;
-    if (streamFallbackAttemptedRef.current === key) {
+    void (async () => {
+      if (mediaAuthRetryRef.current !== key) {
+        mediaAuthRetryRef.current = key;
+        clearMediaToken();
+        const mt = await getMediaToken({ force: true });
+        if (mt && currentTrack) {
+          setStreamRetryNonce((n) => n + 1);
+          return;
+        }
+      }
+      if (streamFallbackAttemptedRef.current === key) {
+        pendingPlayAfterSeekRef.current = false;
+        setIsLoading?.(false);
+        setIsPlaying?.(false);
+        return;
+      }
+      const lower = lowerQualityTier(playbackQuality, availableQualities);
+      if (lower && currentTrack) {
+        streamFallbackAttemptedRef.current = key;
+        showToast?.(
+          lang === 'ru'
+            ? `Ошибка потока — пробуем ${lower === 'LOSSLESS' ? 'FLAC' : lower}`
+            : `Stream error — trying ${lower}`,
+        );
+        const time = audioRef?.current?.currentTime || 0;
+        pendingSeekRef.current = time;
+        pendingPlayAfterSeekRef.current = isPlaying;
+        setPlaybackQuality(lower);
+        setIsLoading?.(true);
+        return;
+      }
       pendingPlayAfterSeekRef.current = false;
       setIsLoading?.(false);
       setIsPlaying?.(false);
-      return;
-    }
-    const lower = lowerQualityTier(playbackQuality, availableQualities);
-    if (lower && currentTrack) {
-      streamFallbackAttemptedRef.current = key;
-      showToast?.(
-        lang === 'ru'
-          ? `Ошибка потока — пробуем ${lower === 'LOSSLESS' ? 'FLAC' : lower}`
-          : `Stream error — trying ${lower}`,
-      );
-      const time = audioRef?.current?.currentTime || 0;
-      pendingSeekRef.current = time;
-      pendingPlayAfterSeekRef.current = isPlaying;
-      setPlaybackQuality(lower);
-      setIsLoading?.(true);
-      return;
-    }
-    pendingPlayAfterSeekRef.current = false;
-    setIsLoading?.(false);
-    setIsPlaying?.(false);
-    showToast?.(lang === 'ru' ? 'Не удалось воспроизвести — войдите снова' : 'Playback failed — try logging in again');
+      showToast?.(lang === 'ru' ? 'Не удалось воспроизвести — войдите снова' : 'Playback failed — try logging in again');
+    })();
   }, [
     currentTrack, playbackQuality, availableQualities, audioRef, isPlaying,
     setPlaybackQuality, setIsLoading, setIsPlaying, lang, showToast,
@@ -251,7 +273,12 @@ export function usePlaybackQuality({
     let url = await getCachedAudioUrl(nextTrack, playbackQuality);
     if (!url) {
       const bypass = downloadedTracksRef.current.has(String(nextTrack.provider_id)) ? 'false' : 'true';
-      url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${await getMediaToken()}`;
+      const mt = await resolveMediaTokenForStream();
+      if (!mt) {
+        setPreloadAudioSrc('');
+        return;
+      }
+      url = `/api/stream/${nextTrack.provider}/${nextTrack.provider_id}?quality=${playbackQuality}&bypass_registry=${bypass}&mt=${mt}`;
       void prefetchAudioToCache(
         { ...nextTrack, provider: nextTrack.provider || 'tidal' },
         playbackQuality,

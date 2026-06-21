@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCachedAudioUrl } from '../utils/cache';
-import { getMediaToken } from '../utils/mediaToken';
+import { resolveMediaTokenForStream } from '../utils/mediaToken';
 import { DJ_ANALYSIS_CONCURRENCY, DJ_PREFS_CHANGED_EVENT } from '../utils/djPrefs';
 import {
   isDjAnalysisBlockedForTrack,
@@ -22,7 +22,7 @@ async function streamUrlForTrack(track) {
   }
   const cached = await getCachedAudioUrl(track, 'HIGH');
   if (cached) return cached;
-  const mt = await getMediaToken();
+  const mt = await resolveMediaTokenForStream();
   if (!mt) return null;
   const base = `/api/stream/${track.provider || 'tidal'}/${track.provider_id}?quality=HIGH&bypass_registry=true&mt=${mt}`;
   return window.__TAURI__ ? `http://localhost:8000${base}` : base;

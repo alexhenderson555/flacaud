@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { showToast } from '../utils/toast';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { validateSession, getStoredEffectivePlan, tryRefreshAccessToken } from '../utils/authSession';
+import { primeMediaToken } from '../utils/mediaToken';
 import { dispatchDjPrefsChanged } from '../utils/djPrefs';
 import { reportClientMetric } from '../clientObservability';
 
@@ -92,6 +93,7 @@ export function useAppAuth({
           if (djOn) dispatchDjPrefsChanged();
           setPlanReady(true);
           setMediaEnabled(true);
+          void primeMediaToken();
           // Defer player hydration so the app shell can render first.
           queueMicrotask
             ? queueMicrotask(() => hydratePlayerFromStorage())
