@@ -1,208 +1,490 @@
-import { useState } from 'react';
-import { getMediaToken } from '../utils/mediaToken';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Repeat, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  Repeat, CheckCircle2, AlertCircle, Eye, ListMusic, Heart, Music2,
+} from 'lucide-react';
+import PlatformIcon from '../components/sync/PlatformIcon';
+import SyncProgressPanel from '../components/sync/SyncProgressPanel';
+import MatchConfidenceBadge from '../components/MatchConfidenceBadge';
+import { syncDict, fmtSync } from '../locales/syncDict';
+import {
+  SYNC_PLATFORMS,
+  detectPlatformFromUrl,
+  getSyncPlatform,
+  isTransferUrl,
+  placeholderForPlatform,
+} from '../utils/syncPlatforms';
+import { previewTransfer, importTransfer } from '../utils/transferApi';
+import { coverImgSrc } from '../utils/coverUrl';
+import { formatDurationSeconds } from '../utils/trackDuration';
+import { showToast } from '../utils/toast';
+import { dispatchLibraryTransferDone } from '../utils/libraryPatch';
+import { getAccessToken } from '../utils/tokenStorage';
+import '../styles/sync.css';
+
+const MAX_PREVIEW_ROWS = 120;
+
+function artistLine(track) {
+  const artists = Array.isArray(track?.artists) ? track.artists.filter(Boolean) : [];
+  return artists.length ? artists.join(', ') : 'Unknown';
+}
 
 export default function Sync() {
-  const [selectedSource, setSelectedSource] = useState(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncUrl, setSyncUrl] = useState('');
-  const [syncStatus, setSyncStatus] = useState(null);
-  const [jobId, setJobId] = useState(null);
-  const [downloadReady, setDownloadReady] = useState(false);
-  const [zipToken, setZipToken] = useState('');
+  const outlet = useOutletContext() || {};
+  const lang = outlet.lang || 'en';
+  const navigate = useNavigate();
 
-  const platforms = [
-    { id: 'spotify', name: 'Spotify', color: '#1DB954', logo: 'https://cdn.simpleicons.org/spotify/1DB954' },
-    { id: 'apple', name: 'Apple Music', color: '#FA243C', logo: 'https://cdn.simpleicons.org/apple/FA243C' },
-    { id: 'yandex', name: 'Yandex Music', color: '#FFCC00', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e0/Yandex_Music_logo.svg' },
-    { id: 'ytmusic', name: 'YT Music', color: '#FF0000', logo: 'https://cdn.simpleicons.org/youtube/FF0000' },
-    { id: 'vk', name: 'VK Music', color: '#0077FF', logo: 'https://cdn.simpleicons.org/vk/0077FF' },
-    { id: 'soundcloud', name: 'SoundCloud', color: '#FF5500', logo: 'https://cdn.simpleicons.org/soundcloud/FF5500' },
-    { id: 'deezer', name: 'Deezer', color: '#A238FF', logo: 'https://cdn.simpleicons.org/deezer/A238FF' },
-    { id: 'bandcamp', name: 'Bandcamp', color: '#629AA9', logo: 'https://cdn.simpleicons.org/bandcamp/629AA9' }
-  ];
+  const t = useCallback(
+    (key, vars) => fmtSync(key, lang, vars),
+    [lang],
+  );
 
-  const handleSync = async () => {
-    if (!syncUrl) return;
-    setIsSyncing(true);
-    setSyncStatus('Connecting to platform API...');
-    setDownloadReady(false);
-    
-    // Mock API integration for Spotify/Yandex etc.
-    if (syncUrl.includes('spotify.com') || syncUrl.includes('yandex.ru') || syncUrl.includes('apple.com')) {
-       setTimeout(() => setSyncStatus('Parsing playlist data...'), 1500);
-       setTimeout(() => setSyncStatus('Matching tracks against Tidal catalog...'), 3500);
-       setTimeout(() => {
-          setSyncStatus('Error: Backend API Keys for third-party platforms are currently disabled in Settings.');
-          setIsSyncing(false);
-       }, 6000);
-       return;
+  const rowT = useCallback(
+    (key, vars) => {
+      const fromSync = syncDict[lang]?.[key] || syncDict.en[key];
+      if (fromSync) return fmtSync(key, lang, vars);
+      return key;
+    },
+    [lang],
+  );
+
+  const [selectedPlatform, setSelectedPlatform] = useState(null);
+  const [url, setUrl] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [taskId, setTaskId] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const [selectedIndices, setSelectedIndices] = useState(() => new Set());
+  const [addToLibrary, setAddToLibrary] = useState(true);
+  const [createPlaylist, setCreatePlaylist] = useState(true);
+  const [downloadFlac, setDownloadFlac] = useState(false);
+  const [playlistName, setPlaylistName] = useState('');
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [error, setError] = useState(null);
+  const abortRef = useRef(null);
+
+  const platform = getSyncPlatform(selectedPlatform);
+  const isLoggedIn = Boolean(getAccessToken() || localStorage.getItem('tidal-token'));
+
+  useEffect(() => {
+    const detected = detectPlatformFromUrl(url);
+    if (detected && detected !== selectedPlatform) {
+      setSelectedPlatform(detected);
     }
+  }, [url, selectedPlatform]);
 
+  useEffect(() => {
+    if (preview?.source_title && !playlistName) {
+      setPlaylistName(preview.source_title);
+    }
+  }, [preview?.source_title, playlistName]);
+
+  const flowStep = useMemo(() => {
+    if (importResult) return 'import';
+    if (preview) return 'preview';
+    if (url.trim()) return 'link';
+    return 'source';
+  }, [importResult, preview, url]);
+
+  const resetPreview = () => {
+    setPreview(null);
+    setTaskId(null);
+    setProgress(null);
+    setSelectedIndices(new Set());
+    setImportResult(null);
+    setError(null);
+  };
+
+  const runPreview = async () => {
+    const trimmed = url.trim();
+    if (!selectedPlatform || !isTransferUrl(trimmed, selectedPlatform)) {
+      setError(t('syncInvalidUrl'));
+      return;
+    }
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setLoadingPreview(true);
+    setError(null);
+    setImportResult(null);
+    setPreview(null);
+    setProgress(null);
     try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({
-          url: syncUrl,
-          quality: 'LOSSLESS',
-          match_tidal: true
-        })
+      const result = await previewTransfer(trimmed, lang, {
+        signal: ac.signal,
+        onProgress: setProgress,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to start job');
-      
-      setJobId(data.job_id);
-      pollJob(data.job_id);
+      setPreview(result);
+      setTaskId(result.task_id || null);
+      const all = new Set((result.tracks || []).map((_, i) => i));
+      setSelectedIndices(all);
     } catch (e) {
-      setSyncStatus('Error: ' + e.message);
-      setIsSyncing(false);
+      if (e?.code === 'aborted') return;
+      setError(e?.message || t('syncPreviewFailed'));
+    } finally {
+      setLoadingPreview(false);
+      setProgress(null);
     }
   };
 
-  const pollJob = (id) => {
-    const iv = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/jobs/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } });
-        const data = await res.json();
-        
-        if (data.status === 'done') {
-          clearInterval(iv);
-          setSyncStatus(`Done! Successfully synced ${data.tracks.length} tracks.`);
-          setDownloadReady(true);
-          getMediaToken().then(setZipToken);
-          setIsSyncing(false);
-        } else if (data.status === 'failed') {
-          clearInterval(iv);
-          setSyncStatus('Job failed.');
-          setIsSyncing(false);
-        } else {
-          const doneCount = data.tracks ? data.tracks.filter(t => t.status === 'done').length : 0;
-          const total = data.tracks ? data.tracks.length : 0;
-          setSyncStatus(`Syncing... ${doneCount}/${total} tracks processed`);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }, 2000);
+  const toggleIndex = (index) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
   };
+
+  const runImport = async () => {
+    if (!isLoggedIn) {
+      showToast(t('syncLoginRequired'));
+      navigate('/account');
+      return;
+    }
+    if (!preview?.tracks?.length || selectedIndices.size === 0) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const selectedList = [...selectedIndices].sort((a, b) => a - b);
+      const result = await importTransfer(
+        {
+          url: url.trim(),
+          taskId,
+          addToLibrary,
+          createPlaylist,
+          playlistName: playlistName.trim() || preview.source_title || undefined,
+          downloadFlac,
+          quality: 'LOSSLESS',
+          selectedIndices: selectedList,
+        },
+        lang,
+      );
+      setImportResult(result);
+      dispatchLibraryTransferDone();
+      showToast(
+        t('syncImportDone', {
+          added: result.added_to_library,
+          skipped: result.already_in_library,
+          total: result.total_tracks,
+        }),
+      );
+    } catch (e) {
+      setError(e?.message || t('syncFailed'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const previewTracks = preview?.tracks || [];
+  const showMany = previewTracks.length > MAX_PREVIEW_ROWS;
+  const visibleTracks = showMany ? previewTracks.slice(0, MAX_PREVIEW_ROWS) : previewTracks;
+  const unmatched = preview?.unmatched_entries || [];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <motion.div 
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        style={{ marginBottom: '40px' }}
-      >
-        <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>Library <span className="text-gradient">Transfer</span></h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Sync your playlists from other platforms and download them in FLAC automatically.</p>
-      </motion.div>
+    <div className="sync-page page-container">
+      <motion.header className="sync-page__header" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+        <h1>
+          {t('syncTitle')}{' '}
+          <span className="text-gradient">{t('syncTitleBold')}</span>
+        </h1>
+        <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>{t('syncSubtitle')}</p>
+      </motion.header>
 
-      <div style={{ display: 'flex', gap: '40px', flex: 1 }}>
-        {/* Source Selection */}
-        <motion.div 
-          initial={{ x: -20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          style={{ flex: 1, maxWidth: '600px' }}
-        >
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', color: 'var(--text-secondary)' }}>1. Select Source</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            {platforms.map(platform => (
-              <div 
-                key={platform.id}
-                onClick={() => setSelectedSource(platform.id)}
-                className="glass-panel"
-                style={{ 
-                  padding: '16px', 
-                  borderRadius: '16px', 
-                  cursor: 'pointer',
-                  border: selectedSource === platform.id ? `2px solid ${platform.color}` : '2px solid transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  transition: 'all 0.2s'
-                }}
+      <div className="sync-page__layout">
+        <section className="sync-page__sources">
+          <h2 className="sync-page__step-title">{t('syncStep1')}</h2>
+          <div className="sync-platform-grid">
+            {SYNC_PLATFORMS.map((p) => {
+              const active = selectedPlatform === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`sync-platform-card${active ? ' sync-platform-card--active' : ''}`}
+                  style={{ '--platform-color': p.color }}
+                  onClick={() => {
+                    setSelectedPlatform(p.id);
+                    resetPreview();
+                  }}
+                  data-testid={`sync-platform-${p.id}`}
+                >
+                  <span className="sync-platform-card__main">
+                    <PlatformIcon id={p.id} size={32} />
+                    <span className="sync-platform-card__name">{p.name}</span>
+                  </span>
+                  {active ? <CheckCircle2 className="sync-platform-card__check" size={22} /> : null}
+                </button>
+              );
+            })}
+          </div>
+          <p className="sync-page__footnote">{t('syncFootnote')}</p>
+        </section>
+
+        <section className="sync-page__panel-wrap">
+          <h2 className="sync-page__step-title">{t('syncStep2')}</h2>
+
+          <div className="sync-flow" aria-label={t('syncFlowLabel')}>
+            {['link', 'preview', 'import'].map((step) => (
+              <span
+                key={step}
+                className={[
+                  'sync-flow__step',
+                  flowStep === step ? 'sync-flow__step--active' : '',
+                  (step === 'link' && url.trim())
+                  || (step === 'preview' && preview)
+                  || (step === 'import' && importResult)
+                    ? 'sync-flow__step--done'
+                    : '',
+                ].filter(Boolean).join(' ')}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <img src={platform.logo} alt={platform.name} style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
-                  <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>{platform.name}</span>
-                </div>
-                {selectedSource === platform.id && <CheckCircle2 color={platform.color} size={24} />}
-              </div>
+                <span className="sync-flow__num">
+                  {step === 'link' ? '1' : step === 'preview' ? '2' : '3'}
+                </span>
+                {t(step === 'link' ? 'syncFlowLink' : step === 'preview' ? 'syncFlowPreview' : 'syncFlowImport')}
+              </span>
             ))}
           </div>
-        </motion.div>
 
-        {/* Action Panel */}
-        <motion.div 
-          initial={{ x: 20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          style={{ flex: 1, maxWidth: '500px' }}
-        >
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', color: 'var(--text-secondary)' }}>2. Configure & Sync</h2>
-          
-          <div className="glass-panel" style={{ padding: '32px', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {!selectedSource ? (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0' }}>
-                <Repeat size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                <p>Please select a source platform first</p>
+          <div className="sync-panel glass-panel">
+            {!selectedPlatform ? (
+              <div className="sync-panel__empty">
+                <Repeat size={44} style={{ opacity: 0.45 }} />
+                <p>{t('syncSelectFirst')}</p>
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px' }}>
-                  <AlertCircle size={20} color="var(--warning)" />
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                    We will match your tracks against our high-quality catalog. Accuracy is typically ~85-95%. Unmatched tracks will fallback to YT Music.
-                  </span>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Playlist Link</label>
-                  <input 
-                    type="text" 
-                    placeholder="https://..."
-                    value={syncUrl}
-                    onChange={e => setSyncUrl(e.target.value)}
-                    style={{ 
-                      width: '100%', padding: '14px 16px', borderRadius: '12px', 
-                      background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', 
-                      color: 'var(--text-primary)', outline: 'none'
-                    }} 
-                  />
-                </div>
-
-                {syncStatus && (
-                  <div style={{ color: 'var(--accent-solid)', fontSize: '0.9rem', fontWeight: 500 }}>
-                    {syncStatus}
-                  </div>
+                {platform && (
+                  <p className="sync-panel__platform-label">
+                    {t('syncSelectedPlatform', { name: platform.name })}
+                  </p>
                 )}
 
-                {downloadReady ? (
-                  <a
-                    href={`/api/jobs/${jobId}/zip?mt=${zipToken}`}
-                    download
-                    className="btn-primary"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '16px', textDecoration: 'none', background: 'var(--success)' }}
+                <div className="sync-panel__hint">
+                  <AlertCircle size={18} />
+                  <span>{t('syncHint')}</span>
+                </div>
+
+                <label className="sync-panel__label" htmlFor="sync-url-input">
+                  {t('syncPlaylistLink')}
+                </label>
+                <input
+                  id="sync-url-input"
+                  type="url"
+                  className="sync-panel__input"
+                  placeholder={placeholderForPlatform(selectedPlatform)}
+                  value={url}
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    if (preview) resetPreview();
+                  }}
+                  data-testid="sync-url-input"
+                />
+
+                <div className="sync-panel__actions-row">
+                  <button
+                    type="button"
+                    className="btn-secondary sync-panel__preview-cta"
+                    onClick={runPreview}
+                    disabled={loadingPreview || !url.trim()}
+                    data-testid="sync-preview-btn"
                   >
-                    <CheckCircle2 size={20} />
-                    Download ZIP Archive
-                  </a>
-                ) : (
-                  <button 
-                    className="btn-primary" 
-                    onClick={handleSync}
-                    disabled={!syncUrl || isSyncing}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '16px', opacity: (!syncUrl || isSyncing) ? 0.5 : 1 }}
-                  >
-                    {isSyncing ? 'Matching Tracks...' : 'Start Synchronization'}
-                    {!isSyncing && <ArrowRight size={20} />}
+                    <Eye size={18} />
+                    {preview ? t('syncPreviewAgain') : t('syncPreview')}
                   </button>
+                </div>
+
+                {!preview && !loadingPreview && (
+                  <p className="sync-panel__next-hint">{t('syncPreviewFirst')}</p>
+                )}
+
+                {loadingPreview && (
+                  <SyncProgressPanel t={rowT} progress={progress} />
+                )}
+
+                {error && (
+                  <p className="sync-panel__status" style={{ color: 'var(--danger)' }} role="alert">
+                    {error}
+                  </p>
+                )}
+
+                {preview && !loadingPreview && (
+                  <div className="sync-preview" data-testid="sync-preview">
+                    <div className="sync-preview__head">
+                      <ListMusic size={22} />
+                      <div>
+                        <div className="sync-preview__title">
+                          {preview.source_title || t('syncUntitledSource')}
+                        </div>
+                        <div className="sync-preview__meta">
+                          {t('syncPreviewMeta', {
+                            kind: preview.source_kind || 'playlist',
+                            matched: preview.total ?? previewTracks.length,
+                            source: preview.source_total ?? previewTracks.length,
+                          })}
+                        </div>
+                        {preview.unmatched_count > 0 && (
+                          <div className="sync-preview__warn">
+                            {t('syncUnmatched', { n: preview.unmatched_count })}
+                          </div>
+                        )}
+                        {preview.skipped_unavailable > 0 && (
+                          <div className="sync-preview__warn">
+                            {t('syncSkippedUnavailable', { n: preview.skipped_unavailable })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {showMany && (
+                      <p className="sync-preview__many">
+                        {t('syncManyTracks', { n: previewTracks.length })}
+                      </p>
+                    )}
+
+                    <div className="sync-preview__list">
+                      {visibleTracks.map((track, index) => {
+                        const selected = selectedIndices.has(index);
+                        const dur = track.duration_s
+                          ? formatDurationSeconds(track.duration_s)
+                          : null;
+                        const cover = coverImgSrc(track.cover_url);
+                        return (
+                          <label
+                            key={`${track.provider_id}-${index}`}
+                            className={`sync-preview__item sync-preview__item--selectable glass-panel${selected ? ' is-selected' : ''}`}
+                            data-testid="sync-preview-row"
+                          >
+                            <input
+                              type="checkbox"
+                              className="sync-preview__check"
+                              checked={selected}
+                              onChange={() => toggleIndex(index)}
+                            />
+                            {cover ? (
+                              <img src={cover} alt="" className="sync-preview__cover" loading="lazy" />
+                            ) : (
+                              <div className="sync-preview__cover sync-preview__cover--empty">
+                                <Music2 size={20} />
+                              </div>
+                            )}
+                            <div className="sync-preview__item-main">
+                              <div className="sync-preview__track-title">{track.title}</div>
+                              <div className="sync-preview__track-artist">
+                                {artistLine(track)}
+                                {dur ? ` · ${dur}` : ''}
+                              </div>
+                            </div>
+                            <MatchConfidenceBadge score={track.match_score} />
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {unmatched.length > 0 && (
+                      <>
+                        <h3 className="sync-preview__warn" style={{ marginTop: 16 }}>
+                          {t('syncSkippedList')}
+                        </h3>
+                        <div className="sync-preview__list">
+                          {unmatched.map((row, i) => (
+                            <div
+                              key={`${row.source_title}-${i}`}
+                              className="sync-preview__item sync-preview__item--unmatched glass-panel"
+                              data-testid="sync-skipped-row"
+                            >
+                              <div className="sync-preview__cover sync-preview__cover--unknown">
+                                <span>?</span>
+                              </div>
+                              <div className="sync-preview__item-main">
+                                <div className="sync-preview__track-title">{row.source_title}</div>
+                                <div className="sync-preview__track-artist">
+                                  {artistLine({ artists: row.source_artists })}
+                                </div>
+                              </div>
+                              <span className="sync-match sync-match--unknown">—</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    <div className="sync-panel__options">
+                      <label className="sync-option">
+                        <input
+                          type="checkbox"
+                          checked={addToLibrary}
+                          onChange={(e) => setAddToLibrary(e.target.checked)}
+                        />
+                        <Heart size={16} />
+                        <span>{t('syncOptLibrary')}</span>
+                      </label>
+                      <label className="sync-option">
+                        <input
+                          type="checkbox"
+                          checked={createPlaylist}
+                          onChange={(e) => setCreatePlaylist(e.target.checked)}
+                        />
+                        <ListMusic size={16} />
+                        <span>{t('syncOptPlaylist')}</span>
+                      </label>
+                      {createPlaylist && (
+                        <input
+                          type="text"
+                          className="sync-panel__input sync-panel__input--nested"
+                          placeholder={t('syncPlaylistName')}
+                          value={playlistName}
+                          onChange={(e) => setPlaylistName(e.target.value)}
+                        />
+                      )}
+                      <label className="sync-option">
+                        <input
+                          type="checkbox"
+                          checked={downloadFlac}
+                          onChange={(e) => setDownloadFlac(e.target.checked)}
+                        />
+                        <span>{t('syncOptDownload')}</span>
+                      </label>
+                    </div>
+
+                    {!isLoggedIn && (
+                      <p className="sync-panel__login-hint">{t('syncLoginRequired')}</p>
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn-primary sync-panel__cta sync-panel__cta--import"
+                      onClick={runImport}
+                      disabled={importing || selectedIndices.size === 0}
+                      data-testid="sync-import-btn"
+                    >
+                      {importing ? t('syncImporting') : t('syncStart')}
+                    </button>
+
+                    {importResult && (
+                      <div className="sync-result">
+                        <CheckCircle2 size={20} />
+                        <p>
+                          {t('syncImportDone', {
+                            added: importResult.added_to_library,
+                            skipped: importResult.already_in_library,
+                            total: importResult.total_tracks,
+                          })}
+                        </p>
+                        <div className="sync-result__links">
+                          <Link to="/library">{t('syncOpenLibrary')}</Link>
+                          <Link to="/playlists">{t('syncOpenPlaylists')}</Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </>
             )}
           </div>
-        </motion.div>
+        </section>
       </div>
     </div>
   );

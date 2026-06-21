@@ -5,6 +5,8 @@ import {
   getLibraryTrackFeatures,
   getCachedTrackFeatures,
   clearFailedFeatureCache,
+  isFeatureAnalysisPending,
+  markFeatureAnalysisFailed,
   loadPersistedFeatures,
   seedFeaturesFromLibraryRow,
 } from './trackFeatures.js';
@@ -53,5 +55,14 @@ describe('trackFeatures', () => {
     clearFailedFeatureCache('no-such');
     persistFeatureEntry('88', { bpm: 128, musicalKey: 'Am', camelotKey: '1A', analyzed: true });
     expect(getCachedTrackFeatures({ provider_id: '88' })?.bpm).toBe(128);
+  });
+
+  it('isFeatureAnalysisPending excludes exhausted tracks', () => {
+    const track = { provider_id: '77' };
+    expect(isFeatureAnalysisPending(track)).toBe(true);
+    markFeatureAnalysisFailed('77');
+    expect(isFeatureAnalysisPending(track)).toBe(false);
+    clearFailedFeatureCache('77');
+    expect(isFeatureAnalysisPending(track)).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import HotkeyHint from '../HotkeyHint';
 import DownloadToast from '../DownloadToast';
 import CommandPalette from '../CommandPalette';
 import GlobalSetEmbed from '../player/GlobalSetEmbed';
+import ArtistCardHost from '../artist/ArtistCardHost';
 
 /** Player UI that updates on progress ticks — isolated from AppShell. */
 function PlayerChrome({ playbackEnabled = true }) {
@@ -18,7 +19,6 @@ function PlayerChrome({ playbackEnabled = true }) {
     likedTracks,
     toggleLike,
     handleDownload,
-    setLibraryRevision,
     effectivePlan,
     shuffleEnabled,
     repeatMode,
@@ -83,6 +83,7 @@ function PlayerChrome({ playbackEnabled = true }) {
         attachSlotA={attachSlotA}
         attachSlotB={attachSlotB}
         mainOnSlotA={mainOnSlotA}
+        getMainAudioEl={getMainAudioEl}
         audioRef={audioRef}
         currentAudioSrc={currentAudioSrc}
         currentTrackId={currentTrack?.provider_id}
@@ -191,9 +192,10 @@ function PlayerChrome({ playbackEnabled = true }) {
         playNext={transport.playNext}
         toggleLike={toggleLike}
         likedTracks={likedTracks}
-        setLibraryRevision={setLibraryRevision}
         lang={lang}
       />
+
+      <ArtistCardHost />
 
       <HotkeyHint lang={lang} hidden={!currentTrack} />
       <DownloadToast lang={lang} />

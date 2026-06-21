@@ -9,7 +9,7 @@ import { hasAuthSession } from './utils/hasAuthSession';
 
 function AppRoutes() {
   const location = useLocation();
-  const { sessionReady, lang, libraryRevision, authTick } = usePlayer();
+  const { sessionReady, lang, authTick } = usePlayer();
   const shellPaddingTop = window.__TAURI__ ? '38px' : '0';
 
   if (!sessionReady) {
@@ -32,7 +32,7 @@ function AppRoutes() {
     return <Navigate to="/account" replace />;
   }
   return (
-    <LibraryDataProvider revision={libraryRevision} lang={lang}>
+    <LibraryDataProvider lang={lang}>
       <AppShell shellPaddingTop={shellPaddingTop} />
     </LibraryDataProvider>
   );

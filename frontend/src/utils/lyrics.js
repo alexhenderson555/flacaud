@@ -104,7 +104,7 @@ export function getActiveLyricIndex(lyrics, currentTime) {
 }
 
 export const LYRICS_SYNC_LEAD_S = 0.5;
-export function invalidateLyricsEmptyCache(trackId) {}
+export function invalidateLyricsEmptyCache() {}
 
 /** Drop in-flight prefetch when switching tracks (key from lyricsCacheKey). */
 export function cancelInflightLyricsForKey(key) {

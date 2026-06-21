@@ -4,14 +4,15 @@ import { apiGetJson, apiPostJson } from './apiClient';
 import { prefetchAudioToCache } from './cache';
 
 const QUEUE_KEY = 'tidal-queue-jobs';
-// Jobs whose finished file was already auto-saved to the user's machine. Persisted
-// in localStorage so a reload or re-login never re-downloads what already completed.
 const SAVED_KEY = 'tidal-saved-jobs';
 const SAVED_CAP = 300;
-// Jobs started in THIS browser tab/session. sessionStorage survives a reload but is
-// cleared when the tab closes — so a job polled from a *previous* session counts as
-// a leftover and is never silently re-downloaded.
 const SESSION_KEY = 'tidal-session-jobs';
+
+export const DOWNLOAD_JOB_STARTED_EVENT = 'tidal-download-job-started';
+export const DOWNLOAD_REGISTRY_REFRESH = 'tidal-download-registry-refresh';
+
+/** @deprecated use DOWNLOAD_JOB_STARTED_EVENT */
+export const DOWNLOAD_JOB_STARTED = DOWNLOAD_JOB_STARTED_EVENT;
 
 function readIds(storage, key) {
   try {
@@ -55,7 +56,14 @@ export function markJobSaved(jobId) {
   }
 }
 
-export function enqueueDownloadJob(jobId) {
+export function notifyDownloadJobStarted(jobId, { title = null, quality = null, replaces = null } = {}) {
+  if (!jobId || typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(DOWNLOAD_JOB_STARTED_EVENT, {
+    detail: { jobId, title, quality, replaces },
+  }));
+}
+
+export function enqueueDownloadJob(jobId, { title = null, quality = null, replaces = null } = {}) {
   if (!jobId) return;
   try {
     const jobs = readIds(localStorage, QUEUE_KEY);
@@ -64,6 +72,7 @@ export function enqueueDownloadJob(jobId) {
       localStorage.setItem(QUEUE_KEY, JSON.stringify(jobs));
     }
     markSessionJob(jobId);
+    notifyDownloadJobStarted(jobId, { title, quality, replaces });
   } catch (e) {
     console.error(e);
   }
@@ -72,8 +81,7 @@ export function enqueueDownloadJob(jobId) {
 export function removeDownloadJob(jobId) {
   try {
     const jobs = readIds(localStorage, QUEUE_KEY);
-    const next = jobs.filter((id) => id !== jobId);
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(next));
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(jobs.filter((id) => id !== jobId)));
   } catch (e) {
     console.error(e);
   }
@@ -86,7 +94,7 @@ export async function retryDownloadJob(jobMeta) {
     url,
     quality: jobMeta.quality || 'LOSSLESS',
     track: jobMeta.provider_id
-      ? { provider: jobMeta.provider || 'tidal', provider_id: jobMeta.provider_id }
+      ? { provider: jobMeta.provider || 'tidal', provider_id: jobMeta.provider_id, title: jobMeta.title }
       : null,
   });
 }
@@ -96,6 +104,8 @@ export async function startDownloadJob({
   quality = 'LOSSLESS',
   jobType = 'download',
   track = null,
+  optimisticId = null,
+  prefetch = true,
 }) {
   const token = localStorage.getItem('tidal-token') || '';
   const res = await fetch('/api/jobs', {
@@ -107,8 +117,9 @@ export async function startDownloadJob({
   if (!res.ok) {
     throw new Error(data.detail || 'Failed to start download');
   }
-  enqueueDownloadJob(data.job_id);
-  if (track?.provider_id) {
+  const title = track?.title || data.tracks?.[0]?.title || null;
+  enqueueDownloadJob(data.job_id, { title, quality, replaces: optimisticId || null });
+  if (prefetch && track?.provider_id) {
     void prefetchAudioToCache(
       { ...track, provider: track.provider || 'tidal' },
       quality,
@@ -121,13 +132,10 @@ export async function cancelJob(jobId, lang = 'en') {
   return apiPostJson(`/api/jobs/${jobId}/cancel`, {}, { auth: true, lang });
 }
 
-export const DOWNLOAD_REGISTRY_REFRESH = 'tidal-download-registry-refresh';
-
-export const DOWNLOAD_JOB_STARTED = new EventTarget();
 export function requestDownloadRegistryRefresh() {
-  DOWNLOAD_JOB_STARTED.dispatchEvent(new Event('refresh'));
   window.dispatchEvent(new Event(DOWNLOAD_REGISTRY_REFRESH));
 }
+
 export async function fetchJobStatus(jobId) {
   try {
     return await apiGetJson(`/api/jobs/${jobId}`, { auth: true });

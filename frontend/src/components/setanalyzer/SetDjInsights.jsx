@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Disc3, Loader2, Sparkles } from 'lucide-react';
 import { normalizeSetMatchedTrack } from '../../utils/setAnalyzerUtils';
 import { getAnalyzedFeaturesOnly } from '../../utils/trackFeatures';
@@ -27,26 +27,43 @@ export default function SetDjInsights({
   rows,
   lang = 'en',
   pendingCount = 0,
+  totalToAnalyze = 0,
   getFeatures,
   onAnalyzeBatch,
 }) {
   const L = QUALITY_LABEL[lang] || QUALITY_LABEL.en;
   const [analyzeRequested, setAnalyzeRequested] = useState(false);
+  const [enabling, setEnabling] = useState(false);
   const insights = useMemo(() => buildSetDjInsights(rows, (row) => {
     const track = normalizeSetMatchedTrack(row);
     if (!track) return null;
     return getFeatures?.(track) || getAnalyzedFeaturesOnly(track);
   }), [rows, getFeatures]);
 
+  useEffect(() => {
+    if (analyzeRequested && pendingCount === 0) {
+      setAnalyzeRequested(false);
+    }
+  }, [analyzeRequested, pendingCount]);
+
   if (!insights.totalMatched) return null;
 
   const maxBpm = Math.max(...insights.bpmSeries.map((e) => e.bpm), 1);
   const needsAnalyze = insights.analyzedCount < 2 && insights.totalMatched >= 2;
   const analyzing = analyzeRequested && pendingCount > 0;
+  const busy = enabling || analyzing;
+  const batchTotal = totalToAnalyze || insights.totalMatched;
+  const batchDone = Math.max(0, batchTotal - pendingCount);
 
-  const handleAnalyze = () => {
-    setAnalyzeRequested(true);
-    onAnalyzeBatch?.();
+  const handleAnalyze = async () => {
+    if (busy || !onAnalyzeBatch) return;
+    setEnabling(true);
+    try {
+      const ok = await onAnalyzeBatch();
+      if (ok) setAnalyzeRequested(true);
+    } finally {
+      setEnabling(false);
+    }
   };
 
   return (
@@ -59,11 +76,15 @@ export default function SetDjInsights({
             type="button"
             className="set-dj-insights__analyze-btn"
             onClick={handleAnalyze}
-            disabled={analyzing}
+            disabled={busy}
             data-testid="set-dj-analyze-batch"
           >
-            {analyzing ? <Loader2 size={14} className="spin" aria-hidden /> : <Sparkles size={14} aria-hidden />}
-            {lang === 'ru' ? 'Анализ BPM/Key' : 'Analyze BPM/Key'}
+            {(enabling || analyzing) ? <Loader2 size={14} className="spin" aria-hidden /> : <Sparkles size={14} aria-hidden />}
+            {enabling
+              ? (lang === 'ru' ? 'Включение…' : 'Enabling…')
+              : analyzing && batchTotal > 0
+                ? `${lang === 'ru' ? 'Анализ' : 'Analyzing'} ${batchDone}/${batchTotal}`
+                : (lang === 'ru' ? 'Анализ BPM/Key' : 'Analyze BPM/Key')}
           </button>
         )}
       </div>

@@ -6,6 +6,7 @@ import {
   mapPlaylistTrack,
   normalizeTrack,
   parseArtistIds,
+  pickRadioStartTrack,
   trackIdentityKey,
   tracksMatch,
 } from './trackNormalize';
@@ -18,6 +19,22 @@ describe('buildRadioQueue', () => {
       { provider_id: '1', title: 'A dup', artists: ['X'] },
     ]);
     expect(q.map((t) => t.provider_id)).toEqual(['1', '2']);
+  });
+});
+
+describe('pickRadioStartTrack', () => {
+  const queue = [
+    { provider_id: '1' },
+    { provider_id: '2' },
+    { provider_id: '3' },
+  ];
+
+  it('plays seed by default', () => {
+    expect(pickRadioStartTrack(queue)?.provider_id).toBe('1');
+  });
+
+  it('skips seed when auto-advancing from queue end', () => {
+    expect(pickRadioStartTrack(queue, { advancePastSeed: true })?.provider_id).toBe('2');
   });
 });
 

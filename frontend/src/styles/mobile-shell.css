@@ -1,3 +1,29 @@
+/* Desktop sidebar — scroll without visible scrollbar */
+@media (width >= 769px) {
+  .nav-links {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .nav-links::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .brand-title {
+    font-size: inherit;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+
+  .brand-title__suffix {
+    color: var(--text-primary);
+    -webkit-text-fill-color: var(--text-primary);
+  }
+}
+
 /* Mobile sidebar “More options” overlay */
 .mobile-menu-overlay {
   position: fixed;
@@ -125,4 +151,48 @@
 .player-mobile-action-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Expanded mobile player — volume under quality toggle */
+.player-volume-row--mobile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 4px 4px;
+  margin-top: 4px;
+}
+
+.player-volume-row--mobile .player-volume-range {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-bar--expanded .player-quality-slot {
+  width: 100%;
+  justify-content: center;
+  padding: 4px 0 0;
+}
+
+.hotkey-hint {
+  position: fixed;
+  bottom: 94px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: min(96vw, 1100px);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 5;
+  letter-spacing: 0.02em;
+}
+
+.hotkey-hint__row {
+  text-align: center;
+  white-space: nowrap;
 }

@@ -1,101 +1,120 @@
 import { useState, useEffect, useCallback } from 'react';
 import { showToast } from '../utils/toast';
-import { normalizeArtists } from '../utils/trackNormalize';
+import { apiDelete, apiGetJson, apiPostJson } from '../utils/apiClient';
+import { hasAuthSession } from '../utils/hasAuthSession';
+import { readCachedLibraryTracks } from '../utils/libraryApi';
+import { dispatchLibraryPatch, LIBRARY_PATCH_EVENT } from '../utils/libraryPatch';
+import { applyLikedMapPatch, likedMapFromTracks } from '../utils/librarySync';
+import { normalizeArtists, trackIdentityKey } from '../utils/trackNormalize';
 
-export function useLibraryLikes(t, { enabled = true } = {}) {
-  const [likedTracks, setLikedTracks] = useState(new Map());
-  const [libraryRevision, setLibraryRevision] = useState(0);
+export function useLibraryLikes(t, { enabled = true, lang = 'en' } = {}) {
+  const [likedTracks, setLikedTracks] = useState(() => likedMapFromTracks(readCachedLibraryTracks()));
 
-  const fetchLibrary = useCallback(async () => {
-    if (!enabled) return;
-    const token = localStorage.getItem('tidal-token');
-    if (!token) return;
+  const syncLikedMap = useCallback(async () => {
+    if (!enabled || !hasAuthSession()) return;
     try {
-      const res = await fetch('/api/library', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const map = new Map();
-        data.forEach((row) => map.set(String(row.provider_id), row.id));
-        setLikedTracks(map);
-      }
+      const data = await apiGetJson('/api/library', { auth: true, lang });
+      setLikedTracks(likedMapFromTracks(data.map((row) => ({
+        ...row,
+        provider: row.provider || 'tidal',
+        provider_id: String(row.provider_id),
+      }))));
     } catch {
-      /* ignore */
+      /* keep cache */
     }
-  }, [enabled]);
+  }, [enabled, lang]);
 
   useEffect(() => {
-    fetchLibrary();
-  }, [fetchLibrary]);
+    if (!enabled) return undefined;
+    void syncLikedMap();
+    return undefined;
+  }, [enabled, syncLikedMap]);
+
+  useEffect(() => {
+    const onPatch = (event) => {
+      applyLikedMapPatch(event.detail, setLikedTracks);
+    };
+    window.addEventListener(LIBRARY_PATCH_EVENT, onPatch);
+    return () => window.removeEventListener(LIBRARY_PATCH_EVENT, onPatch);
+  }, []);
+
+  useEffect(() => {
+    const onLogin = () => { void syncLikedMap(); };
+    window.addEventListener('tidal-auth-login', onLogin);
+    return () => window.removeEventListener('tidal-auth-login', onLogin);
+  }, [syncLikedMap]);
 
   const toggleLike = useCallback(async (track, e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
     if (!track) return;
-    const token = localStorage.getItem('tidal-token');
-    if (!token) {
+    if (!hasAuthSession()) {
       showToast(t('loginToSave'));
       return;
     }
-    const pId = String(track.provider_id);
-    const isLiked = likedTracks.has(pId);
+    const key = trackIdentityKey(track);
+    if (!key) return;
+    const isLiked = likedTracks.has(key);
     const artists = normalizeArtists(track);
+    const pId = String(track.provider_id);
+    const prevMap = likedTracks;
 
     if (isLiked) {
-      const dbId = likedTracks.get(pId);
+      const dbId = likedTracks.get(key);
+      const nextMap = new Map(likedTracks);
+      nextMap.delete(key);
+      setLikedTracks(nextMap);
       try {
-        const res = await fetch(`/api/library/${dbId}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const newMap = new Map(likedTracks);
-          newMap.delete(pId);
-          setLikedTracks(newMap);
-          setLibraryRevision((r) => r + 1);
-          showToast(t('removedFromLibrary'));
-        } else {
-          showToast(t('failedToRemove'));
-        }
+        await apiDelete(`/api/library/${dbId}`, { auth: true, lang });
+        dispatchLibraryPatch({ op: 'remove', track: { ...track, provider_id: pId } });
+        showToast(t('removedFromLibrary'));
       } catch {
-        showToast(t('networkError'));
+        setLikedTracks(prevMap);
+        showToast(t('failedToRemove'));
       }
     } else {
+      const nextMap = new Map(likedTracks);
+      nextMap.set(key, -1);
+      setLikedTracks(nextMap);
       try {
-        const res = await fetch('/api/library', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
+        const data = await apiPostJson('/api/library', {
+          provider: track.provider || 'tidal',
+          provider_id: pId,
+          title: track.title || 'Unknown',
+          artists_json: JSON.stringify(artists),
+          cover_url: track.cover_url || null,
+          duration: track.duration_s || track.duration || 0,
+          album: track.album || '',
+          quality: track.quality || 'LOW',
+        }, { auth: true, lang });
+        setLikedTracks((prev) => {
+          const confirmed = new Map(prev);
+          confirmed.set(key, data.id);
+          return confirmed;
+        });
+        dispatchLibraryPatch({
+          op: 'add',
+          id: data.id,
+          track: {
+            ...track,
+            id: data.id,
             provider: track.provider || 'tidal',
             provider_id: pId,
-            title: track.title || 'Unknown',
-            artists_json: JSON.stringify(artists),
-            cover_url: track.cover_url || null,
-            duration: track.duration_s || track.duration || 0,
-            album: track.album || '',
-            quality: track.quality || 'LOW',
-          }),
+            artists,
+            added_at: new Date().toISOString(),
+          },
         });
-        if (res.ok) {
-          const data = await res.json();
-          const newMap = new Map(likedTracks);
-          newMap.set(pId, data.id);
-          setLikedTracks(newMap);
-          setLibraryRevision((r) => r + 1);
-          showToast(t('addedToLibrary'));
-        } else {
-          showToast(t('failedToAdd'));
-        }
+        showToast(t('addedToLibrary'));
       } catch {
-        showToast(t('networkError'));
+        setLikedTracks(prevMap);
+        showToast(t('failedToAdd'));
       }
     }
-  }, [likedTracks, t]);
+  }, [likedTracks, t, lang]);
 
   return {
     likedTracks,
-    libraryRevision,
-    setLibraryRevision,
-    fetchLibrary,
     toggleLike,
+    syncLikedMap,
   };
 }

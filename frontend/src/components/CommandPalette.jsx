@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Music, Heart, User, Download, Radio, Sparkles,
   ListMusic, Mic2, Sliders, Disc, ListOrdered, Play, Pause, Wand2, Scissors, History,
-  Shuffle, Repeat, Repeat1, FileText, Shield,
+  Shuffle, Repeat, Repeat1, FileText, Shield, Library,
 } from 'lucide-react';
 import { REPEAT_ALL, REPEAT_ONE } from '../utils/playbackModes';
 import { readRecentlyPlayed } from '../utils/recentlyPlayed';
@@ -17,7 +17,7 @@ const NAV = [
   { id: 'nav-genreverse', title: 'Genreverse', keywords: 'genre radio vibes stations', icon: Radio, path: '/genreverse' },
   { id: 'nav-radio', title: 'Track Radio', keywords: 'similar track station', icon: Radio, path: '/search' },
   { id: 'nav-analyzer', title: 'Set Analyzer', keywords: 'dj mix youtube', icon: Wand2, path: '/analyzer' },
-  { id: 'nav-sets', title: 'Set Library', keywords: 'dj sets mix library saved', icon: ListMusic, path: '/sets' },
+  { id: 'nav-sets', title: 'Set Library', keywords: 'dj sets mix library saved', icon: Library, path: '/sets' },
   { id: 'nav-stems', title: 'Stem Splitter', keywords: 'vocals isolate', icon: Scissors, path: '/splitter' },
   { id: 'nav-sync', title: 'Transfer Music', keywords: 'import playlist', icon: Download, path: '/sync' },
   { id: 'nav-account', title: 'Account Settings', keywords: 'profile quality theme', icon: User, path: '/account' },

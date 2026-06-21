@@ -4,6 +4,7 @@ import {
   X, Play, Pause, Heart, SkipForward, Sparkles, Circle, Waves, LayoutGrid, Aperture, Box,
 } from 'lucide-react';
 import { coverImgSrc } from '../../utils/coverUrl';
+import { isTrackLiked } from '../../utils/trackNormalize';
 import PartyVisualizer, { MODES } from './PartyVisualizer';
 
 const MODE_META = {
@@ -34,7 +35,7 @@ export default function PartyMode({
   const [uiVisible, setUiVisible] = useState(true);
   const uiTimeoutRef = useRef(null);
 
-  const liked = currentTrack && likedTracks?.has?.(String(currentTrack.provider_id));
+  const liked = isTrackLiked(likedTracks, currentTrack);
 
   useEffect(() => {
     document.documentElement.classList.add('party-mode-open');

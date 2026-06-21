@@ -12,6 +12,8 @@ import {
   mergeGuestDataOnLogin,
   mapLibraryApiRows,
   playlistIdsMatch,
+  readCachedLibraryTracks,
+  readCachedPlaylists,
   readGuestLibrary,
   readGuestPlaylists,
   updatePlaylistTracksApi,
@@ -20,14 +22,14 @@ import {
 } from '../utils/libraryApi';
 import { mapPlaylistTrack, normalizeTrack, tracksMatch } from '../utils/trackNormalize';
 import { claimPendingShareAfterLogin } from '../utils/shareApi';
-import { LIBRARY_PATCH_EVENT, LIBRARY_TRANSFER_DONE } from '../utils/libraryPatch';
+import {
+  LIBRARY_PATCH_EVENT,
+  LIBRARY_RELOAD_REQUEST,
+  LIBRARY_TRANSFER_DONE,
+} from '../utils/libraryPatch';
+import { applyLibraryPatch } from '../utils/librarySync';
 import { useEnrichLibraryArtists } from './useEnrichLibraryArtists';
-
 import { hasAuthSession } from '../utils/hasAuthSession';
-
-function hasAuth() {
-  return hasAuthSession();
-}
 
 function mapGuestPlaylists(rows) {
   return (rows || []).map((p) => ({
@@ -36,15 +38,23 @@ function mapGuestPlaylists(rows) {
   }));
 }
 
-export function useLibraryData(revision = 0, lang = 'en') {
-  const [library, setLibrary] = useState([]);
-  const [playlists, setPlaylists] = useState([]);
-  const [libraryLoading, setLibraryLoading] = useState(true);
+export function useLibraryData(lang = 'en') {
+  const [library, setLibrary] = useState(readCachedLibraryTracks);
+  const [playlists, setPlaylists] = useState(readCachedPlaylists);
+  const [libraryLoading, setLibraryLoading] = useState(
+    () => hasAuthSession() && readCachedLibraryTracks().length === 0,
+  );
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
 
   const libraryRef = useRef(library);
   libraryRef.current = library;
+  const playlistsRef = useRef(playlists);
+  playlistsRef.current = playlists;
   const loadErrorToastAt = useRef(0);
+  const libraryFetchGenRef = useRef(0);
+  const playlistsFetchGenRef = useRef(0);
+  const guestMergeDone = useRef(false);
+  const postLoginSyncInFlight = useRef(false);
 
   useEnrichLibraryArtists(library, setLibrary);
 
@@ -55,80 +65,96 @@ export function useLibraryData(revision = 0, lang = 'en') {
     showToast(messageForApiError(err, lang));
   }, [lang]);
 
-  const loadLibraryTracks = useCallback(async () => {
-    setLibraryLoading(true);
+  const loadLibraryTracks = useCallback(async ({ background = false } = {}) => {
+    const hasCache = libraryRef.current.length > 0;
+    if (!background && !hasCache) setLibraryLoading(true);
+
+    const gen = libraryFetchGenRef.current + 1;
+    libraryFetchGenRef.current = gen;
+
     try {
-      if (hasAuth()) {
+      if (hasAuthSession()) {
         const rows = await fetchLibraryTracks(lang);
-        const enriched = await enrichTracksFromApi(rows, lang);
-        setLibrary(enriched);
-        writeGuestLibrary(enriched);
-        return enriched;
+        if (gen !== libraryFetchGenRef.current) return rows;
+        setLibrary(rows);
+        writeGuestLibrary(rows);
+        void enrichTracksFromApi(rows, lang).then((enriched) => {
+          if (gen !== libraryFetchGenRef.current) return;
+          setLibrary(enriched);
+          writeGuestLibrary(enriched);
+        });
+        return rows;
       }
       const guest = readGuestLibrary().map((t) => normalizeTrack(t)).filter(Boolean);
-      setLibrary(guest);
+      if (gen === libraryFetchGenRef.current) setLibrary(guest);
       return guest;
     } catch (err) {
       toastLoadError(err);
-      if (!hasAuth()) {
+      if (!hasAuthSession()) {
         const guest = mapLibraryApiRows(readGuestLibrary());
-        setLibrary(guest);
+        if (gen === libraryFetchGenRef.current) setLibrary(guest);
         return guest;
       }
       return libraryRef.current;
     } finally {
-      setLibraryLoading(false);
+      if (gen === libraryFetchGenRef.current) setLibraryLoading(false);
     }
   }, [lang, toastLoadError]);
 
-  const loadPlaylistsData = useCallback(async (libraryRows) => {
-    setPlaylistsLoading(true);
+  const loadPlaylistsData = useCallback(async (libraryRows, { background = false } = {}) => {
+    const hasCache = playlistsRef.current.length > 0;
+    if (!background && !hasCache) setPlaylistsLoading(true);
+
+    const gen = playlistsFetchGenRef.current + 1;
+    playlistsFetchGenRef.current = gen;
     const lib = libraryRows ?? libraryRef.current;
+
     try {
-      if (hasAuth()) {
+      if (hasAuthSession()) {
         const pl = await fetchPlaylists(lang);
+        if (gen !== playlistsFetchGenRef.current) return;
         const fromLib = pl.map((p) => ({
           ...p,
           tracks: enrichTracksFromLibrary(p.tracks, lib),
         }));
-        const enriched = await Promise.all(
+        setPlaylists(fromLib);
+        writeGuestPlaylists(fromLib);
+        void Promise.all(
           fromLib.map(async (p) => ({
             ...p,
-            tracks: await enrichTracksFromApi(p.tracks, lang),
+            tracks: await enrichTracksFromApi(p.tracks, lang, { persistLibrary: false }),
           })),
-        );
-        setPlaylists(enriched);
-        writeGuestPlaylists(enriched);
+        ).then((enriched) => {
+          if (gen !== playlistsFetchGenRef.current) return;
+          setPlaylists(enriched);
+          writeGuestPlaylists(enriched);
+        });
       } else {
         setPlaylists(mapGuestPlaylists(readGuestPlaylists()));
       }
     } catch (err) {
       toastLoadError(err);
-      if (!hasAuth()) setPlaylists(mapGuestPlaylists(readGuestPlaylists()));
+      if (!hasAuthSession()) setPlaylists(mapGuestPlaylists(readGuestPlaylists()));
     } finally {
-      setPlaylistsLoading(false);
+      if (gen === playlistsFetchGenRef.current) setPlaylistsLoading(false);
     }
   }, [lang, toastLoadError]);
 
-  const reloadAll = useCallback(async () => {
-    const rows = await loadLibraryTracks();
-    await loadPlaylistsData(rows);
+  const reloadAll = useCallback(async ({ background = false } = {}) => {
+    const rows = await loadLibraryTracks({ background });
+    await loadPlaylistsData(rows, { background });
   }, [loadLibraryTracks, loadPlaylistsData]);
-
-  const guestMergeDone = useRef(false);
-  const postLoginSyncInFlight = useRef(false);
 
   const runPostLoginSync = useCallback(async () => {
     if (postLoginSyncInFlight.current) return;
     postLoginSyncInFlight.current = true;
     try {
-      // First load server-side library/playlists so UI becomes responsive quickly.
-      const rows = await loadLibraryTracks();
-      await loadPlaylistsData(rows);
+      const hasCache = libraryRef.current.length > 0 || playlistsRef.current.length > 0;
+      const rows = await loadLibraryTracks({ background: hasCache });
+      await loadPlaylistsData(rows, { background: hasCache });
       window.dispatchEvent(new CustomEvent('tidal-sets-changed'));
       guestMergeDone.current = true;
 
-      // Kick off guest merge + pending share claim in the background without blocking the UI.
       void mergeGuestDataOnLogin(lang)
         .then(() => claimPendingShareAfterLogin(lang))
         .then((claimed) => {
@@ -136,11 +162,12 @@ export function useLibraryData(revision = 0, lang = 'en') {
           const msg = lang === 'ru'
             ? (claimed.already_had
               ? (claimed.kind === 'set' ? 'Сет уже был в медиатеке' : 'Плейлист уже был в медиатеке')
-              : (claimed.kind === 'set' ? 'Сет добавлен в медиатеку' : 'Плейлист добавлен в медиатеку'))
+              : (claimed.kind === 'set' ? 'Сет добавлен в медиатеку' : 'Плейлист добавлен в медиатеке'))
             : (claimed.already_had
               ? (claimed.kind === 'set' ? 'Set is already in your library' : 'Playlist is already in your library')
               : (claimed.kind === 'set' ? 'Set added to your library' : 'Playlist added to your library'));
           showToast(msg);
+          void reloadAll({ background: true });
         })
         .catch((err) => {
           console.error('Guest merge failed', err);
@@ -148,7 +175,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
     } finally {
       postLoginSyncInFlight.current = false;
     }
-  }, [lang, loadLibraryTracks, loadPlaylistsData]);
+  }, [lang, loadLibraryTracks, loadPlaylistsData, reloadAll]);
 
   useEffect(() => {
     if (!library.length) return;
@@ -164,74 +191,24 @@ export function useLibraryData(revision = 0, lang = 'en') {
 
   useEffect(() => {
     const onTransfer = () => {
-      if (hasAuth()) void reloadAll();
+      if (hasAuthSession()) void reloadAll({ background: libraryRef.current.length > 0 });
     };
     window.addEventListener(LIBRARY_TRANSFER_DONE, onTransfer);
     return () => window.removeEventListener(LIBRARY_TRANSFER_DONE, onTransfer);
   }, [reloadAll]);
 
   useEffect(() => {
-    const onPatch = (event) => {
-      const { op, track, id } = event.detail || {};
-      if (!track) return;
-      const normalized = normalizeTrack(track);
-      if (!normalized) return;
-
-      if (op === 'add') {
-        setLibrary((prev) => {
-          if (prev.some((row) => tracksMatch(row, normalized))) return prev;
-          const row = {
-            ...normalized,
-            id: id ?? normalized.id,
-            added_at: new Date().toISOString(),
-          };
-          const next = [row, ...prev];
-          writeGuestLibrary(next);
-          return next;
-        });
-        return;
-      }
-
-      if (op === 'remove') {
-        setLibrary((prev) => {
-          const next = prev.filter((row) => !tracksMatch(row, normalized));
-          if (next.length === prev.length) return prev;
-          writeGuestLibrary(next);
-          return next;
-        });
-        setPlaylists((prev) => prev.map((p) => ({
-          ...p,
-          tracks: (p.tracks || []).filter((tr) => !tracksMatch(tr, normalized)),
-        })));
-        return;
-      }
-
-      if (op === 'confirm' && id != null) {
-        setLibrary((prev) => {
-          const next = prev.map((row) => (
-            tracksMatch(row, normalized) ? { ...row, id } : row
-          ));
-          writeGuestLibrary(next);
-          return next;
-        });
-        return;
-      }
-
-      if (op === 'dj-meta') {
-        const { provider_id, bpm, camelot_key, musical_key } = event.detail || {};
-        if (provider_id == null || !bpm || !camelot_key) return;
-        setLibrary((prev) => {
-          const next = prev.map((row) => (
-            String(row.provider_id) === String(provider_id)
-              ? { ...row, bpm, camelot_key, musical_key: musical_key || row.musical_key }
-              : row
-          ));
-          writeGuestLibrary(next);
-          return next;
-        });
-      }
+    const onReload = () => {
+      if (hasAuthSession()) void reloadAll({ background: true });
     };
+    window.addEventListener(LIBRARY_RELOAD_REQUEST, onReload);
+    return () => window.removeEventListener(LIBRARY_RELOAD_REQUEST, onReload);
+  }, [reloadAll]);
 
+  useEffect(() => {
+    const onPatch = (event) => {
+      applyLibraryPatch(event.detail, setLibrary, setPlaylists);
+    };
     window.addEventListener(LIBRARY_PATCH_EVENT, onPatch);
     return () => window.removeEventListener(LIBRARY_PATCH_EVENT, onPatch);
   }, []);
@@ -239,31 +216,32 @@ export function useLibraryData(revision = 0, lang = 'en') {
   useEffect(() => {
     const onLogin = () => {
       guestMergeDone.current = false;
-      if (hasAuth()) void runPostLoginSync();
+      if (hasAuthSession()) void runPostLoginSync();
     };
     window.addEventListener('tidal-auth-login', onLogin);
     return () => window.removeEventListener('tidal-auth-login', onLogin);
   }, [runPostLoginSync]);
 
   useEffect(() => {
-    if (!hasAuth()) {
+    if (!hasAuthSession()) {
       guestMergeDone.current = false;
-      void loadLibraryTracks();
+      void loadLibraryTracks({ background: libraryRef.current.length > 0 });
       return;
     }
-    if (guestMergeDone.current) {
-      void reloadAll();
+    if (!guestMergeDone.current) {
+      void runPostLoginSync();
       return;
     }
-    void runPostLoginSync();
-  }, [loadLibraryTracks, reloadAll, revision, lang, runPostLoginSync]);
+    void loadLibraryTracks({ background: true });
+    void loadPlaylistsData(null, { background: true });
+  }, [lang, loadLibraryTracks, loadPlaylistsData, runPostLoginSync]);
 
   const removeFromLibrary = useCallback(async (providerId) => {
     const track = library.find((t) => String(t.provider_id) === String(providerId));
     const next = library.filter((t) => String(t.provider_id) !== String(providerId));
     setLibrary(next);
     writeGuestLibrary(next);
-    if (hasAuth() && track?.id) {
+    if (hasAuthSession() && track?.id) {
       try {
         await deleteLibraryTrackApi(track.id, lang);
       } catch (err) {
@@ -287,7 +265,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
     });
     setPlaylists(next);
     writeGuestPlaylists(next);
-    if (hasAuth() && updated) {
+    if (hasAuthSession() && updated) {
       try {
         await updatePlaylistTracksApi(playlistId, updated.tracks, lang);
       } catch (err) {
@@ -318,7 +296,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
     if (!updated) return;
     setPlaylists(next);
     writeGuestPlaylists(next);
-    if (hasAuth()) {
+    if (hasAuthSession()) {
       try {
         await updatePlaylistTracksApi(playlistId, updated.tracks, lang);
       } catch (err) {
@@ -337,7 +315,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
     if (!updated) return;
     setPlaylists(next);
     writeGuestPlaylists(next);
-    if (hasAuth()) {
+    if (hasAuthSession()) {
       try {
         await updatePlaylistTracksApi(playlistId, updated.tracks, lang);
       } catch (err) {
@@ -350,7 +328,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
     const next = playlists.filter((p) => !playlistIdsMatch(p.id, playlistId));
     setPlaylists(next);
     writeGuestPlaylists(next);
-    if (hasAuth()) {
+    if (hasAuthSession()) {
       try {
         await deletePlaylistApi(playlistId, lang);
       } catch (err) {
@@ -374,7 +352,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
     });
     setPlaylists(next);
     writeGuestPlaylists(next);
-    if (hasAuth() && updated) {
+    if (hasAuthSession() && updated) {
       await updatePlaylistTracksApi(playlistId, updated.tracks, lang);
     }
   }, [playlists, lang]);
@@ -390,7 +368,7 @@ export function useLibraryData(revision = 0, lang = 'en') {
       name: trimmed,
       tracks: seed ? [seed] : [],
     };
-    if (hasAuth()) {
+    if (hasAuthSession()) {
       try {
         const db = await createPlaylistApi(trimmed, lang);
         created = { ...db, tracks: seed ? [seed] : [] };

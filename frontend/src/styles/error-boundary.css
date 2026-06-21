@@ -1,0 +1,90 @@
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px 20px;
+  text-align: center;
+  background: var(--bg-main, #08080c);
+  color: var(--text-primary, #fff);
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+.error-boundary__card {
+  width: min(480px, 100%);
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.error-boundary__title {
+  margin: 0;
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.error-boundary__body {
+  margin: 0;
+  font-family: 'Inter', 'Outfit', system-ui, sans-serif;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  font-size: 0.98rem;
+  line-height: 1.55;
+  max-width: 36ch;
+}
+
+.error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.error-boundary__btn {
+  border: none;
+  border-radius: 999px;
+  padding: 11px 20px;
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.error-boundary__btn:hover {
+  transform: translateY(-1px);
+}
+
+.error-boundary__btn:active {
+  transform: translateY(0);
+}
+
+.error-boundary__btn--telegram {
+  background: linear-gradient(135deg, #2aabee 0%, #229ed9 100%);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(34, 158, 217, 0.35);
+}
+
+.error-boundary__btn--telegram:hover {
+  box-shadow: 0 6px 24px rgba(34, 158, 217, 0.45);
+}
+
+.error-boundary__btn--ghost {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary, #fff);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}

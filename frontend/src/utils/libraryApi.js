@@ -225,6 +225,21 @@ export function readGuestLibrary() {
   }
 }
 
+/** Player-ready tracks from the last successful library sync (instant UI hydrate). */
+export function readCachedLibraryTracks() {
+  return (readGuestLibrary() || [])
+    .map((row) => normalizeTrack(row))
+    .filter(Boolean);
+}
+
+/** Playlists from the last successful sync (instant UI hydrate). */
+export function readCachedPlaylists() {
+  return (readGuestPlaylists() || []).map((p) => ({
+    ...p,
+    tracks: (p.tracks || []).map(mapPlaylistTrack).filter(Boolean),
+  }));
+}
+
 export function writeGuestLibrary(rows) {
   try {
     localStorage.setItem('tidal-library', JSON.stringify(Array.isArray(rows) ? rows : []));

@@ -1,0 +1,70 @@
+/* Library Transfer (/sync) — platform cards + step flow spacing */
+
+.sync-page__panel-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.sync-flow {
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.sync-panel {
+  position: relative;
+  z-index: 0;
+}
+
+.sync-platform-grid .sync-platform-card {
+  --platform-tint: var(--platform-color, var(--accent-solid));
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--platform-tint) 38%, #0c0c12),
+    color-mix(in srgb, var(--platform-tint) 16%, #08080c)
+  );
+  border: 1px solid color-mix(in srgb, var(--platform-tint) 42%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.sync-platform-grid .sync-platform-card:hover {
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--platform-tint) 48%, #0c0c12),
+    color-mix(in srgb, var(--platform-tint) 22%, #08080c)
+  );
+  border-color: color-mix(in srgb, var(--platform-tint) 58%, transparent);
+}
+
+.sync-platform-grid .sync-platform-card--active {
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--platform-tint) 52%, #101018),
+    color-mix(in srgb, var(--platform-tint) 28%, #08080c)
+  );
+  border: 2px solid var(--platform-tint);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--platform-tint) 35%, transparent),
+    0 10px 28px color-mix(in srgb, var(--platform-tint) 22%, transparent);
+}
+
+.sync-platform-grid .sync-platform-card__name {
+  color: var(--text-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Brand SVG fills match card tints — lift icons onto a light badge so they stay visible. */
+.sync-platform-grid .platform-icon {
+  padding: 5px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.sync-platform-grid .platform-icon img,
+.sync-platform-grid .platform-icon svg {
+  display: block;
+}

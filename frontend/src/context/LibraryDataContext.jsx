@@ -3,8 +3,8 @@ import { useLibraryData } from '../hooks/useLibraryData';
 
 const LibraryDataContext = createContext(null);
 
-export function LibraryDataProvider({ children, revision = 0, lang = 'en' }) {
-  const value = useLibraryData(revision, lang);
+export function LibraryDataProvider({ children, lang = 'en' }) {
+  const value = useLibraryData(lang);
   return (
     <LibraryDataContext.Provider value={value}>
       {children}

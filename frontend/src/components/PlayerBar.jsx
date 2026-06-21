@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import MetaBadge from './MetaBadge';
-import { formatTrackYear } from '../utils/trackNormalize';
+import { formatTrackYear, normalizeArtists } from '../utils/trackNormalize';
 import {
   streamBadgeLabel,
   qualityButtonLabel,
@@ -8,12 +8,14 @@ import {
   isPlaybackQualityAvailable,
   isTidalCatalogOnlyLossless,
   qualityUnavailableTooltip,
+  resolvePlayerUiQuality,
 } from '../utils/qualityPrefs';
 import { appDict } from '../locales/appDict';
 import { coverImgSrc } from '../utils/coverUrl';
 import { apiGetJson } from '../utils/apiClient';
 import { usePlayerStore } from '../store/usePlayerStore';
-import { Link } from 'react-router-dom';
+import { useArtistCardStore } from '../store/useArtistCardStore';
+import { resolveArtistId } from '../utils/resolveArtist';
 import {
   Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders,
   ListMusic, Volume2, Waves, Radio, Shuffle, Repeat, Repeat1, ChevronUp, ChevronDown, Sparkles,
@@ -91,6 +93,24 @@ export default function PlayerBar({
   const coverRefreshAttempted = useRef(false);
   const setCurrentTrack = usePlayerStore((s) => s.setCurrentTrack);
   const swipeRef = useRef({ startY: 0, active: false });
+  const openArtistCard = useArtistCardStore((s) => s.openArtistCard);
+  const [resolvingArtist, setResolvingArtist] = useState(null);
+
+  const handlePlayerArtistClick = async (artistName, artistId) => {
+    if (resolvingArtist) return;
+    let id = artistId ? String(artistId) : null;
+    if (!id) {
+      setResolvingArtist(artistName);
+      try {
+        id = await resolveArtistId(artistName, lang);
+      } catch {
+        return;
+      } finally {
+        setResolvingArtist(null);
+      }
+    }
+    if (id) openArtistCard(id, artistName);
+  };
 
   const handlePlayerTouchStart = (e) => {
     if (!isMobile) return;
@@ -172,7 +192,10 @@ export default function PlayerBar({
   const displayArtistTooltip = setActive
     ? setLabel
     : (currentTrack
-      ? (currentTrack.artists?.length ? currentTrack.artists.join(', ') : 'Unknown Artist')
+      ? (() => {
+        const names = normalizeArtists(currentTrack);
+        return names.length ? names.join(', ') : 'Unknown Artist';
+      })()
       : t('selectTrack'));
   const titleTooltip = (setActive && embedTitle) || currentTrack ? displayTitle : undefined;
   const artistTooltip = (setActive && embedTitle) || currentTrack ? displayArtistTooltip : undefined;
@@ -204,17 +227,23 @@ export default function PlayerBar({
     </div>
   );
 
+  const artistNames = currentTrack ? normalizeArtists(currentTrack) : [];
   const artistLine = setActive ? setLabel : currentTrack ? (
-    currentTrack.artists ? currentTrack.artists.map((artistName, i) => {
+    artistNames.length ? artistNames.map((artistName, i) => {
       const artistId = currentTrack.artist_ids?.[i];
+      const isResolving = resolvingArtist === artistName;
       return (
         <Fragment key={i}>
           {i > 0 && ', '}
-          {artistId ? (
-            <Link to={`/artist/${artistId}`} className="player-artist-link">
-              {artistName}
-            </Link>
-          ) : artistName}
+          <button
+            type="button"
+            className="player-artist-link"
+            disabled={!!resolvingArtist}
+            style={{ cursor: isResolving ? 'wait' : 'pointer', opacity: isResolving ? 0.7 : 1 }}
+            onClick={() => { void handlePlayerArtistClick(artistName, artistId); }}
+          >
+            {artistName}
+          </button>
         </Fragment>
       );
     }) : 'Unknown Artist'
@@ -237,7 +266,7 @@ export default function PlayerBar({
         className="player-transport-btn"
         style={{ width: size, height: size }}
       >
-        {!setActive && isLoading ? (
+        {!setActive && isLoading && !playing ? (
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
@@ -283,14 +312,14 @@ export default function PlayerBar({
 
   const qualityDict = appDict[lang] || appDict.en;
 
-  const preferredUnavailable = qualitiesReady && !isPlaybackQualityAvailable(
+  const uiQualityId = resolvePlayerUiQuality({
+    deliveredStream,
+    streamQuality,
     playbackQuality,
-    availableQualities,
-    maxTrackQuality,
-    effectivePlan,
-    probeData,
-  );
-  const activeQualityId = preferredUnavailable ? streamQuality : playbackQuality;
+    qualitiesReady,
+  });
+
+  const activeQualityId = uiQualityId;
 
   const qualityPicker = (
     <div className="player-quality-picker">
@@ -659,15 +688,15 @@ export default function PlayerBar({
                       )}
                       {playbackQuality && qualitiesReady && (
                         <MetaBadge
-                          className="hide-on-mobile"
+                          className={isMobile && !mobileExpanded ? 'hide-on-mobile' : undefined}
                           variant="solid"
                           title={
-                            deliveredStream?.tier && deliveredStream.tier !== playbackQuality
-                              ? `${streamBadgeLabel({ tier: playbackQuality }, playbackQuality)} → ${streamBadgeLabel(deliveredStream, playbackQuality)}`
-                              : streamBadgeLabel(deliveredStream, playbackQuality)
+                            uiQualityId !== playbackQuality
+                              ? `${streamBadgeLabel({ tier: playbackQuality }, playbackQuality)} → ${streamBadgeLabel(deliveredStream, uiQualityId)}`
+                              : streamBadgeLabel(deliveredStream, uiQualityId)
                           }
                         >
-                          {streamBadgeLabel(deliveredStream, playbackQuality)}
+                          {streamBadgeLabel(deliveredStream, uiQualityId)}
                         </MetaBadge>
                       )}
                     </div>
@@ -700,7 +729,7 @@ export default function PlayerBar({
                   {isMobile && mobileExpanded ? null : actionIcons}
                 </div>
               )}
-              <div className="player-volume-row hide-on-mobile">
+              <div className={`player-volume-row${isMobile && mobileExpanded ? ' player-volume-row--mobile' : ' hide-on-mobile'}`}>
                 <Volume2 size={20} />
                 <input
                   type="range"

@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { showToast } from '../utils/toast';
 import { apiGetJson, apiPostJson, messageForApiError } from '../utils/apiClient';
-import { buildRadioQueue } from '../utils/trackNormalize';
+import { buildRadioQueue, pickRadioStartTrack } from '../utils/trackNormalize';
 
 /** Track / artist / AI radio queue bootstrap. */
 export function usePlayerRadio({
@@ -10,18 +10,22 @@ export function usePlayerRadio({
   playQueue,
   startTrackRadioRef,
 }) {
-  const startTrackRadio = useCallback(async (track) => {
+  const startTrackRadio = useCallback(async (track, { advancePastSeed = false } = {}) => {
     const pid = String(track.provider_id);
     const provider = track.provider || 'tidal';
-    const seedQueue = buildRadioQueue(track, []);
-    if (seedQueue.length > 0) {
-      playQueue(seedQueue[0], seedQueue);
+
+    if (!advancePastSeed) {
+      const seedQueue = buildRadioQueue(track, []);
+      if (seedQueue.length > 0) {
+        playQueue(seedQueue[0], seedQueue);
+      }
     }
 
     const applyRadioQueue = (radioTracks, toastKey = 'trackRadioStarted') => {
       const queue = buildRadioQueue(track, radioTracks);
-      if (queue.length <= 1) return false;
-      playQueue(queue[0], queue);
+      const start = pickRadioStartTrack(queue, { advancePastSeed });
+      if (!start || queue.length <= 1) return false;
+      playQueue(start, queue);
       showToast(t(toastKey));
       return true;
     };
@@ -33,7 +37,7 @@ export function usePlayerRadio({
           { auth: true, lang },
         );
         if (radioData.tracks?.length > 0 && applyRadioQueue(radioData.tracks)) {
-          return;
+          return true;
         }
       } catch {
         /* try full radio, then ai fallback */
@@ -45,7 +49,7 @@ export function usePlayerRadio({
           { auth: true, lang },
         );
         if (radioData.tracks?.length > 0 && applyRadioQueue(radioData.tracks)) {
-          return;
+          return true;
         }
       } catch {
         /* try ai fallback */
@@ -58,7 +62,7 @@ export function usePlayerRadio({
       try {
         const data = await apiPostJson('/api/ai-playlist', { query: vibeQuery, limit: 15 }, { lang });
         if (data.tracks?.length > 0 && applyRadioQueue(data.tracks)) {
-          return;
+          return true;
         }
       } catch {
         /* artist fallback */
@@ -70,15 +74,17 @@ export function usePlayerRadio({
           const artistData = await apiGetJson(`/api/artist/${artistId}`, { lang });
           const top = artistData.top_tracks || [];
           if (applyRadioQueue(top, 'artistRadioStarted')) {
-            return;
+            return true;
           }
         } catch {
           /* ignore */
         }
       }
       showToast(t('radioFailed'));
+      return false;
     } catch (err) {
       showToast(messageForApiError(err, lang));
+      return false;
     }
   }, [lang, playQueue, t]);
 

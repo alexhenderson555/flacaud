@@ -10,7 +10,7 @@ import {
   isSessionJob,
   wasJobSaved,
   markJobSaved,
-  DOWNLOAD_JOB_STARTED,
+  DOWNLOAD_JOB_STARTED_EVENT,
   requestDownloadRegistryRefresh,
   fetchJobStatus,
 } from '../utils/downloadJobs';
@@ -210,13 +210,17 @@ export default function DownloadToast({ lang = 'en' }) {
 
   useEffect(() => {
     const onStarted = (e) => {
-      const { jobId, title, quality } = e.detail || {};
+      const { jobId, title, quality, replaces } = e.detail || {};
       if (!jobId || dismissedRef.current.has(jobId)) return;
+      if (replaces) {
+        delete optimisticRef.current[replaces];
+        activeJobsRef.current = activeJobsRef.current.filter((j) => j.id !== replaces);
+      }
       pushOptimistic(jobId, title, quality);
       queueMicrotask(() => fetchNowRef.current?.());
     };
-    window.addEventListener(DOWNLOAD_JOB_STARTED, onStarted);
-    return () => window.removeEventListener(DOWNLOAD_JOB_STARTED, onStarted);
+    window.addEventListener(DOWNLOAD_JOB_STARTED_EVENT, onStarted);
+    return () => window.removeEventListener(DOWNLOAD_JOB_STARTED_EVENT, onStarted);
   }, [pushOptimistic]);
 
   useEffect(() => {

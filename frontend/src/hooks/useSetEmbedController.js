@@ -152,7 +152,8 @@ export function useSetEmbedController({ pauseMainAudio, setMainPlaying, volume =
     if (!targetUrl || !canPlaySetUrl(targetUrl)) return false;
 
     const title = opts.title || deriveSetTitle(targetUrl);
-    const hasCached = await probeCachedSetAudio(targetUrl);
+    const preferEmbed = !!opts.preferEmbed;
+    const hasCached = !preferEmbed && await probeCachedSetAudio(targetUrl);
     if (hasCached) {
       if (url && normalizeSetUrl(url) !== embedUrl) {
         setSetAudioMode(false);
@@ -210,10 +211,35 @@ export function useSetEmbedController({ pauseMainAudio, setMainPlaying, volume =
 
   const seekSetEmbed = useCallback((seconds, opts = {}) => {
     const forceCachedAudio = !!opts.forceCachedAudio;
+    const preferEmbed = !!opts.preferEmbed;
+    const urlOverride = opts.url ? normalizeSetUrl(opts.url) : '';
     pendingSeekRef.current = seconds;
     if (forceCachedAudio && embedUrl) {
       startCachedSetAudio(embedUrl, seconds, embedDisplayTitle || deriveSetTitle(embedUrl));
       return;
+    }
+    if (preferEmbed) {
+      const targetUrl = urlOverride || embedUrl;
+      if (targetUrl && canPlaySetUrl(targetUrl)) {
+        setSetAudioMode(false);
+        setEmbedDisplayTitle(opts.title || deriveSetTitle(targetUrl));
+        setEmbedEngaged(true);
+        if (urlOverride && urlOverride !== embedUrl) {
+          setEmbedUrl(urlOverride);
+        }
+        pauseMainAudio?.();
+        setMainPlaying?.(false);
+        suppressEmbedSyncRef.current = false;
+        seekRetryCleanupRef.current?.();
+        seekRetryCleanupRef.current = seekSetPlayerWithRetry(playerRef, seconds);
+        if (!embedPlaying) {
+          playSetEmbed(seconds, targetUrl, { preferEmbed: true, title: opts.title });
+          return;
+        }
+        playerRef.current?.play?.();
+        setEmbedPlaying(true);
+        return;
+      }
     }
     if (setAudioModeRef.current) {
       const el = setAudioRef.current;
@@ -236,7 +262,7 @@ export function useSetEmbedController({ pauseMainAudio, setMainPlaying, volume =
     seekRetryCleanupRef.current?.();
     seekRetryCleanupRef.current = seekSetPlayerWithRetry(playerRef, seconds);
     if (!embedPlaying) {
-      playSetEmbed(seconds);
+      playSetEmbed(seconds, urlOverride || undefined, { preferEmbed, title: opts.title });
       return;
     }
     playerRef.current?.play?.();

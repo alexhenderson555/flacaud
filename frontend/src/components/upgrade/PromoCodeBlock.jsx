@@ -7,6 +7,8 @@ export default function PromoCodeBlock({
   onRedeem,
   redeeming,
   compact = false,
+  /** On login screen: enter code, then sign in — no separate Activate until logged in. */
+  redeemAfterLogin = false,
 }) {
   const t = (en, ru) => (lang === 'ru' ? ru : en);
 
@@ -27,21 +29,28 @@ export default function PromoCodeBlock({
           autoComplete="off"
           spellCheck={false}
         />
-        <button
-          type="button"
-          data-testid="activation-redeem-btn"
-          className="btn-primary upgrade-promo__btn"
-          disabled={redeeming || !activationCode.trim()}
-          onClick={onRedeem}
-        >
-          {redeeming ? '…' : t('Activate', 'Активировать')}
-        </button>
+        {!redeemAfterLogin && (
+          <button
+            type="button"
+            data-testid="activation-redeem-btn"
+            className="btn-primary upgrade-promo__btn"
+            disabled={redeeming || !activationCode.trim()}
+            onClick={onRedeem}
+          >
+            {redeeming ? '…' : t('Activate', 'Активировать')}
+          </button>
+        )}
       </div>
       <p className="upgrade-promo__hint">
-        {t(
-          'Codes from Telegram or promotions apply instantly.',
-          'Коды из Telegram и акций применяются сразу.',
-        )}
+        {redeemAfterLogin
+          ? t(
+            'Enter your code, then press Log In or Sign Up — the plan applies right after.',
+            'Введите код и нажмите «Войти» или «Регистрация» — тариф применится сразу после входа.',
+          )
+          : t(
+            'Codes from Telegram or promotions apply instantly.',
+            'Коды из Telegram и акций применяются сразу.',
+          )}
       </p>
     </div>
   );

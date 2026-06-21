@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ListMusic, User, Repeat, Radio, Flame, Disc, Menu, X, Heart,
+  Search, ListMusic, User, Repeat, Radio, Flame, Disc, Library, Menu, X, Heart,
 } from 'lucide-react';
 import { BRAND_LOGO_SRC, BRAND_NAME } from '../../brand';
 
@@ -14,7 +14,7 @@ const MOBILE_MORE_LINKS = [
   { to: '/playlists', icon: ListMusic, labelKey: 'playlists' },
   { to: '/sync', icon: Repeat, labelKey: 'transfer' },
   { to: '/analyzer', icon: ListMusic, labelKey: 'setAnalyzer' },
-  { to: '/set-library', icon: Disc, labelKey: 'setLibrary' },
+  { to: '/set-library', icon: Library, labelKey: 'setLibrary' },
   { to: '/splitter', icon: Disc, labelKey: 'stemSplitter' },
 ];
 
@@ -30,7 +30,10 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             alt={`${BRAND_NAME} logo`}
             className="brand-logo"
           />
-          <h1 className="text-gradient">{BRAND_NAME}</h1>
+          <h1 className="brand-title">
+            <span className="text-gradient">Flac</span>
+            <span className="brand-title__suffix">Aud</span>
+          </h1>
         </Link>
 
         <div className="nav-links">
@@ -68,7 +71,7 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             <span>{t('setAnalyzer')}</span>
           </NavLink>
           <NavLink to="/set-library" className={navClass('', 'hide-on-mobile')}>
-            <Disc size={20} />
+            <Library size={20} />
             <span>{t('setLibrary')}</span>
           </NavLink>
           <NavLink to="/splitter" className={navClass('', 'hide-on-mobile')}>
@@ -88,7 +91,6 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
         </div>
 
         <div className="sidebar-footer hide-on-mobile">
-          <div className="sidebar-section-label">{t('account')}</div>
           <NavLink to="/account" className={navClass('', 'nav-item-account')}>
             <User size={20} />
             <span>{t('account')}</span>

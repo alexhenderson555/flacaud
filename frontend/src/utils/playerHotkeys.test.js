@@ -16,4 +16,14 @@ describe('hotkeyHintLines', () => {
     expect(lines.join(' ')).toContain('радио по треку');
     expect(lines.join(' ')).toContain('громкость');
   });
+
+  it('lists every shortcut from PLAYER_HOTKEYS', () => {
+    const text = hotkeyHintLines('en').join(' ');
+    Object.values(PLAYER_HOTKEYS).forEach((key) => {
+      const parts = String(key).split('/');
+      parts.forEach((part) => {
+        expect(text).toContain(part.trim());
+      });
+    });
+  });
 });

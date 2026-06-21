@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Play, Music } from 'lucide-react';
 import { coverImgSrc } from '../../utils/coverUrl';
 import TrackRowActions from '../TrackRowActions';
+import ArtistLine from '../ArtistLine';
 import { normalizeSetMatchedTrack, setTrackRowDurationSeconds } from '../../utils/setAnalyzerUtils';
 import { formatDurationSeconds } from '../../utils/trackDuration';
 
@@ -68,7 +69,9 @@ export default function SetTracklistRow({
         <div className="track-row__title">
           <span className="track-row__title-text">{row.title}</span>
         </div>
-        <div className="track-row__artist">{row.artist}</div>
+        <div className="track-row__artist">
+          {track ? <ArtistLine track={track} stopPropagation /> : row.artist}
+        </div>
       </div>
 
       <span

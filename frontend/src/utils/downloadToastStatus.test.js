@@ -82,6 +82,13 @@ describe('computeDownloadToastView', () => {
       labels,
     );
     expect(hi.statusText).toBe('Downloading… 10% · 320k');
+
+    const hires = computeDownloadToastView(
+      { progress: 55, status: 'running', quality: 'HI_RES', failed: false },
+      undefined,
+      labels,
+    );
+    expect(hires.statusText).toBe('Downloading… 55% · Lossless');
   });
 
   it('keeps bar aligned with server percent while preparing PC save', () => {

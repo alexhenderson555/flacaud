@@ -333,8 +333,12 @@ export default function Account() {
             showToast(redeemData.message || (lang === 'ru' ? 'Тариф активирован!' : 'Plan activated!'));
             setActivationCode('');
             await checkAuth();
+          } else {
+            showToast(redeemData.detail || (lang === 'ru' ? 'Неверный код' : 'Invalid code'));
           }
-        } catch { /* optional post-login redeem */ }
+        } catch (err) {
+          showToast(messageForApiError(err, lang));
+        }
       }
 
       const shareToken = peekPendingShareToken();
@@ -803,6 +807,7 @@ export default function Account() {
                   setActivationCode={setActivationCode}
                   onRedeem={handleRedeemActivation}
                   redeeming={redeeming}
+                  redeemAfterLogin
                   compact
                 />
               </div>

@@ -4,9 +4,11 @@ import {
   barDisplayValue,
   bandEqualizerGain,
   computeBarLevels,
+  mirroredSpectrumIndex,
   sampleBandAverage,
   sampleBandPeak,
   smoothBarLevels,
+  spectrumSlotCount,
   targetBarCount,
 } from './visualizerBands';
 
@@ -23,52 +25,88 @@ describe('targetBarCount', () => {
   });
 });
 
+describe('mirroredSpectrumIndex', () => {
+  it('maps both edges to the lowest spectrum slot', () => {
+    expect(mirroredSpectrumIndex(0, 100)).toBe(0);
+    expect(mirroredSpectrumIndex(99, 100)).toBe(0);
+    expect(mirroredSpectrumIndex(50, 100)).toBe(49);
+  });
+});
+
+describe('spectrumSlotCount', () => {
+  it('uses half the bars for unique frequency bands', () => {
+    expect(spectrumSlotCount(100)).toBe(50);
+    expect(spectrumSlotCount(101)).toBe(51);
+  });
+});
+
 describe('barBinRange', () => {
-  it('covers the full spectrum across bars', () => {
+  it('covers the musical spectrum across bars', () => {
     const barCount = 64;
     const binCount = 256;
     const first = barBinRange(0, barCount, binCount);
     const last = barBinRange(barCount - 1, barCount, binCount);
 
-    expect(first.start).toBeGreaterThanOrEqual(1);
-    expect(last.end).toBe(binCount);
+    expect(first.start).toBe(0);
+    expect(first.end).toBeGreaterThan(1);
+    expect(last.end).toBeLessThanOrEqual(binCount);
     expect(last.start).toBeGreaterThan(first.start);
   });
 });
 
 describe('sampleBandPeak', () => {
   it('reads the loudest bin in each band', () => {
-    const data = new Uint8Array([0, 10, 50, 20, 200, 5]);
-    const peak = sampleBandPeak(data, 2, 3);
-    expect(peak).toBe(200);
+    const barCount = 32;
+    const binCount = 256;
+    for (let bar = 0; bar < barCount; bar += 1) {
+      const { start } = barBinRange(bar, barCount, binCount);
+      const data = new Uint8Array(binCount);
+      data.fill(10);
+      data[start] = 200;
+      expect(sampleBandPeak(data, bar, barCount)).toBe(200);
+    }
   });
 });
 
 describe('sampleBandAverage', () => {
   it('reads the mean energy in each band', () => {
-    const data = new Uint8Array([0, 20, 30, 40, 50, 60]);
-    const avg = sampleBandAverage(data, 1, 3);
+    const barCount = 32;
+    const binCount = 256;
+    const { start, end } = barBinRange(5, barCount, binCount);
+    const data = new Uint8Array(binCount);
+    data.fill(10);
+    for (let i = start; i < end; i += 1) data[i] = 40;
+    const avg = sampleBandAverage(data, 5, barCount);
     expect(avg).toBeGreaterThan(20);
     expect(avg).toBeLessThan(60);
   });
 });
 
 describe('bandEqualizerGain', () => {
-  it('attenuates lows and lifts highs', () => {
+  it('lifts higher spectrum slots slightly', () => {
     expect(bandEqualizerGain(0, 10)).toBeLessThan(bandEqualizerGain(9, 10));
   });
 });
 
 describe('computeBarLevels', () => {
-  it('fills every bar across the spectrum', () => {
+  it('mirrors bass energy to both viewport edges', () => {
     const data = new Uint8Array(256);
-    for (let i = 0; i < data.length; i += 1) {
-      data[i] = i % 2 === 0 ? 180 : 40;
-    }
+    data.fill(12);
+    data[2] = 240;
+    data[3] = 220;
     const levels = computeBarLevels(data, 1400);
-    expect(levels.length).toBeGreaterThan(50);
-    expect(levels[0]).toBeLessThan(255);
-    expect(levels[levels.length - 1]).toBeGreaterThan(0);
+    expect(levels[0]).toBeGreaterThan(30);
+    expect(levels[levels.length - 1]).toBeGreaterThan(30);
+    expect(Math.abs(levels[0] - levels[levels.length - 1])).toBeLessThan(8);
+  });
+
+  it('keeps motion in the center for mid-range energy', () => {
+    const data = new Uint8Array(256);
+    data.fill(15);
+    for (let i = 20; i < 60; i += 1) data[i] = 180;
+    const levels = computeBarLevels(data, 1200);
+    const center = levels[Math.floor(levels.length / 2)];
+    expect(center).toBeGreaterThan(20);
   });
 
   it('does not pin every low bar to max when bass dominates', () => {
@@ -77,10 +115,8 @@ describe('computeBarLevels', () => {
     data[2] = 255;
     data[3] = 240;
     const levels = computeBarLevels(data, 1200);
-    const lowAvg = (levels[0] + levels[1] + levels[2]) / 3;
-    const highAvg = (levels[levels.length - 3] + levels[levels.length - 2] + levels[levels.length - 1]) / 3;
-    expect(lowAvg).toBeLessThan(255);
-    expect(highAvg).toBeGreaterThan(0);
+    expect(levels[0]).toBeLessThan(255);
+    expect(levels[levels.length - 1]).toBeLessThan(255);
   });
 });
 

@@ -7,7 +7,7 @@ import {
   shouldTriggerTrackEnd,
   canStartCrossfade,
   isPreloadReadyForCrossfade,
-  clearAudioElementSrc,
+  clearIdleAudioSlot,
   resumeMainPlaybackAfterHandoff,
 } from '../utils/playerTransportLogic';
 import { initAudioEngine as setupAudioEngine } from '../utils/audioEngine';
@@ -168,7 +168,7 @@ export function usePlayerProgressLoop({
 
             const playing = getMainAudioEl?.() ?? audioRef.current;
             const idle = getPreloadAudioEl?.() ?? preloadAudioRef.current;
-            clearAudioElementSrc(idle);
+            clearIdleAudioSlot(idle);
             if (playing) {
               // Do not seek to handoffTime — the element is already mid-playback from crossfade.
               resumeMainPlaybackAfterHandoff(playing, {

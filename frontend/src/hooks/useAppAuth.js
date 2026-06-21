@@ -35,6 +35,7 @@ export function useAppAuth({
       setEffectivePlan(getStoredEffectivePlan());
       setPlanReady(true);
       setMediaEnabled(true);
+      void primeMediaToken();
       // Avoid doing potentially heavy localStorage hydration in the same tick as login.
       queueMicrotask
         ? queueMicrotask(() => hydratePlayerFromStorage())

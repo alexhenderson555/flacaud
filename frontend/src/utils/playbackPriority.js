@@ -1,10 +1,10 @@
 /**
- * Playback priority without killing background DJ entirely.
- * - Other tracks: analyze in parallel while something plays.
- * - Current track + seek/buffer: pause DJ so stream range requests win.
+ * Playback priority for background media (DJ analysis, offline prefetch).
+ * Pause all background stream work while the main player is loading or playing.
  */
 
 let loading = false;
+let playing = false;
 let seekQuietUntil = 0;
 let currentTrackId = null;
 const listeners = new Set();
@@ -20,6 +20,7 @@ function notify() {
 
 export function setPlaybackPriorityState(patch = {}) {
   if ('loading' in patch) loading = !!patch.loading;
+  if ('playing' in patch) playing = !!patch.playing;
   if ('currentTrackId' in patch) {
     currentTrackId = patch.currentTrackId != null ? String(patch.currentTrackId) : null;
   }
@@ -32,9 +33,9 @@ export function markSeekActivity(ms = 4000) {
   notify();
 }
 
-/** True only when playback is actively waiting on the network (seek / buffer). */
+/** Defer background stream fetches (DJ analysis, offline prefetch) while playback is active. */
 export function shouldDeferBackgroundMedia() {
-  return loading || Date.now() < seekQuietUntil;
+  return loading || playing || Date.now() < seekQuietUntil;
 }
 
 export function isDjAnalysisBlockedForTrack(providerId) {
@@ -50,6 +51,7 @@ export function subscribePlaybackPriority(listener) {
 /** @internal vitest only */
 export function resetPlaybackPriorityForTests() {
   loading = false;
+  playing = false;
   seekQuietUntil = 0;
   currentTrackId = null;
 }

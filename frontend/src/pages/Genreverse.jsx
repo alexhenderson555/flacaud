@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Radio as RadioIcon, Play, Loader2, ChevronRight, X, RefreshCcw } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Radio as RadioIcon, Play, Loader2, X, RefreshCcw } from 'lucide-react';
 import LibraryTrackRow from '../components/LibraryTrackRow';
 import PlaylistModal from '../components/PlaylistModal';
 import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
@@ -39,93 +39,6 @@ const dict = {
     back: 'К списку жанров'
   },
 };
-
-const GENRE_UNIVERSE = [
-  {
-    id: 'electronic',
-    name: 'Electronic',
-    color: 'linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%)',
-    image: '/genres/genre_electronic_1781783267241.png',
-    subgenres: ['Melodic House', 'Deep House', 'Techno', 'Synthwave', 'Trance', 'Dubstep', 'Drum and Bass', 'Chillwave', 'IDM', 'House', 'Hardstyle']
-  },
-  {
-    id: 'rock',
-    name: 'Rock',
-    color: 'linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%)',
-    image: '/genres/genre_rock_1781783278795.png',
-    subgenres: ['Indie Rock', 'Punk', 'Alternative', 'Classic Rock', 'Grunge', 'Psychedelic Rock', 'Hard Rock', 'Post-Punk']
-  },
-  {
-    id: 'metal',
-    name: 'Metal',
-    color: 'linear-gradient(135deg, #2b5876 0%, #4e4376 100%)',
-    image: '/genres/genre_metal_1781783287069.png',
-    subgenres: ['Heavy Metal', 'Death Metal', 'Black Metal', 'Metalcore', 'Doom Metal', 'Nu Metal', 'Thrash Metal', 'Symphonic Metal']
-  },
-  {
-    id: 'hiphop',
-    name: 'Hip-Hop / Rap',
-    color: 'linear-gradient(135deg, #F09819 0%, #EDDE5D 100%)',
-    image: '/genres/genre_hiphop_1781783297333.png',
-    subgenres: ['Trap', 'Boom Bap', 'Lo-Fi', 'Drill', 'Conscious Rap', 'Cloud Rap', 'Old School Hip-Hop', 'Mumble Rap', 'Grime']
-  },
-  {
-    id: 'pop',
-    name: 'Pop',
-    color: 'linear-gradient(135deg, #E55D87 0%, #5FC3E4 100%)',
-    image: '/genres/genre_pop_1781783307721.png',
-    subgenres: ['Synth-Pop', 'Dream Pop', 'Electropop', 'Hyperpop', 'Dance-Pop', 'Indie Pop', 'Teen Pop', 'Art Pop']
-  },
-  {
-    id: 'rnb',
-    name: 'R&B / Soul',
-    color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    image: '/genres/genre_rnb_1781783316965.png',
-    subgenres: ['Neo-Soul', 'Contemporary R&B', 'Funk', 'Motown', 'Quiet Storm', 'Alternative R&B', 'Classic Soul']
-  },
-  {
-    id: 'jazz',
-    name: 'Jazz & Blues',
-    color: 'linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)',
-    image: '/genres/genre_jazz_1781783337431.png',
-    subgenres: ['Bebop', 'Smooth Jazz', 'Delta Blues', 'Chicago Blues', 'Jazz Fusion', 'Cool Jazz', 'Free Jazz', 'Soul Jazz']
-  },
-  {
-    id: 'latin',
-    name: 'Latin',
-    color: 'linear-gradient(135deg, #f83600 0%, #f9d423 100%)',
-    image: '/genres/genre_latin_1781783348619.png',
-    subgenres: ['Reggaeton', 'Salsa', 'Bossa Nova', 'Bachata', 'Latin Pop', 'Cumbia', 'Merengue']
-  },
-  {
-    id: 'classical',
-    name: 'Classical',
-    color: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-    image: '/genres/genre_classical_1781783360883.png',
-    subgenres: ['Symphony', 'Baroque', 'Romantic', 'Chamber Music', 'Contemporary Classical', 'Opera', 'Choral']
-  },
-  {
-    id: 'country',
-    name: 'Country & Folk',
-    color: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
-    image: '/genres/genre_country_1781783371674.png',
-    subgenres: ['Modern Country', 'Bluegrass', 'Americana', 'Indie Folk', 'Acoustic', 'Alt-Country', 'Traditional Country']
-  },
-  {
-    id: 'world',
-    name: 'Global & World',
-    color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    image: '/genres/genre_world_1781783382572.png',
-    subgenres: ['Afrobeats', 'Afro', 'K-Pop', 'J-Pop', 'Reggae', 'Dancehall', 'Bollywood', 'Celtic']
-  },
-  {
-    id: 'ambient',
-    name: 'Chill & Focus',
-    color: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
-    image: '/genres/genre_chill_1781783392590.png',
-    subgenres: ['Lo-Fi Beats', 'Nature Sounds', 'Meditation', 'White Noise', 'Cinematic', 'Ambient', 'Downtempo', 'Binaural Beats']
-  }
-];
 
 export default function Genreverse() {
   const [genreUniverse, setGenreUniverse] = useState([]);

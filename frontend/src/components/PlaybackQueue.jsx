@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion, Reorder, useDragControls } from 'framer-motion';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { X, Play, Music, Trash2, GripVertical } from 'lucide-react';
-import { coverImgSrc } from '../utils/coverUrl';
+import { X, Play, Music, Trash2, GripVertical } from 'lucide-react';import { coverImgSrc } from '../utils/coverUrl';
 import { tracksMatch } from '../utils/trackNormalize';
 import ArtistLine from './ArtistLine';
 
@@ -104,13 +102,6 @@ export default function PlaybackQueue({
 
   const scrollContainerRef = useRef(null);
 
-  const virtualizer = useVirtualizer({
-    count: playlist?.length ? localUpNext.length : 0,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 72,
-    overscan: 10,
-  });
-
   if (!playlist?.length) return null;
 
   return (
@@ -156,36 +147,23 @@ export default function PlaybackQueue({
             values={upNextIds}
             onReorder={handleIdsReorder}
             layoutScroll
-            style={{ listStyle: 'none', margin: 0, padding: 0, height: virtualizer.getTotalSize(), position: 'relative' }}
+            style={{ listStyle: 'none', margin: 0, padding: 0 }}
           >
-            {virtualizer.getVirtualItems().map((virtualItem) => {
-              const track = localUpNext[virtualItem.index];
-              return (
-                <div
-                  key={virtualItem.key}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                >
-                  <QueueReorderRow
-                    trackId={String(track.provider_id)}
-                    track={track}
-                    onPlay={() => {
-                      const full = safeIndex >= 0
-                        ? [...playlist.slice(0, safeIndex + 1), ...localUpNextRef.current]
-                        : playlist;
-                      togglePlay(track, full);
-                    }}
-                    onRemove={() => removeAt(virtualItem.index)}
-                    onDragEnd={handleDragEnd}
-                  />
-                </div>
-              );
-            })}
+            {localUpNext.map((track, index) => (
+              <QueueReorderRow
+                key={String(track.provider_id)}
+                trackId={String(track.provider_id)}
+                track={track}
+                onPlay={() => {
+                  const full = safeIndex >= 0
+                    ? [...playlist.slice(0, safeIndex + 1), ...localUpNextRef.current]
+                    : playlist;
+                  togglePlay(track, full);
+                }}
+                onRemove={() => removeAt(index)}
+                onDragEnd={handleDragEnd}
+              />
+            ))}
           </Reorder.Group>
         ) : (
           <div style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>

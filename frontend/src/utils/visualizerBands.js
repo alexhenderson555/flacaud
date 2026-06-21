@@ -5,22 +5,40 @@ export function targetBarCount(viewportWidth, binCount = 128) {
   return Math.min(desired, usableBins);
 }
 
-/** Log-spaced FFT bin range so lows and highs both get visible columns. */
+/** Mirror bar index so bass/mids appear on both left and right edges (symmetric EQ). */
+export function mirroredSpectrumIndex(barIndex, barCount) {
+  if (barCount <= 1) return 0;
+  return Math.min(barIndex, barCount - 1 - barIndex);
+}
+
+/** Unique spectrum slots when mirroring (center bar is the highest band). */
+export function spectrumSlotCount(barCount) {
+  return Math.max(1, Math.ceil(barCount / 2));
+}
+
+/** Log-spaced FFT bin range across the musically active part of the spectrum. */
 export function barBinRange(barIndex, barCount, binCount) {
   if (binCount <= 1 || barCount <= 0) return { start: 0, end: 1 };
 
-  const minBin = Math.min(4, binCount - 2);
-  const maxBin = binCount - 1;
+  const maxBin = Math.max(8, Math.floor((binCount - 1) * 0.72));
+
+  if (barIndex === 0) {
+    return { start: 0, end: Math.min(binCount, 6) };
+  }
+
+  const minBin = 5;
   const logMin = Math.log(minBin);
   const logMax = Math.log(maxBin);
-  const t0 = barIndex / barCount;
-  const t1 = (barIndex + 1) / barCount;
+  const adjustedIndex = barIndex - 1;
+  const adjustedCount = Math.max(1, barCount - 1);
+  const t0 = adjustedIndex / adjustedCount;
+  const t1 = (adjustedIndex + 1) / adjustedCount;
   const start = Math.min(maxBin, Math.floor(Math.exp(logMin + t0 * (logMax - logMin))));
   let end = Math.min(
     binCount,
     Math.max(start + 1, Math.floor(Math.exp(logMin + t1 * (logMax - logMin)))),
   );
-  if (barIndex === barCount - 1) end = binCount;
+  if (barIndex === barCount - 1) end = Math.min(binCount, maxBin + 1);
   return { start, end };
 }
 
@@ -44,42 +62,32 @@ export function sampleBandAverage(data, barIndex, barCount) {
   return count ? sum / count : 0;
 }
 
-/** Attenuate sub-bass dominance; lift treble slightly so the right side stays visible. */
+/** Attenuate sub-bass dominance; lift treble slightly so the center stays visible. */
 export function bandEqualizerGain(barIndex, barCount) {
   const t = barCount > 1 ? barIndex / (barCount - 1) : 0;
-  return 0.5 + t * 0.65;
+  return 0.55 + t * 0.45;
 }
 
-/** Legacy helper – prefer computeBarLevels for rendering. */
+/** Per-bar height from FFT peak (no global normalization that crushes quiet bands). */
 export function barDisplayValue(peak, barIndex, barCount) {
   const t = barCount > 1 ? barIndex / (barCount - 1) : 0;
   const shaped = Math.pow(peak / 255, 0.72) * 255;
-  return Math.min(255, shaped * (0.55 + t * 0.45));
+  return Math.min(255, shaped * bandEqualizerGain(barIndex, barCount) * (0.85 + t * 0.15));
 }
 
 /**
- * Map FFT bins → bar heights with per-frame normalization so lows don't peg at max
- * and quiet treble bins still show motion across the full viewport width.
+ * Map FFT bins → bar heights. Spectrum is mirrored so both viewport edges
+ * show bass/mid energy instead of pinning highs to the right side only.
  */
 export function computeBarLevels(data, viewportWidth) {
   const barCount = targetBarCount(viewportWidth, data.length);
-  const raw = new Float32Array(barCount);
-  let max = 0;
-
-  for (let i = 0; i < barCount; i += 1) {
-    const avg = sampleBandAverage(data, i, barCount);
-    const shaped = Math.pow(avg / 255, 0.72) * 255;
-    const weighted = shaped * bandEqualizerGain(i, barCount);
-    raw[i] = weighted;
-    if (weighted > max) max = weighted;
-  }
-
-  const floor = max * 0.1;
-  const span = Math.max(1, max - floor);
+  const specSlots = spectrumSlotCount(barCount);
   const levels = new Uint8Array(barCount);
+
   for (let i = 0; i < barCount; i += 1) {
-    const norm = Math.max(0, (raw[i] - floor) / span);
-    levels[i] = Math.min(255, Math.round(Math.pow(norm, 1.12) * 255));
+    const specIndex = mirroredSpectrumIndex(i, barCount);
+    const peak = sampleBandPeak(data, specIndex, specSlots);
+    levels[i] = Math.round(barDisplayValue(peak, specIndex, specSlots));
   }
   return levels;
 }

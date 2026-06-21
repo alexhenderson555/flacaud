@@ -9,6 +9,7 @@ import {
   urlTargetsTrack,
   resumePausedPlayback,
   resumeMainPlaybackAfterHandoff,
+  prepareMainAudioForTrackSwitch,
   unlockPlaybackElement,
   resolveVolumeUpdate,
   formatTime,
@@ -80,6 +81,32 @@ describe('resumePausedPlayback', () => {
     expect(loading).toBe(false);
     expect(playing).toBe(true);
     expect(pendingPlayRef.current).toBe(false);
+  });
+});
+
+describe('prepareMainAudioForTrackSwitch', () => {
+  it('pauses Web Audio element without blanking src', () => {
+    const el = {
+      _sourceNode: {},
+      src: 'blob:track-a',
+      pause: () => { el.paused = true; },
+      paused: false,
+    };
+    prepareMainAudioForTrackSwitch(el);
+    expect(el.src).toBe('blob:track-a');
+    expect(el.paused).toBe(true);
+  });
+
+  it('clears src on plain audio elements', () => {
+    let loaded = false;
+    const el = {
+      removeAttribute: () => { el.src = ''; },
+      load: () => { loaded = true; },
+      pause: () => {},
+      src: 'blob:track-a',
+    };
+    prepareMainAudioForTrackSwitch(el);
+    expect(loaded).toBe(true);
   });
 });
 

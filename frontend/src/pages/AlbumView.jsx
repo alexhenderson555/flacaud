@@ -1,10 +1,9 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect } from 'react';
 import { showToast } from '../utils/toast';
 import { useParams, useOutletContext, useNavigate, Link } from 'react-router-dom';
-import { Play, ChevronLeft, Download, Check, Heart, Plus } from 'lucide-react';
+import { Play, ChevronLeft, Heart } from 'lucide-react';
 import PlaylistModal from '../components/PlaylistModal';
-import { toggleLibraryTrack } from '../utils/library';
-import { cacheAudioTrack } from '../utils/cache';
+import LibraryTrackRow from '../components/LibraryTrackRow';
 
 export default function AlbumView() {
   const { id } = useParams();
@@ -13,55 +12,19 @@ export default function AlbumView() {
   const [loading, setLoading] = useState(true);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   
-  const { togglePlay, playingTrackId, downloadedTracks } = useOutletContext();
-  const [libraryIds, setLibraryIds] = useState(new Set());
+  const {
+    togglePlay,
+    currentTrackId,
+    isPlaying,
+    isLoading,
+    likedTracks,
+    toggleLike,
+    handleDownload,
+    downloadedTracks,
+    t: globalT,
+  } = useOutletContext();
 
-  useEffect(() => {
-    const saved = localStorage.getItem('tidal-library');
-    if (saved) {
-      try {
-        const lib = JSON.parse(saved);
-        setLibraryIds(new Set(lib.map(t => t.provider_id)));
-      } catch { /* ignore */ }
-    }
-  }, []);
-
-  const toggleLike = async (track, e) => {
-    e.stopPropagation();
-    const added = await toggleLibraryTrack(track);
-    if (added) {
-      libraryIds.add(track.provider_id);
-    } else {
-      libraryIds.delete(track.provider_id);
-    }
-    setLibraryIds(new Set(libraryIds));
-  };
-
-  const handleDownload = async (track, e) => {
-    e.stopPropagation();
-    if (downloadedTracks?.has(track.provider_id)) return;
-    
-    try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
-        body: JSON.stringify({
-          url: track.source_url,
-          quality: 'LOSSLESS',
-          lyrics: true,
-          karaoke: false,
-          dj_analyze: false
-        })
-      });
-      if (res.ok) {
-        // Cache in browser
-        cacheAudioTrack(track, 'LOSSLESS').then(() => {});
-        showToast(`Started downloading: ${track.title}`);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const rowT = globalT || ((k) => k);
 
   useEffect(() => {
     const fetchAlbum = async () => {
@@ -160,64 +123,26 @@ export default function AlbumView() {
         </div>
       </div>
 
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 16px 12px 16px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-          <div style={{ width: '32px', textAlign: 'center' }}>#</div>
-          <div style={{ flex: 1, paddingLeft: '16px' }}>Title</div>
-          <div style={{ width: '200px', textAlign: 'right', paddingRight: '16px' }}>Actions</div>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', marginTop: '12px' }}>
-          {tracks.map((track, idx) => (
-            <div 
-              key={track.provider_id}
-              className="glass-panel"
-              style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderRadius: '12px', transition: 'background 0.2s', cursor: 'pointer', marginBottom: '4px' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-surface-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              onClick={() => togglePlay(track, tracks)}
-            >
-              <div style={{ width: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>{track.track_number || idx + 1}</div>
-              
-              <div style={{ flex: 1, paddingLeft: '16px', minWidth: 0 }}>
-                <div style={{ fontWeight: playingTrackId === track.provider_id ? 700 : 500, color: playingTrackId === track.provider_id ? 'var(--accent-solid)' : 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {track.title}
-                </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  {track.artists?.map((artistName, i) => {
-                     const artistId = track.artist_ids?.[i];
-                     return (
-                       <Fragment key={i}>
-                         {i > 0 && ", "}
-                         {artistId ? (
-                           <Link to={`/artist/${artistId}`} onClick={e => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
-                             {artistName}
-                           </Link>
-                         ) : artistName}
-                       </Fragment>
-                     );
-                  })}
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <button onClick={(e) => toggleLike(track, e)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <Heart size={20} fill={libraryIds.has(track.provider_id) ? "var(--accent-solid)" : "none"} color={libraryIds.has(track.provider_id) ? "var(--accent-solid)" : "var(--text-muted)"} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); setPlaylistModalTrack(track); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <Plus size={20} color="var(--text-muted)" />
-                </button>
-                <button 
-                  className="btn-primary" 
-                  onClick={(e) => handleDownload(track, e)}
-                  style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', opacity: downloadedTracks?.has(track.provider_id) ? 0.7 : 1 }}
-                >
-                  {downloadedTracks?.has(track.provider_id) ? <Check size={16} /> : <Download size={16} />}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="track-list">
+        {tracks.map((track, idx) => (
+          <LibraryTrackRow
+            key={track.provider_id}
+            track={track}
+            index={idx}
+            list={tracks}
+            t={rowT}
+            likedTracks={likedTracks}
+            downloadedTracks={downloadedTracks}
+            currentTrackId={currentTrackId}
+            isPlaying={isPlaying}
+            isLoading={isLoading}
+            onTogglePlay={togglePlay}
+            onToggleLike={toggleLike}
+            onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
+            onDownload={handleDownload}
+            testIdPrefix="album"
+          />
+        ))}
       </div>
       
       {playlistModalTrack && (

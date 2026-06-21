@@ -1,12 +1,13 @@
 import { useEffect, useMemo } from 'react';
 import { debounce } from '../utils/debounce';
-import { serializeTrackForStorage, tracksMatch } from '../utils/trackNormalize';
+import { serializeTrackForStorage, tracksMatch, mergePlaybackTracks } from '../utils/trackNormalize';
 
 export function usePlayerPersistence({
   mediaEnabled,
   playlist,
   currentTrackIndex,
   setCurrentTrackIndex,
+  setCurrentTrack,
   currentTrack,
   playlistRef,
   currentTrackIndexRef,
@@ -50,4 +51,16 @@ export function usePlayerPersistence({
     const idx = playlist.findIndex((tr) => tracksMatch(tr, currentTrack));
     if (idx !== -1 && idx !== currentTrackIndex) setCurrentTrackIndex(idx);
   }, [currentTrack, playlist, currentTrackIndex, setCurrentTrackIndex]);
+
+  useEffect(() => {
+    if (!mediaEnabled || !currentTrack?.provider_id || !playlist?.length) return;
+    const plTrack = playlist.find((tr) => tracksMatch(tr, currentTrack));
+    if (!plTrack) return;
+    const merged = mergePlaybackTracks(currentTrack, plTrack);
+    const hadArtists = (currentTrack.artists?.length || 0) > 0;
+    const hasArtists = (merged.artists?.length || 0) > 0;
+    const richer = (!hadArtists && hasArtists)
+      || ((merged.duration_s ?? merged.duration ?? 0) > (currentTrack.duration_s ?? currentTrack.duration ?? 0));
+    if (richer) setCurrentTrack(merged);
+  }, [mediaEnabled, currentTrack, playlist, setCurrentTrack]);
 }

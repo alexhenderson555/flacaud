@@ -28,7 +28,9 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
     const existing = await localforage.getItem(cacheKey);
     if (existing) return true;
 
-    let resource = `/api/stream/${track.provider || 'tidal'}/${track.provider_id}?quality=${quality}&mt=${await getMediaToken()}`;
+    const mt = await getMediaToken();
+    if (!mt) throw new Error('No media token');
+    let resource = `/api/stream/${track.provider || 'tidal'}/${track.provider_id}?quality=${quality}&mt=${encodeURIComponent(mt)}`;
     if (window.__TAURI__) {
       resource = 'http://localhost:8000' + resource;
     }
@@ -66,6 +68,11 @@ export const getCachedAudioUrl = async (track, quality = 'HIGH') => {
   try {
     const blob = await localforage.getItem(cacheKey);
     if (blob) {
+      // Reject tiny blobs (401 HTML / partial fetch) — they cause one-blip playback.
+      if (blob.size < 65536) {
+        await localforage.removeItem(cacheKey);
+        return null;
+      }
       return URL.createObjectURL(blob);
     }
   } catch (error) {

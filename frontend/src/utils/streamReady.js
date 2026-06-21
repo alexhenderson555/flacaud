@@ -1,10 +1,13 @@
-/** Poll until lossless stream responds (server finished DASH merge). */
+/** Poll until lossless stream has the first ~20 s chunk buffered (206, not 503). */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Match server `_CHUNK_20S_LOSSLESS` — first playable buffer target. */
+export const LOSSLESS_STREAM_CHUNK_BYTES = 3_500_000;
+
 export async function waitForLosslessStreamReady(
   streamUrl,
-  { timeoutMs = 120_000, intervalMs = 450, signal } = {},
+  { timeoutMs = 120_000, intervalMs = 400, signal } = {},
 ) {
   if (!streamUrl || streamUrl.startsWith('blob:')) return true;
 

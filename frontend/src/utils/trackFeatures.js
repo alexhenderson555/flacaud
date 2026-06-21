@@ -162,6 +162,22 @@ export function clearFailedFeatureCacheForTracks(tracks) {
   (tracks || []).forEach((t) => clearFailedFeatureCache(t?.provider_id));
 }
 
+/** True when track still needs DJ analysis (not cached, not exhausted). */
+export function isFeatureAnalysisPending(track) {
+  if (!track?.provider_id) return false;
+  if (getLibraryTrackFeatures(track)) return false;
+  const row = featureCache.get(String(track.provider_id));
+  if (row?.analyzed === false) return false;
+  return true;
+}
+
+/** Mark track as exhausted for this session so batch UI does not spin forever. */
+export function markFeatureAnalysisFailed(providerId) {
+  const id = providerId != null ? String(providerId) : '';
+  if (!id) return;
+  featureCache.set(id, { analyzed: false, bpm: 0, camelotKey: '', musicalKey: '' });
+}
+
 /** Synchronous lookup: cache → track tags → deterministic hash. */
 export function getTrackFeaturesSync(track) {
   if (!track) return { bpm: 120, musicalKey: 'Cm', camelotKey: '8A' };
@@ -218,7 +234,7 @@ export async function analyzeTrackFeatures(track, streamUrl) {
       }
 
       if (!streamUrl) {
-        return { ...hashFallback(track), analyzed: false };
+        return { analyzed: false };
       }
 
       const res = await fetch(streamUrl, {
@@ -244,7 +260,8 @@ export async function analyzeTrackFeatures(track, streamUrl) {
       }
     } catch (e) {
       console.warn('Track feature analysis failed', e);
-      return { ...hashFallback(track), analyzed: false };
+      if (streamUrl) markFeatureAnalysisFailed(id);
+      return { analyzed: false };
     } finally {
       inflight.delete(id);
     }

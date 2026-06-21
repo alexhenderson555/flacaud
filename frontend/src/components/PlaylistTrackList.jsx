@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Reorder, useDragControls } from 'framer-motion';
 
 const SCROLL_EDGE_PX = 72;
@@ -94,7 +94,6 @@ export default function PlaylistTrackList({
   }, []);
 
   const handleDragStart = useCallback(() => {
-    isDraggingRef.current = true;
     setIsDragging(true);
   }, []);
 
@@ -114,21 +113,16 @@ export default function PlaylistTrackList({
         axis="y"
         values={trackIds}
         onReorder={handleIdsReorder}
+        layoutScroll
         style={{ listStyle: 'none', margin: 0, padding: 0 }}
       >
         {localTracks.map((track) => (
           <PlaylistReorderRow
             key={String(track.provider_id)}
             trackId={String(track.provider_id)}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
-            renderRow={(dragStart) => renderItem(
-              track,
-              (e) => {
-                handleDragStart();
-                dragStart(e);
-              },
-              localTracks,
-            )}
+            renderRow={(dragStart) => renderItem(track, dragStart, localTracks)}
           />
         ))}
       </Reorder.Group>
@@ -136,18 +130,19 @@ export default function PlaylistTrackList({
   );
 }
 
-function PlaylistReorderRow({ trackId, onDragEnd, renderRow }) {
+function PlaylistReorderRow({ trackId, onDragStart, onDragEnd, renderRow }) {
   const dragControls = useDragControls();
 
   return (
     <Reorder.Item
       as="div"
       value={trackId}
-      layout={false}
       dragListener={false}
       dragControls={dragControls}
+      onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      whileDrag={{ zIndex: 20, boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}
+      whileDrag={{ scale: 1.02, zIndex: 20, boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}
+      style={{ marginBottom: '8px', listStyle: 'none', touchAction: 'none' }}
       className="playlist-reorder-item"
     >
       {renderRow((e) => dragControls.start(e))}

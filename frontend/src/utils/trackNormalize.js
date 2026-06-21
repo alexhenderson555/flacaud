@@ -75,6 +75,13 @@ export function buildRadioQueue(seedTrack, radioTracks) {
   return [seed, ...rest];
 }
 
+/** Which track to start when a radio queue is applied. */
+export function pickRadioStartTrack(queue, { advancePastSeed = false } = {}) {
+  if (!queue?.length) return null;
+  if (advancePastSeed && queue.length > 1) return queue[1];
+  return queue[0];
+}
+
 /** Stable id for dedup across library, playlists, and liked state. */
 export function trackIdentityKey(track) {
   if (!track?.provider_id) return '';
@@ -121,6 +128,7 @@ export function normalizeArtists(track) {
   if (!track) return [];
   if (Array.isArray(track.artists)) return track.artists.map(String);
   if (typeof track.artists === 'string') return [track.artists];
+  if (typeof track.artist === 'string' && track.artist.trim()) return [track.artist.trim()];
   if (typeof track.artists_json === 'string') {
     try {
       const parsed = JSON.parse(track.artists_json || '[]');
@@ -130,4 +138,28 @@ export function normalizeArtists(track) {
     }
   }
   return [];
+}
+
+/** Merge queue/list row into the active player track without dropping metadata. */
+export function mergePlaybackTracks(base, patch) {
+  const a = base ? normalizeTrack(base) : null;
+  const b = patch ? normalizeTrack(patch) : null;
+  if (!b) return a;
+  if (!a || a.provider_id !== b.provider_id) return b;
+  return normalizeTrack({
+    ...a,
+    ...b,
+    title: b.title || a.title,
+    artists: b.artists?.length ? b.artists : a.artists,
+    artist_ids: b.artist_ids?.length ? b.artist_ids : a.artist_ids,
+    album: b.album || a.album,
+    album_id: b.album_id || a.album_id,
+    cover_url: b.cover_url || a.cover_url,
+    duration_s: b.duration_s ?? a.duration_s,
+    duration: b.duration ?? a.duration,
+    release_date: b.release_date || a.release_date,
+    year: b.year ?? a.year,
+    source_url: b.source_url || a.source_url,
+    quality: b.quality || a.quality,
+  });
 }

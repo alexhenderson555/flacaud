@@ -1,0 +1,113 @@
+/** Library Transfer page copy (en/ru). */
+
+export const syncDict = {
+  en: {
+    syncTitle: 'Library',
+    syncTitleBold: 'Transfer',
+    syncSubtitle:
+      'Import playlists from Spotify, Apple Music, Yandex, YouTube Music, VK, SoundCloud, Deezer, or Tidal into FlacAud.',
+    syncStep1: '1. Select source',
+    syncStep2: '2. Link, preview & import',
+    syncSelectFirst: 'Select a source platform first',
+    syncComingSoon: 'Paste a playlist, album, or track link for the selected platform.',
+    syncPlaylistLink: 'Playlist, album, or track link',
+    syncStart: 'Import to library',
+    syncPreview: 'Preview tracks',
+    syncPreviewAgain: 'Update preview',
+    syncPreviewFirst:
+      'First preview how tracks match on Tidal, then import when the list looks right.',
+    syncFlowLabel: 'Transfer steps',
+    syncFlowLink: 'Paste link',
+    syncFlowPreview: 'Preview',
+    syncFlowImport: 'Import',
+    syncLoadingPreview: 'Loading preview…',
+    syncInvalidUrl: 'Paste a valid link for the selected platform.',
+    syncUntitledSource: 'Untitled',
+    syncPreviewMeta: '{kind} · {matched} matched on Tidal ({source} in source)',
+    syncSelectedPlatform: 'Source: {name}',
+    syncUnmatched: '{n} tracks could not be matched and were skipped.',
+    syncSkippedList: 'Skipped (no confident match)',
+    syncSourceTrack: 'Source',
+    syncSkippedUnavailable: '{n} unavailable source tracks were skipped.',
+    syncManyTracks: '{n} tracks — list hidden for large imports.',
+    syncOptLibrary: 'Add to saved library',
+    syncOptPlaylist: 'Create FlacAud playlist',
+    syncPlaylistName: 'Playlist name',
+    syncOptDownload: 'Start FLAC download job',
+    syncImporting: 'Importing…',
+    syncImportDone:
+      'Done — {added} new in library, {skipped} already there ({total} tracks imported).',
+    syncOpenPlaylists: 'Open playlists',
+    syncOpenLibrary: 'Open library',
+    syncFootnote:
+      'Non-Tidal sources are matched to the Tidal catalog (~85–95% typical). Unmatched tracks are skipped.',
+    syncMatching: 'Matching tracks…',
+    syncDone: 'Done — {n} tracks matched',
+    syncFailed: 'Import failed',
+    syncPreviewFailed: 'Preview failed',
+    syncProgress: '{done}/{total} on Tidal · {matched} matched',
+    syncPhaseQueued: 'Starting preview…',
+    syncPhaseReading: 'Reading source playlist…',
+    syncPhaseMatching: 'Matching tracks on Tidal…',
+    syncHint:
+      'We read the source playlist and match each track to Tidal for playback in FlacAud. Optional FLAC download runs as a background job.',
+    syncLoginRequired: 'Log in to import tracks',
+  },
+  ru: {
+    syncTitle: 'Перенос',
+    syncTitleBold: 'медиатеки',
+    syncSubtitle:
+      'Импорт плейлистов из Spotify, Apple Music, Яндекс Музыки, YouTube Music, VK, SoundCloud, Deezer или Tidal в FlacAud.',
+    syncStep1: '1. Источник',
+    syncStep2: '2. Ссылка, предпросмотр и импорт',
+    syncSelectFirst: 'Сначала выберите платформу',
+    syncComingSoon: 'Вставьте ссылку на плейлист, альбом или трек выбранной платформы.',
+    syncPlaylistLink: 'Ссылка на плейлист, альбом или трек',
+    syncStart: 'Импортировать в медиатеку',
+    syncPreview: 'Предпросмотр треков',
+    syncPreviewAgain: 'Обновить предпросмотр',
+    syncPreviewFirst:
+      'Сначала предпросмотр — проверьте сопоставление с Tidal, затем импорт.',
+    syncFlowLabel: 'Шаги переноса',
+    syncFlowLink: 'Ссылка',
+    syncFlowPreview: 'Предпросмотр',
+    syncFlowImport: 'Импорт',
+    syncLoadingPreview: 'Загружаем предпросмотр…',
+    syncInvalidUrl: 'Вставьте корректную ссылку для выбранной платформы.',
+    syncUntitledSource: 'Без названия',
+    syncPreviewMeta: '{kind} · {matched} сопоставлено в Tidal (в источнике {source})',
+    syncSelectedPlatform: 'Источник: {name}',
+    syncUnmatched: '{n} треков не сопоставлено и пропущено.',
+    syncSkippedList: 'Пропущено (нет уверенного совпадения)',
+    syncSourceTrack: 'Источник',
+    syncSkippedUnavailable: 'Пропущено недоступных треков: {n}.',
+    syncManyTracks: '{n} треков — список скрыт для больших импортов.',
+    syncOptLibrary: 'Добавить в медиатеку',
+    syncOptPlaylist: 'Создать плейлист FlacAud',
+    syncPlaylistName: 'Название плейлиста',
+    syncOptDownload: 'Запустить загрузку FLAC',
+    syncImporting: 'Импорт…',
+    syncImportDone:
+      'Готово — добавлено {added} новых, уже было {skipped} (импорт {total} треков).',
+    syncOpenPlaylists: 'Открыть плейлисты',
+    syncOpenLibrary: 'Открыть медиатеку',
+    syncFootnote:
+      'Источники кроме Tidal сопоставляются с каталогом Tidal (~85–95%). Несовпавшие треки пропускаются.',
+    syncMatching: 'Сопоставляем треки…',
+    syncDone: 'Готово — сопоставлено {n} треков',
+    syncFailed: 'Импорт не удался',
+    syncPreviewFailed: 'Предпросмотр не удался',
+    syncProgress: '{done}/{total} в Tidal · сопоставлено {matched}',
+    syncPhaseQueued: 'Запускаем предпросмотр…',
+    syncPhaseReading: 'Читаем плейлист источника…',
+    syncPhaseMatching: 'Сопоставляем треки с Tidal…',
+    syncHint:
+      'Читаем плейлист источника и сопоставляем каждый трек с Tidal для воспроизведения во FlacAud. Загрузка FLAC — опциональная фоновая задача.',
+    syncLoginRequired: 'Войдите, чтобы начать перенос',
+  },
+};
+
+export function fmtSync(key, lang, vars = {}) {
+  const raw = syncDict[lang]?.[key] || syncDict.en[key] || key;
+  return String(raw).replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ''));
+}

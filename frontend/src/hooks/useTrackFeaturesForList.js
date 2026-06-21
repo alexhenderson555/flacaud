@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCachedAudioUrl } from '../utils/cache';
-import { resolveMediaTokenForStream } from '../utils/mediaToken';
+import { getMediaToken } from '../utils/mediaToken';
 import { DJ_ANALYSIS_CONCURRENCY, DJ_PREFS_CHANGED_EVENT } from '../utils/djPrefs';
 import {
   isDjAnalysisBlockedForTrack,
@@ -12,7 +12,9 @@ import {
   analyzeTrackFeatures,
   clearFailedFeatureCacheForTracks,
   getLibraryTrackFeatures,
+  isFeatureAnalysisPending,
   loadPersistedFeatures,
+  markFeatureAnalysisFailed,
   syncDjMetaToServer,
 } from '../utils/trackFeatures';
 
@@ -22,7 +24,7 @@ async function streamUrlForTrack(track) {
   }
   const cached = await getCachedAudioUrl(track, 'HIGH');
   if (cached) return cached;
-  const mt = await resolveMediaTokenForStream();
+  const mt = await getMediaToken();
   if (!mt) return null;
   const base = `/api/stream/${track.provider || 'tidal'}/${track.provider_id}?quality=HIGH&bypass_registry=true&mt=${mt}`;
   return window.__TAURI__ ? `http://localhost:8000${base}` : base;
@@ -32,8 +34,12 @@ async function analyzeOneTrack(track) {
   let result = await analyzeTrackFeatures(track, null);
   if (result?.analyzed !== false) return result;
   const url = await streamUrlForTrack(track);
-  result = await analyzeTrackFeatures(track, url);
-  return result;
+  if (url) {
+    result = await analyzeTrackFeatures(track, url);
+    if (result?.analyzed !== false) return result;
+  }
+  markFeatureAnalysisFailed(track.provider_id);
+  return { analyzed: false };
 }
 
 /**
@@ -74,7 +80,7 @@ export function useTrackFeaturesForList(tracks, options = {}) {
   const pendingKey = useMemo(() => {
     void tick;
     return (tracks || [])
-      .filter((t) => t?.provider_id && !getLibraryTrackFeatures(t))
+      .filter((t) => isFeatureAnalysisPending(t))
       .map((t) => String(t.provider_id))
       .slice(0, maxAnalyze)
       .join(',');
@@ -105,12 +111,16 @@ export function useTrackFeaturesForList(tracks, options = {}) {
         if (index >= pendingIds.length) break;
 
         const track = resolveTrack(pendingIds[index]);
-        if (!track || getLibraryTrackFeatures(track)) continue;
+        if (!track || !isFeatureAnalysisPending(track)) continue;
         if (isDjAnalysisBlockedForTrack(track.provider_id)) continue;
 
         try {
           const result = await analyzeOneTrack(track);
-          if (!mountedRef.current || !result || result.analyzed === false) continue;
+          if (!mountedRef.current) continue;
+          if (!result || result.analyzed === false) {
+            bump();
+            continue;
+          }
 
           if (track.id) await syncDjMetaToServer(track.id, result);
           dispatchLibraryPatch({
@@ -122,7 +132,8 @@ export function useTrackFeaturesForList(tracks, options = {}) {
           });
           bump();
         } catch {
-          /* retry on interval bump */
+          markFeatureAnalysisFailed(track.provider_id);
+          bump();
         }
       }
     };
@@ -134,9 +145,7 @@ export function useTrackFeaturesForList(tracks, options = {}) {
   useEffect(() => {
     if (!enabled || !analyze) return undefined;
     const timer = setInterval(() => {
-      const anyPending = (tracksRef.current || []).some(
-        (t) => t?.provider_id && !getLibraryTrackFeatures(t),
-      );
+      const anyPending = (tracksRef.current || []).some((t) => isFeatureAnalysisPending(t));
       if (anyPending) bump();
     }, 15000);
     return () => clearInterval(timer);
@@ -150,7 +159,7 @@ export function useTrackFeaturesForList(tracks, options = {}) {
     [tick],
   );
 
-  const pendingCount = (tracks || []).filter((t) => !getLibraryTrackFeatures(t)).length;
+  const pendingCount = (tracks || []).filter((t) => isFeatureAnalysisPending(t)).length;
 
   return { getFeatures, pendingCount };
 }

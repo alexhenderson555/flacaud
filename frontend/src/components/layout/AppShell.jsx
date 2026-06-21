@@ -8,6 +8,7 @@ import PlayerChrome from './PlayerChrome';
 import AuthRequiredBanner from '../AuthRequiredBanner';
 import LegalFooter from './LegalFooter';
 import { usePlayer } from '../../store/usePlayerStore';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 export default function AppShell({ shellPaddingTop = '0' }) {
   const location = useLocation();
@@ -22,6 +23,9 @@ export default function AppShell({ shellPaddingTop = '0' }) {
   t,
   lang,
   } = usePlayer();
+
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const showVisualizer = mediaEnabled && visualizerEnabled && !isMobile;
 
   const [authBannerDismissed, setAuthBannerDismissed] = useState(
     () => sessionStorage.getItem('tidal-auth-banner-dismissed') === '1',
@@ -52,7 +56,7 @@ export default function AppShell({ shellPaddingTop = '0' }) {
       style={{ paddingTop: shellPaddingTop }}
     >
       <Titlebar />
-      {mediaEnabled && visualizerEnabled ? (
+      {showVisualizer ? (
         <AudioVisualizer audioRef={audioRef} isPlaying={isPlaying} />
       ) : (
         <>

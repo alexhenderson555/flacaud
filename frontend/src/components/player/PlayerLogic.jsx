@@ -18,7 +18,7 @@ import {
   qualityBadgeLabel,
   shouldNotifyDownloadTierFallback,
 } from '../../utils/qualityPrefs';
-import { startDownloadJob } from '../../utils/downloadJobs';
+import { startDownloadJob, notifyDownloadJobStarted } from '../../utils/downloadJobs';
 import { isTrackCached, downloadCachedTrack } from '../../utils/cache';
 import {
   resolveDownloadQualityForTrack,
@@ -36,6 +36,7 @@ import { pauseBackgroundRequests, resumeBackgroundRequests } from '../../utils/a
 import { setPlaybackPriorityState } from '../../utils/playbackPriority';
 import { canUseDjFeatures } from '../../utils/djPrefs';
 import { clearAudioElementSrc, resolveVolumeUpdate } from '../../utils/playerTransportLogic';
+import { normalizeTrack } from '../../utils/trackNormalize';
 import { useSetEmbedController } from '../../hooks/useSetEmbedController';
 
 import { usePlayerStore } from '../../store/usePlayerStore';
@@ -119,8 +120,10 @@ export default function PlayerLogic({ children }) {
       const savedTrack = localStorage.getItem('tidal-current-track');
       const savedPlaylist = localStorage.getItem('tidal-current-playlist');
       const savedIndex = localStorage.getItem('tidal-current-index');
-      setCurrentTrack(savedTrack ? JSON.parse(savedTrack) : null);
-      setPlaylist(savedPlaylist ? JSON.parse(savedPlaylist) : []);
+      setCurrentTrack(savedTrack ? normalizeTrack(JSON.parse(savedTrack)) : null);
+      setPlaylist(savedPlaylist
+        ? JSON.parse(savedPlaylist).map((tr) => normalizeTrack(tr)).filter(Boolean)
+        : []);
       setCurrentTrackIndex(savedIndex ? parseInt(savedIndex, 10) : -1);
     } catch (e) {
       console.warn('Could not restore player state', e);
@@ -130,7 +133,6 @@ export default function PlayerLogic({ children }) {
 
   const {
     sessionReady,
-    planReady,
     mediaEnabled,
     authTick,
     effectivePlan,
@@ -145,7 +147,7 @@ export default function PlayerLogic({ children }) {
 
   const { t } = useI18n(lang, setLang);
   const overlays = usePlayerOverlays();
-  const { likedTracks, libraryRevision, setLibraryRevision, toggleLike } = useLibraryLikes(t, {
+  const { likedTracks, toggleLike } = useLibraryLikes(t, {
     enabled: mediaEnabled,
     lang,
   });
@@ -176,7 +178,7 @@ export default function PlayerLogic({ children }) {
     skipAudioSrcSyncRef,
     skipEndedRef,
     pendingPlayRef,
-    enabled: mediaEnabled && planReady,
+    enabled: mediaEnabled,
     currentTrack,
     downloadedTracksRef,
     downloadedRegistryRef,
@@ -323,6 +325,7 @@ export default function PlayerLogic({ children }) {
     playlist,
     currentTrackIndex,
     setCurrentTrackIndex,
+    setCurrentTrack,
     currentTrack,
     playlistRef,
     currentTrackIndexRef,
@@ -407,7 +410,16 @@ export default function PlayerLogic({ children }) {
         if (saved) showToast(t('quickCacheSave'));
       }
       const url = track.source_url || `https://tidal.com/track/${track.provider_id}`;
-      await startDownloadJob({ url, quality, track });
+      const isPlayingCurrent = isCurrentTrack && isPlaying;
+      const optimisticId = `opt-${String(track.provider_id)}-${Date.now()}`;
+      notifyDownloadJobStarted(optimisticId, { title: track.title, quality });
+      await startDownloadJob({
+        url,
+        quality,
+        track,
+        optimisticId,
+        prefetch: !isPlayingCurrent,
+      });
       if (!cached) {
         const streamTier = fromPlayer && isCurrentTrack && qualitiesReady ? streamQuality : null;
         if (shouldNotifyDownloadTierFallback(streamTier, quality)) {
@@ -418,8 +430,6 @@ export default function PlayerLogic({ children }) {
               ? `${asked} недоступен для скачивания — загружаем ${got}`
               : `${asked} not available for download — fetching ${got}`,
           );
-        } else {
-          showToast(t('downloadStarted'));
         }
       }
     } catch (err) {
@@ -433,6 +443,7 @@ export default function PlayerLogic({ children }) {
     lang,
     t,
     currentTrack,
+    isPlaying,
     streamQuality,
     playbackQuality,
     availableQualities,
@@ -446,9 +457,10 @@ export default function PlayerLogic({ children }) {
   useEffect(() => {
     setPlaybackPriorityState({
       loading: isLoading,
+      playing: isPlaying,
       currentTrackId,
     });
-  }, [isLoading, currentTrackId]);
+  }, [isLoading, isPlaying, currentTrackId]);
 
   const playerContext = useMemo(
     () => buildPlayerOutletContext({
@@ -460,7 +472,6 @@ export default function PlayerLogic({ children }) {
       likedTracks,
       toggleLike,
       handleDownload,
-      libraryRevision,
       playbackQuality,
       setPlaybackQuality,
       defaultPlaybackQuality,
@@ -490,7 +501,6 @@ export default function PlayerLogic({ children }) {
       likedTracks,
       toggleLike,
       handleDownload,
-      libraryRevision,
       playbackQuality,
       setPlaybackQuality,
       defaultPlaybackQuality,
@@ -545,7 +555,6 @@ export default function PlayerLogic({ children }) {
     likedTracks,
     toggleLike,
     handleDownload,
-    setLibraryRevision,
     playbackQuality,
     availableQualities,
     qualitiesReady,
@@ -555,7 +564,6 @@ export default function PlayerLogic({ children }) {
     repeatMode: playbackModes.repeatMode,
     toggleShuffle: playbackModes.toggleShuffle,
     cycleRepeat: playbackModes.cycleRepeat,
-    libraryRevision,
     visualizerEnabled,
     setVisualizerEnabled,
     theme,
@@ -601,7 +609,6 @@ export default function PlayerLogic({ children }) {
     likedTracks,
     toggleLike,
     handleDownload,
-    setLibraryRevision,
     playbackQuality,
     availableQualities,
     qualitiesReady,
@@ -611,7 +618,6 @@ export default function PlayerLogic({ children }) {
     playbackModes.repeatMode,
     playbackModes.toggleShuffle,
     playbackModes.cycleRepeat,
-    libraryRevision,
     visualizerEnabled,
     theme,
     embedUrl,

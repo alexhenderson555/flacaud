@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect, useMemo, Fragment, memo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import { debounce } from '../utils/debounce';
 import { showToast } from '../utils/toast';
-import { useOutletContext, Link } from 'react-router-dom';
-import { Search as SearchIcon, Download, Mic, Play, Pause, Heart, Zap, ImagePlus, Plus, Check } from 'lucide-react';
+import { useOutletContext } from 'react-router-dom';
+import { Search as SearchIcon, Mic, Heart, Zap, ImagePlus, Plus } from 'lucide-react';
 import { cacheAudioTrack } from '../utils/cache';
 import PlaylistModal from '../components/PlaylistModal';
+import LibraryTrackRow from '../components/LibraryTrackRow';
+import VirtualTrackList from '../components/VirtualTrackList';
 import { suggestSearchCorrection, fixKeyboardLayout } from '../utils/searchQueryFix';
 import { tracksForPlaylistApi } from '../utils/playlistApi';
 import { getAccessToken } from '../utils/tokenStorage';
@@ -116,12 +118,10 @@ function Search() {
   useEffect(() => { persistSearchState({ realResults }); }, [realResults, persistSearchState]);
   useEffect(() => { persistSearchState({ aiResults }); }, [aiResults, persistSearchState]);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
-  const { togglePlay: playerContextTogglePlay, currentTrackId, isPlaying, isLoading, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext } = useOutletContext();
+  const { togglePlay: playerContextTogglePlay, currentTrackId, isPlaying, isLoading, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext, t: globalT } = useOutletContext();
   
   const t = (key) => dict[lang][key] || key;
-
-  const isTrackCurrent = (track) => currentTrackId === String(track.provider_id);
-  const showPauseIcon = (track) => isTrackCurrent(track) && (isPlaying || isLoading);
+  const rowT = globalT || ((k) => k);
 
   const toggleLike = async (track, e) => {
     e.stopPropagation();
@@ -181,42 +181,7 @@ function Search() {
     }
   };
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (query.trim()) {
-        performSearch(query.trim(), 0, false);
-      } else {
-        setRealResults(null);
-        setHasMore(false);
-        setSearchOffset(0);
-        setQuerySuggestion(null);
-      }
-    }, 500);
-
-    return () => clearTimeout(handler);
-  }, [query]);
-
-  useEffect(() => {
-    if (!loadMoreRef.current || !hasMore) return;
-    const el = loadMoreRef.current;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting) return;
-        if (!hasMoreRef.current || isSearchingRef.current || loadingMoreRef.current) return;
-        const q = queryRef.current.trim();
-        if (!q) return;
-        loadingMoreRef.current = true;
-        performSearch(q, searchOffsetRef.current, true).finally(() => {
-          loadingMoreRef.current = false;
-        });
-      },
-      { rootMargin: '200px' }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore]);
-
-  const performSearch = async (searchQuery, offset = 0, append = false) => {
+  const performSearch = useCallback(async (searchQuery, offset = 0, append = false) => {
     setIsSearching(true);
     try {
       const res = await fetch('/api/search', {
@@ -275,7 +240,42 @@ function Search() {
       }
     }
     setIsSearching(false);
-  };
+  }, [lang]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (query.trim()) {
+        performSearch(query.trim(), 0, false);
+      } else {
+        setRealResults(null);
+        setHasMore(false);
+        setSearchOffset(0);
+        setQuerySuggestion(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [query, performSearch]);
+
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasMore) return;
+    const el = loadMoreRef.current;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMoreRef.current || isSearchingRef.current || loadingMoreRef.current) return;
+        const q = queryRef.current.trim();
+        if (!q) return;
+        loadingMoreRef.current = true;
+        performSearch(q, searchOffsetRef.current, true).finally(() => {
+          loadingMoreRef.current = false;
+        });
+      },
+      { rootMargin: '200px' }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, performSearch]);
 
   const handleListen = async () => {
     try {
@@ -380,6 +380,26 @@ function Search() {
       showToast('Failed to connect to backend for downloading.');
     }
   };
+
+  const renderSearchTrackRow = (track, index, list, testIdPrefix = 'search') => (
+    <LibraryTrackRow
+      key={`${track.provider_id}-${index}`}
+      track={track}
+      index={index}
+      list={list}
+      t={rowT}
+      likedTracks={likedTracks}
+      downloadedTracks={downloadedTracks}
+      currentTrackId={currentTrackId}
+      isPlaying={isPlaying}
+      isLoading={isLoading}
+      onTogglePlay={togglePlay}
+      onToggleLike={toggleLike}
+      onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
+      onDownload={handleDownload}
+      testIdPrefix={testIdPrefix}
+    />
+  );
 
   const handleGenerateAI = async () => {
     if (!aiQuery.trim()) return;
@@ -624,85 +644,14 @@ function Search() {
               {t('didYouMean')}: <strong>{querySuggestion}</strong>?
             </button>
           )}
-          {realResults.map((result, idx) => (
-            <motion.div 
-              key={result.provider_id || idx}
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: idx * 0.1 }}
-              className="glass-panel"
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                padding: '16px', 
-                borderRadius: '16px',
-                transition: 'background 0.2s',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-surface-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-surface)'}
-              onClick={() => togglePlay(result, realResults)}
-            >
-              <img src={result.cover_url || 'https://via.placeholder.com/64'} alt={result.title} style={{ width: '64px', height: '64px', borderRadius: '8px', objectFit: 'cover', marginRight: '20px' }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '4px' }}>{result.title}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                  {result.artists ? result.artists.map((artistName, i) => {
-                     const artistId = result.artist_ids?.[i];
-                     return (
-                       <Fragment key={i}>
-                         {i > 0 && ", "}
-                         {artistId ? (
-                           <Link to={`/artist/${artistId}`} onClick={e => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration='underline'} onMouseLeave={e => e.target.style.textDecoration='none'}>
-                             {artistName}
-                           </Link>
-                         ) : artistName}
-                       </Fragment>
-                     );
-                  }) : t('unknownArtist')}
-                  {result.year ? ` • ${result.year}` : (result.release_date ? ` • ${result.release_date.split('-')[0]}` : '')}
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-
-                
-                <button 
-                  onClick={(e) => toggleLike(result, e)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  title={likedTracks && likedTracks.has(String(result.provider_id)) ? "Remove from Library" : "Add to Library"}
-                >
-                  <Heart size={20} fill={likedTracks && likedTracks.has(String(result.provider_id)) ? "var(--accent-solid)" : "none"} color={likedTracks && likedTracks.has(String(result.provider_id)) ? "var(--accent-solid)" : "var(--text-muted)"} />
-                </button>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setPlaylistModalTrack(result); }}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  title="Add to Playlist"
-                >
-                  <Plus size={20} color="var(--text-muted)" />
-                </button>
-
-                <button 
-                  className="btn-secondary" 
-                  onClick={(e) => { e.stopPropagation(); togglePlay(result, realResults); }}
-                  data-testid={`search-play-${result.provider_id}`}
-                  data-play-state={showPauseIcon(result) ? 'pause' : 'play'}
-                  style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTrackCurrent(result) ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
-                  title={showPauseIcon(result) ? 'Pause' : 'Play Preview'}
-                >
-                  {showPauseIcon(result) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                </button>
-
-                <button 
-                  className="btn-primary" 
-                  onClick={(e) => handleDownload(result, e)}
-                  style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: downloadedTracks?.has(result.provider_id) ? 0.7 : 1 }}
-                  title={downloadedTracks?.has(result.provider_id) ? "Downloaded" : "Download"}
-                >
-                  {downloadedTracks?.has(result.provider_id) ? <Check size={18} /> : <Download size={18} />}
-                </button>
-              </div>
-            </motion.div>
-          ))}
+          <VirtualTrackList
+            className="track-list"
+            items={realResults}
+            renderItem={(result, idx) => {
+              const list = realResults.map((t) => ({ ...t, __queue_origin: 'search' }));
+              return renderSearchTrackRow(result, idx, list);
+            }}
+          />
           {(hasMore || isSearching) && (
             <div ref={loadMoreRef} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
               {isSearching ? t('searching') : t('loadMore')}
@@ -731,67 +680,17 @@ function Search() {
             </button>
           </div>
           
-          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '24px', overflow: 'hidden' }}>
-            {aiResults.map((result, idx) => (
-              <motion.div 
-                key={result.provider_id || idx}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="track-card glass-panel"
-                style={{ display: 'flex', alignItems: 'center', padding: '16px', margin: 0, borderBottom: '1px solid var(--border-subtle)', borderRadius: 0, cursor: 'pointer' }}
-                onClick={() => togglePlay(result, aiResults)}
-              >
-                <div style={{ width: '32px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  {isTrackCurrent(result) ? <div className="playing-indicator"><div/><div/><div/></div> : idx + 1}
-                </div>
-                <img src={result.cover_url} alt={result.title} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', marginRight: '16px' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 600, color: isTrackCurrent(result) ? 'var(--accent-solid)' : 'white' }}>{result.title}</div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    {result.artists.join(', ')} 
-                    {result.release_date && <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>• {result.release_date.split('-')[0]}</span>}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-
-                  
-                  <button 
-                    onClick={(e) => toggleLike(result, e)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title={likedTracks && likedTracks.has(String(result.provider_id)) ? "Remove from Library" : "Add to Library"}
-                  >
-                    <Heart size={20} fill={likedTracks && likedTracks.has(String(result.provider_id)) ? "var(--accent-solid)" : "none"} color={likedTracks && likedTracks.has(String(result.provider_id)) ? "var(--accent-solid)" : "var(--text-muted)"} />
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setPlaylistModalTrack(result); }}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Add to Playlist"
-                  >
-                    <Plus size={20} color="var(--text-muted)" />
-                  </button>
-
-                  <button 
-                    className="btn-secondary" 
-                    onClick={(e) => { e.stopPropagation(); togglePlay(result, aiResults); }}
-                    style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTrackCurrent(result) ? 'var(--accent-glow)' : 'var(--bg-surface-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
-                    title="Play Preview"
-                  >
-                    {showPauseIcon(result) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                  </button>
-
-                  <button 
-                    className="btn-primary" 
-                    onClick={(e) => handleDownload(result, e)}
-                    style={{ padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: downloadedTracks?.has(result.provider_id) ? 0.7 : 1 }}
-                    title={downloadedTracks?.has(result.provider_id) ? "Downloaded" : "Download"}
-                  >
-                    {downloadedTracks?.has(result.provider_id) ? <Check size={18} /> : <Download size={18} />}
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          <VirtualTrackList
+            className="track-list track-list--ai-panel"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '24px',
+              overflow: 'hidden',
+            }}
+            items={aiResults}
+            renderItem={(result, idx) => renderSearchTrackRow(result, idx, aiResults, 'ai-search')}
+          />
 
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
             <button 

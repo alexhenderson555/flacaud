@@ -84,7 +84,9 @@ export function unlockPlaybackPolicy() {
 
 /** Call synchronously from a click/tap handler so later play() after buffering is allowed. */
 export function unlockPlaybackElement(audioEl, { useProbe = false } = {}) {
-  if (useProbe || !audioEl) {
+  // Never run the silent-WAV trick on the main element once Web Audio is wired —
+  // clearing src without load() leaves it in a state where each play() outputs a blip.
+  if (useProbe || !audioEl || audioEl._sourceNode) {
     unlockPlaybackPolicy();
     return;
   }
@@ -191,6 +193,26 @@ export function pauseAudioForTrackSwitch(audioEl) {
 }
 
 /**
+ * Pause for a new track. Plain elements are cleared; Web Audio elements keep src
+ * until React assigns the next stream URL (avoid empty-src blip on play()).
+ */
+export function prepareMainAudioForTrackSwitch(audioEl) {
+  if (!audioEl) return;
+  pauseAudioForTrackSwitch(audioEl);
+  if (!audioEl._sourceNode) {
+    clearAudioElementSrc(audioEl);
+  }
+}
+
+/** Clear an idle slot; keep src on Web Audio–routed elements to avoid blip state. */
+export function clearIdleAudioSlot(audioEl) {
+  if (!audioEl) return;
+  pauseAudioForTrackSwitch(audioEl);
+  if (audioEl._sourceNode) return;
+  clearAudioElementSrc(audioEl);
+}
+
+/**
  * After slot swap / crossfade handoff the main element may be buffered but paused
  * (React re-attaches handlers and canplay may have already fired).
  */
@@ -237,9 +259,15 @@ export function clearAudioElementSrc(audioEl) {
   if (!audioEl) return;
   try {
     audioEl.pause();
-    audioEl.removeAttribute('src');
-    // load() after createMediaElementSource breaks seek on that element forever.
-    if (!audioEl._sourceNode) {
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (audioEl._sourceNode) {
+      // load() after createMediaElementSource breaks seek forever — assign empty src instead.
+      audioEl.src = '';
+    } else {
+      audioEl.removeAttribute('src');
       audioEl.load();
     }
   } catch {

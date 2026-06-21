@@ -112,12 +112,21 @@ export function isQualityAllowedForPlan(quality, planId) {
 }
 
 /** Per-track: tier must be in probe list and not above track max (HI_RES index 0 = highest). */
+export function resolveMaxTrackQuality(maxTrackQuality, availableQualities) {
+  const normalized = maxTrackQuality && maxTrackQuality !== 'LOW' ? maxTrackQuality : null;
+  if (normalized && qualityTierLevel(normalized) >= 0) return normalized;
+  for (const q of QUALITY_FALLBACK_ORDER) {
+    if (sanitizeQualitiesForPlayer(availableQualities).includes(q)) return q;
+  }
+  return 'HIGH';
+}
+
 export function isQualityAvailableForTrack(quality, availableQualities, maxTrackQuality) {
   if (!quality || quality === 'LOW') return false;
   const list = sanitizeQualitiesForPlayer(availableQualities);
   if (!list.includes(quality)) return false;
   const qIdx = qualityTierLevel(quality);
-  const maxIdx = qualityTierLevel(maxTrackQuality || 'HIGH');
+  const maxIdx = qualityTierLevel(resolveMaxTrackQuality(maxTrackQuality, availableQualities));
   if (qIdx < 0 || maxIdx < 0) return false;
   return qIdx >= maxIdx;
 }
@@ -260,37 +269,46 @@ function isAacTier(tier) {
   return !u || u === 'HIGH' || u === 'LOW';
 }
 
+/** Map delivered / stream tier to a player UI button id (HIGH | LOSSLESS). */
+export function resolvePlayerUiQuality({
+  deliveredStream = null,
+  streamQuality = 'HIGH',
+  playbackQuality = 'HIGH',
+  qualitiesReady = false,
+}) {
+  const delivered = deliveredStream?.tier;
+  if (qualitiesReady && delivered) {
+    return isAacTier(delivered) ? 'HIGH' : 'LOSSLESS';
+  }
+  return streamQuality || playbackQuality || 'HIGH';
+}
+
 /**
  * Player badge: 320k for AAC, otherwise delivered FLAC sample rate.
  * @param {{ tier?: string, sampleRate?: number|null, bitDepth?: number|null }} delivered
  * @param {string} [requestedTier]
  */
 export function streamBadgeLabel(delivered = {}, requestedTier = 'HIGH') {
-  const tier = delivered.tier || requestedTier;
+  const d = delivered ?? {};
+  const tier = d.tier || requestedTier;
   if (isAacTier(tier)) return '320k';
-  const freq = formatSampleRateLabel(delivered.sampleRate);
+  const freq = formatSampleRateLabel(d.sampleRate);
   if (freq) return freq;
   return 'Lossless';
 }
 
-/** Legacy string tier labels (downloads, toasts). */
-export function qualityBadgeLabel(actual, sampleRate = null) {
+/** User-facing tier labels (downloads, toasts) — two UI tiers: 320k and Lossless. */
+export function qualityBadgeLabel(actual) {
   if (!actual) return '';
-  const u = String(actual).toUpperCase();
-  if (u === 'HI_RES_LOSSLESS' || u === 'HI_RES') {
-    return formatSampleRateLabel(sampleRate) || 'MAX';
-  }
-  if (u === 'LOSSLESS' && sampleRate == null) return 'Lossless';
-  if (!isAacTier(actual)) {
-    return formatSampleRateLabel(sampleRate) || 'Lossless';
-  }
-  return '320k';
+  return qualityButtonLabel(actual);
 }
 
-/** Toast when download tier differs from playback in a user-visible way (not LOSSLESS→HI_RES). */
+/** Toast when download tier differs from playback in a user-visible way (not LOSSLESS↔HI_RES). */
 export function shouldNotifyDownloadTierFallback(streamTier, downloadTier) {
   if (!streamTier || !downloadTier || streamTier === downloadTier) return false;
-  return qualityBadgeLabel(streamTier) !== qualityBadgeLabel(downloadTier);
+  const a = qualityButtonLabel(streamTier);
+  const b = qualityButtonLabel(downloadTier);
+  return a !== b;
 }
 
 /** Map registry / API quality strings to UI tier ids. */

@@ -13,11 +13,15 @@ describe('playbackPriority', () => {
     resetPlaybackPriorityForTests();
   });
 
-  it('defers only while buffering, not during steady play', () => {
+  it('defers while buffering or during steady play', () => {
     expect(shouldDeferBackgroundMedia()).toBe(false);
     setPlaybackPriorityState({ loading: true });
     expect(shouldDeferBackgroundMedia()).toBe(true);
     setPlaybackPriorityState({ loading: false });
+    expect(shouldDeferBackgroundMedia()).toBe(false);
+    setPlaybackPriorityState({ playing: true });
+    expect(shouldDeferBackgroundMedia()).toBe(true);
+    setPlaybackPriorityState({ playing: false });
     expect(shouldDeferBackgroundMedia()).toBe(false);
   });
 

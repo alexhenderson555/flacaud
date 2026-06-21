@@ -12,6 +12,7 @@ import {
   getPreviousTrackIndex,
   shuffleTrackList,
   REPEAT_ONE,
+  REPEAT_ALL,
 } from '../utils/playbackModes';
 import {
   resolveQueueIndex as resolveQueueIndexPure,
@@ -20,19 +21,19 @@ import {
   prepareAudioForNewTrack,
   unlockPlaybackElement,
   urlTargetsTrack,
-  clearAudioElementSrc,
-  pauseAudioForTrackSwitch,
+  prepareMainAudioForTrackSwitch,
+  clearIdleAudioSlot,
   resumePausedPlayback,
   resumeMainPlaybackAfterHandoff,
 } from '../utils/playerTransportLogic';
-import { initAudioEngine as setupAudioEngine } from '../utils/audioEngine';
+import { initAudioEngine as setupAudioEngine, resumeAudioContext } from '../utils/audioEngine';
 import {
   fetchVibeRadioBatch,
   mergeVibeRadioTracks,
   VIBE_RADIO_ORIGIN,
 } from '../utils/vibeRadio';
 import { ensureTrackPlaybackReady, trackNeedsPlaybackEnrich } from '../utils/libraryApi';
-import { normalizeTrack } from '../utils/trackNormalize';
+import { mergePlaybackTracks, normalizeTrack } from '../utils/trackNormalize';
 
 /** Queue navigation, playback start/resume, and preload handoff. */
 export function usePlayerQueue({
@@ -71,11 +72,11 @@ export function usePlayerQueue({
   getPreloadAudioEl,
   deferPlayUntilReady = false,
   queueOriginRef,
-  startTrackRadioRef,
   pauseSetEmbed,
   releaseSetEmbed,
 }) {
   const playbackGenRef = useRef(0);
+  const playNextInFlightRef = useRef(false);
 
   const initAudioEngine = useCallback(() => {
     const el = getMainAudioEl?.() ?? audioRef.current;
@@ -95,7 +96,8 @@ export function usePlayerQueue({
     crossfadeStartedForRef.current = null;
     pendingPlayRef.current = true;
 
-    const normalizedTrack = { ...playable, provider_id: trackId };
+    const normalizedTrack = normalizeTrack({ ...playable, provider_id: trackId });
+    if (!normalizedTrack) return false;
     if (currentTrackRef) currentTrackRef.current = normalizedTrack;
     setCurrentTrack(normalizedTrack);
     pushRecentlyPlayed(playable);
@@ -137,18 +139,21 @@ export function usePlayerQueue({
     releaseSetEmbed?.();
     pauseSetEmbed?.();
 
+    if (skipAudioSrcSyncRef) skipAudioSrcSyncRef.current = null;
+
     const initial = normalizeTrack(track) || track;
     if (!initial?.provider_id) return;
 
     initAudioEngine();
+    resumeAudioContext();
     const main = getMainAudioEl?.() ?? audioRef.current;
     // Arm before pause() — onPause must not clear isPlaying during track switch.
     pendingPlayRef.current = true;
     setIsPlaying(true);
     setIsLoading(true);
-    clearAudioElementSrc(main);
-    setCurrentAudioSrc?.('');
     unlockPlaybackElement(main);
+    prepareMainAudioForTrackSwitch(main);
+    setCurrentAudioSrc?.('');
 
     if (!applyPlaybackTrack(initial, contextPlaylist, { gen, main })) return;
 
@@ -164,7 +169,7 @@ export function usePlayerQueue({
     })();
   }, [
     initAudioEngine, applyPlaybackTrack, audioRef, getMainAudioEl, pauseSetEmbed,
-    releaseSetEmbed, lang,
+    releaseSetEmbed, lang, setCurrentAudioSrc, skipAudioSrcSyncRef,
   ]);
 
   const playQueue = useCallback((track, contextPlaylist) => {
@@ -186,7 +191,9 @@ export function usePlayerQueue({
     setCurrentTrackIndex(idx >= 0 ? idx : 0);
 
     if (playingId === trackId) {
-      setCurrentTrack({ ...track, provider_id: trackId });
+      const merged = mergePlaybackTracks(currentTrackRef.current, track);
+      setCurrentTrack(merged);
+      if (currentTrackRef) currentTrackRef.current = merged;
       const main = getMainAudioEl?.() ?? audioRef.current;
       if (main?.paused) {
         releaseSetEmbed?.();
@@ -197,6 +204,8 @@ export function usePlayerQueue({
           setIsPlaying,
           setIsLoading,
         });
+      } else {
+        setIsLoading(false);
       }
       return;
     }
@@ -221,7 +230,13 @@ export function usePlayerQueue({
       : null;
     const main = getMainAudioEl?.() ?? audioRef.current;
 
+    resumeAudioContext();
+    unlockPlaybackElement(main);
+
     if (playingId === trackId) {
+      const merged = mergePlaybackTracks(currentTrackRef.current, track);
+      if (currentTrackRef) currentTrackRef.current = merged;
+      setCurrentTrack(merged);
       if (main && !main.paused) {
         main.pause();
         setIsPlaying(false);
@@ -272,13 +287,13 @@ export function usePlayerQueue({
 
   const applyTrackMetadata = useCallback((track, { progress = 0 } = {}) => {
     if (!track?.provider_id) return null;
-    const trackId = String(track.provider_id);
-    const normalized = { ...track, provider_id: trackId };
+    const normalized = normalizeTrack({ ...track, provider_id: String(track.provider_id) });
+    if (!normalized) return null;
     if (currentTrackRef) currentTrackRef.current = normalized;
     setCurrentTrack(normalized);
-    pushRecentlyPlayed(track);
+    pushRecentlyPlayed(normalized);
     const pl = playlistRef.current || [];
-    const idx = pl.findIndex((tr) => String(tr.provider_id) === trackId);
+    const idx = pl.findIndex((tr) => String(tr.provider_id) === normalized.provider_id);
     if (idx >= 0) setCurrentTrackIndex(idx);
     setProgress(progress);
     return normalized;
@@ -319,7 +334,7 @@ export function usePlayerQueue({
 
     applyTrackMetadata(nextTrack, { progress: resumeAt > 0.05 ? resumeAt : 0 });
 
-    clearAudioElementSrc(main);
+    prepareMainAudioForTrackSwitch(main);
     if (handoffUrl && skipAudioSrcSyncRef) {
       skipAudioSrcSyncRef.current = handoffUrl;
     }
@@ -329,7 +344,7 @@ export function usePlayerQueue({
 
     const playing = getMainAudioEl?.() ?? audioRef.current;
     const idle = getPreloadAudioEl?.() ?? preloadAudioRef.current;
-    clearAudioElementSrc(idle);
+    clearIdleAudioSlot(idle);
     if (!playing) return false;
     if (resumeAt > 0.05) {
       try {
@@ -355,16 +370,6 @@ export function usePlayerQueue({
     setCurrentAudioSrc, setPreloadAudioSrc, volume, setIsPlaying, setIsLoading,
     pendingPlayRef, pendingSeekRef, pendingPlayAfterSeekRef, skipEndedRef, applyTrackMetadata,
   ]);
-
-  const tryAutoTrackRadio = useCallback(async (track) => {
-    if (!track?.provider_id || !startTrackRadioRef?.current) return false;
-    try {
-      await startTrackRadioRef.current(track);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [startTrackRadioRef]);
 
   const appendVibeRadioTracks = useCallback(async (pl) => {
     if (queueOriginRef?.current !== VIBE_RADIO_ORIGIN) return false;
@@ -393,126 +398,139 @@ export function usePlayerQueue({
 
   const playNext = useCallback(async () => {
     if (crossfadingRef.current) return;
-    crossfadingRef.current = false;
-    crossfadeStartedForRef.current = null;
-    pendingPlayRef.current = true;
-    setIsLoading(true);
-    setIsPlaying(true);
-    const pl = playlistRef.current || [];
-    if (pl.length > 0) {
-      const idx = resolveQueueIndex();
-      const safeIdx = idx >= 0 ? idx : 0;
-      const modes = modesRef?.current || { shuffle: shuffleEnabled, repeat: repeatMode };
-      const nextIdx = getNextTrackIndex(pl, safeIdx, modes);
-      if (nextIdx < 0) {
-        if (queueOriginRef?.current === VIBE_RADIO_ORIGIN && await appendVibeRadioTracks(pl)) {
-          const extended = playlistRef.current || [];
-          const retryIdx = getNextTrackIndex(extended, safeIdx, modes);
-          if (retryIdx >= 0) {
-            const next = extended[retryIdx];
-            if (tryPreloadHandoff(next)) return;
-            beginPlayback(next, extended);
+    if (playNextInFlightRef.current) return;
+    playNextInFlightRef.current = true;
+    try {
+      crossfadingRef.current = false;
+      crossfadeStartedForRef.current = null;
+      pendingPlayRef.current = true;
+      setIsLoading(true);
+      setIsPlaying(true);
+      const pl = playlistRef.current || [];
+      if (pl.length > 0) {
+        const idx = resolveQueueIndex();
+        const safeIdx = idx >= 0 ? idx : 0;
+        const modes = modesRef?.current || { shuffle: shuffleEnabled, repeat: repeatMode };
+        const nextIdx = getNextTrackIndex(pl, safeIdx, modes);
+        if (nextIdx < 0) {
+          if (queueOriginRef?.current === VIBE_RADIO_ORIGIN && await appendVibeRadioTracks(pl)) {
+            const extended = playlistRef.current || [];
+            const retryIdx = getNextTrackIndex(extended, safeIdx, modes);
+            if (retryIdx >= 0) {
+              const next = extended[retryIdx];
+              if (tryPreloadHandoff(next)) return;
+              beginPlayback(next, extended);
+              return;
+            }
+          }
+          setIsPlaying(false);
+          setIsLoading(false);
+          pendingPlayRef.current = false;
+          return;
+        }
+        void prefetchVibeRadioIfNeeded(pl, safeIdx);
+        const next = pl[nextIdx];
+        if (tracksMatch(next, pl[safeIdx])) {
+          if (modes.repeat === REPEAT_ALL || modes.repeat === REPEAT_ONE) {
+            const main = getMainAudioEl?.() ?? audioRef.current;
+            if (main) {
+              main.currentTime = 0;
+            }
+            setProgress(0);
+            pendingPlayRef.current = true;
+            setIsPlaying(true);
+            resumeMainPlaybackAfterHandoff(main, {
+              pendingPlayRef,
+              setIsPlaying,
+              setIsLoading,
+              volume,
+              onEngineInit: initAudioEngine,
+            });
             return;
           }
-        }
-        const cur = currentTrackRef.current;
-        if (cur && modes.repeat !== REPEAT_ONE && await tryAutoTrackRadio(cur)) {
+          setIsPlaying(false);
+          setIsLoading(false);
+          pendingPlayRef.current = false;
           return;
         }
-        setIsPlaying(false);
+        if (tryPreloadHandoff(next)) return;
+        beginPlayback(next, pl);
         return;
       }
-      void prefetchVibeRadioIfNeeded(pl, safeIdx);
-      const next = pl[nextIdx];
-      if (modes.repeat !== REPEAT_ONE && tracksMatch(next, pl[safeIdx])) {
-        if (await tryAutoTrackRadio(pl[safeIdx])) {
-          return;
-        }
-        setIsPlaying(false);
-        return;
-      }
-      if (modes.repeat === REPEAT_ONE && tracksMatch(next, pl[safeIdx])) {
-        const main = getMainAudioEl?.() ?? audioRef.current;
-        if (main) {
-          main.currentTime = 0;
-        }
-        setProgress(0);
-        return;
-      }
-      if (tryPreloadHandoff(next)) return;
-      beginPlayback(next, pl);
-      return;
-    }
 
-    const cur = currentTrackRef.current;
-    if (!cur) return;
-    setIsLoading(true);
-    try {
-      const getHarmonicMatches = (key) => {
-        const match = key?.match?.(/(\d+)([AB])/i);
-        if (!match) return [key];
-        const n = parseInt(match[1], 10);
-        const letter = match[2].toUpperCase();
-        const other = letter === 'A' ? 'B' : 'A';
-        const nextN = n === 12 ? 1 : n + 1;
-        const prevN = n === 1 ? 12 : n - 1;
-        return [`${n}${letter}`, `${nextN}${letter}`, `${prevN}${letter}`, `${n}${other}`];
-      };
+      const cur = currentTrackRef.current;
+      if (!cur) return;
+      setIsLoading(true);
+      try {
+        const getHarmonicMatches = (key) => {
+          const match = key?.match?.(/(\d+)([AB])/i);
+          if (!match) return [key];
+          const n = parseInt(match[1], 10);
+          const letter = match[2].toUpperCase();
+          const other = letter === 'A' ? 'B' : 'A';
+          const nextN = n === 12 ? 1 : n + 1;
+          const prevN = n === 1 ? 12 : n - 1;
+          return [`${n}${letter}`, `${nextN}${letter}`, `${prevN}${letter}`, `${n}${other}`];
+        };
 
-      if (hasAuthSession()) {
+        if (hasAuthSession()) {
+          try {
+            const library = await fetchLibraryTracks(lang);
+            const { bpm: cBpm, camelotKey: cKey } = getTrackFeaturesSync(cur);
+            const allowedKeys = getHarmonicMatches(cKey);
+            const existingIds = new Set(pl.map((tr) => String(tr.provider_id)));
+            const candidates = library.filter((tr) => {
+              if (existingIds.has(String(tr.provider_id))) return false;
+              const { bpm, camelotKey } = getTrackFeaturesSync(tr);
+              return allowedKeys.includes(camelotKey) && Math.abs(bpm - cBpm) <= 5;
+            });
+            if (candidates.length > 0) {
+              const next = candidates[Math.floor(Math.random() * candidates.length)];
+              const newPl = [...pl, { ...next, provider_id: String(next.provider_id) }];
+              syncPlaylistRef(playlistRef, newPl);
+              setPlaylist(newPl);
+              beginPlayback(next, newPl);
+              setIsLoading(false);
+              showToast(t('autoDjMatch'));
+              return;
+            }
+          } catch {
+            /* fall through to artist top */
+          }
+        }
+
         try {
-          const library = await fetchLibraryTracks(lang);
-          const { bpm: cBpm, camelotKey: cKey } = getTrackFeaturesSync(cur);
-          const allowedKeys = getHarmonicMatches(cKey);
-          const existingIds = new Set(pl.map((tr) => String(tr.provider_id)));
-          const candidates = library.filter((tr) => {
-            if (existingIds.has(String(tr.provider_id))) return false;
-            const { bpm, camelotKey } = getTrackFeaturesSync(tr);
-            return allowedKeys.includes(camelotKey) && Math.abs(bpm - cBpm) <= 5;
-          });
-          if (candidates.length > 0) {
-            const next = candidates[Math.floor(Math.random() * candidates.length)];
-            const newPl = [...pl, { ...next, provider_id: String(next.provider_id) }];
-            syncPlaylistRef(playlistRef, newPl);
-            setPlaylist(newPl);
-            beginPlayback(next, newPl);
-            setIsLoading(false);
-            showToast(t('autoDjMatch'));
-            return;
+          const data = await apiGetJson(`/api/artist/${cur.artist_ids?.[0]}`, { lang });
+          if (data.top_tracks?.length > 0) {
+            const existingIds = new Set(pl.map((tr) => String(tr.provider_id)));
+            const newTracks = data.top_tracks
+              .filter((tr) => !existingIds.has(String(tr.provider_id)))
+              .map((tr) => ({ ...tr, provider_id: String(tr.provider_id) }));
+            if (newTracks.length > 0) {
+              const newPl = [...pl, ...newTracks];
+              syncPlaylistRef(playlistRef, newPl);
+              setPlaylist(newPl);
+              beginPlayback(newTracks[0], newPl);
+              setIsLoading(false);
+              return;
+            }
           }
         } catch {
-          /* fall through to artist top */
+          /* ignore */
         }
+      } catch (e) {
+        showToast(messageForApiError(e, lang));
       }
-
-      try {
-        const data = await apiGetJson(`/api/artist/${cur.artist_ids?.[0]}`, { lang });
-        if (data.top_tracks?.length > 0) {
-          const existingIds = new Set(pl.map((tr) => String(tr.provider_id)));
-          const newTracks = data.top_tracks
-            .filter((tr) => !existingIds.has(String(tr.provider_id)))
-            .map((tr) => ({ ...tr, provider_id: String(tr.provider_id) }));
-          if (newTracks.length > 0) {
-            const newPl = [...pl, ...newTracks];
-            syncPlaylistRef(playlistRef, newPl);
-            setPlaylist(newPl);
-            beginPlayback(newTracks[0], newPl);
-            setIsLoading(false);
-            return;
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    } catch (e) {
-      showToast(messageForApiError(e, lang));
+      setIsLoading(false);
+    } finally {
+      playNextInFlightRef.current = false;
     }
-    setIsLoading(false);
   }, [
     resolveQueueIndex, beginPlayback, setPlaylist, setIsLoading, setProgress, t, lang, playlistRef,
     currentTrackRef, modesRef, shuffleEnabled, repeatMode, audioRef, getMainAudioEl, setIsPlaying,
-    tryPreloadHandoff, crossfadingRef, crossfadeStartedForRef, queueOriginRef, startTrackRadioRef,
-    tryAutoTrackRadio, appendVibeRadioTracks, prefetchVibeRadioIfNeeded, pendingPlayRef,
+    tryPreloadHandoff, crossfadingRef, crossfadeStartedForRef, queueOriginRef,
+    appendVibeRadioTracks, prefetchVibeRadioIfNeeded, pendingPlayRef,
+    initAudioEngine, volume,
   ]);
 
   const playPrevious = useCallback(() => {
