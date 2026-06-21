@@ -14,6 +14,7 @@ import {
   resolveStreamBypass,
   sameStreamResource,
   isActivelyPlayingAudio,
+  isPausedMidPlayback,
   mergeProbeWithCatalogHint,
   sanitizeQualitiesForPlayer,
   visibleQualitiesForTrack,
@@ -438,6 +439,17 @@ export function usePlaybackQuality({
 
     const updateAudioSrc = async () => {
       const mainEl = resolveMainEl();
+      const elSrc = mainEl?.currentSrc || mainEl?.src || '';
+      const pausedMidTrack = isPausedMidPlayback(mainEl);
+
+      if (pausedMidTrack && elSrc) {
+        setCurrentAudioSrc((prev) => {
+          if (prev && sameStreamResource(prev, elSrc)) return prev;
+          return elSrc;
+        });
+        return;
+      }
+
       const activelyPlaying = isActivelyPlayingAudio(isPlayingRef.current, mainEl);
       const skipUrl = skipAudioSrcSyncRef?.current;
       if (skipUrl) {
@@ -464,12 +476,12 @@ export function usePlaybackQuality({
 
       let url = '';
       let fromCache = false;
-      if (!activelyPlaying) {
+      if (!activelyPlaying && !pausedMidTrack) {
         url = await getCachedAudioUrl(currentTrack, streamQuality);
         fromCache = Boolean(url);
       }
       if (!url) {
-        if (LOSSLESS_TIERS.has(streamQuality) && !activelyPlaying) {
+        if (LOSSLESS_TIERS.has(streamQuality) && !activelyPlaying && !pausedMidTrack) {
           setIsLoading?.(true);
           await warmStream(currentTrack, streamQuality);
         }
@@ -492,7 +504,7 @@ export function usePlaybackQuality({
             return;
           }
         }
-        if (!activelyPlaying && !LOSSLESS_TIERS.has(streamQuality)) {
+        if (!activelyPlaying && !pausedMidTrack && !LOSSLESS_TIERS.has(streamQuality)) {
           void prefetchAudioToCache(
             { ...currentTrack, provider: currentTrack.provider || 'tidal' },
             streamQuality,

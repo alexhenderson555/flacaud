@@ -10,6 +10,7 @@ import {
   isPlaybackQualityAvailable,
   resolveMaxTrackQuality,
   resolvePlayerUiQuality,
+  isPausedMidPlayback,
 } from './qualityPrefs.js';
 
 describe('qualityPrefs', () => {
@@ -25,6 +26,13 @@ describe('qualityPrefs', () => {
   it('lowers tier on stream error', () => {
     expect(lowerQualityTier('HI_RES', ['LOW', 'HIGH', 'LOSSLESS'])).toBe('LOSSLESS');
     expect(lowerQualityTier('LOSSLESS', ['LOW', 'HIGH', 'LOSSLESS'])).toBe('HIGH');
+  });
+
+  it('detects paused mid-track playback', () => {
+    expect(isPausedMidPlayback(null)).toBe(false);
+    expect(isPausedMidPlayback({ paused: false, currentTime: 10, src: 'x' })).toBe(false);
+    expect(isPausedMidPlayback({ paused: true, currentTime: 0, src: 'x' })).toBe(false);
+    expect(isPausedMidPlayback({ paused: true, currentTime: 5, src: 'http://x/a' })).toBe(true);
   });
 
   it('maps badge labels to two UI tiers', () => {

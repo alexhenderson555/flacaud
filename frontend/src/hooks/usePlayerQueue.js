@@ -242,9 +242,16 @@ export function usePlayerQueue({
         setIsPlaying(false);
         return;
       }
-      if (contextPlaylist) {
-        playQueue(track, contextPlaylist);
-        return;
+      if (contextPlaylist?.length) {
+        const normalized = contextPlaylist.map((tr) => ({
+          ...tr,
+          provider_id: String(tr.provider_id),
+        }));
+        queueOriginRef.current = normalized[0]?.__queue_origin || null;
+        syncPlaylistRef(playlistRef, normalized);
+        setPlaylist(normalized);
+        const idx = normalized.findIndex((tr) => String(tr.provider_id) === trackId);
+        setCurrentTrackIndex(idx >= 0 ? idx : 0);
       }
       pauseSetEmbed?.();
       releaseSetEmbed?.();
@@ -262,6 +269,7 @@ export function usePlayerQueue({
   }, [
     beginPlayback, playQueue, audioRef, getMainAudioEl, currentTrackRef, initAudioEngine,
     deferPlayUntilReady, setIsLoading, setIsPlaying, pendingPlayRef, pauseSetEmbed, releaseSetEmbed,
+    queueOriginRef, playlistRef, setPlaylist, setCurrentTrackIndex,
   ]);
 
   const handleReorderQueue = useCallback((newPlaylist) => {

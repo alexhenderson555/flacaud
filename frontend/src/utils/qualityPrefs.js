@@ -363,6 +363,14 @@ export function isActivelyPlayingAudio(isPlaying, audioEl) {
   return (audioEl.currentTime || 0) > 0.25;
 }
 
+/** Paused mid-track with buffered data — keep `<audio src>` stable on resume. */
+export function isPausedMidPlayback(audioEl, { minSeconds = 0.25 } = {}) {
+  if (!audioEl?.paused) return false;
+  const src = audioEl.currentSrc || audioEl.src || '';
+  if (!src) return false;
+  return (audioEl.currentTime || 0) > minSeconds;
+}
+
 /** Read bypass_registry from a stream URL (blob URLs return null). */
 export function parseBypassFromStreamUrl(url) {
   if (!url || url.startsWith('blob:')) return null;
