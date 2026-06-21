@@ -14,7 +14,6 @@ import {
   resolveStreamBypass,
   sameStreamResource,
   isActivelyPlayingAudio,
-  isPausedMidPlayback,
   mergeProbeWithCatalogHint,
   sanitizeQualitiesForPlayer,
   visibleQualitiesForTrack,
@@ -31,6 +30,7 @@ import {
 } from '../utils/qualityPrefs';
 import { readQualityProbeCache, writeQualityProbeCache } from '../utils/qualityProbeCache';
 import { waitForLosslessStreamReady } from '../utils/streamReady';
+import { shouldPreservePausedStream } from '../utils/playerTransportLogic';
 
 const LOSSLESS_TIERS = new Set(['LOSSLESS', 'HI_RES']);
 
@@ -440,7 +440,7 @@ export function usePlaybackQuality({
     const updateAudioSrc = async () => {
       const mainEl = resolveMainEl();
       const elSrc = mainEl?.currentSrc || mainEl?.src || '';
-      const pausedMidTrack = isPausedMidPlayback(mainEl);
+      const pausedMidTrack = shouldPreservePausedStream(mainEl, currentTrack?.provider_id);
 
       if (pausedMidTrack && elSrc) {
         setCurrentAudioSrc((prev) => {

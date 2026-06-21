@@ -7,6 +7,7 @@ import {
   canStartCrossfade,
   isPreloadReadyForCrossfade,
   urlTargetsTrack,
+  shouldPreservePausedStream,
   resumePausedPlayback,
   resumeMainPlaybackAfterHandoff,
   prepareMainAudioForTrackSwitch,
@@ -247,6 +248,20 @@ describe('urlTargetsTrack', () => {
   it('matches track id in stream path', () => {
     expect(urlTargetsTrack('/api/stream/tidal/123?quality=LOSSLESS', '123')).toBe(true);
     expect(urlTargetsTrack('/api/stream/tidal/123?quality=LOSSLESS', '12')).toBe(false);
+  });
+});
+
+describe('shouldPreservePausedStream', () => {
+  it('preserves only when paused stream matches track id', () => {
+    const el = {
+      paused: true,
+      currentTime: 42,
+      currentSrc: '/api/stream/tidal/111?quality=HIGH',
+      src: '/api/stream/tidal/111?quality=HIGH',
+    };
+    expect(shouldPreservePausedStream(el, '111')).toBe(true);
+    expect(shouldPreservePausedStream(el, '222')).toBe(false);
+    expect(shouldPreservePausedStream({ ...el, paused: false }, '111')).toBe(false);
   });
 });
 

@@ -1,4 +1,5 @@
 import { tracksMatch } from './trackNormalize';
+import { isPausedMidPlayback } from './qualityPrefs';
 import { CROSSFADE_SEC } from './playerConfig';
 
 /** Seconds before catalog end when we auto-advance (rAF + native ended guard). */
@@ -131,6 +132,14 @@ export function urlTargetsTrack(url, trackId) {
   if (!url || trackId == null || trackId === '') return false;
   const id = String(trackId);
   return url.includes(`/${id}?`) || url.includes(`/${id}&`);
+}
+
+/** Keep paused stream only when it still belongs to the requested track. */
+export function shouldPreservePausedStream(audioEl, trackId) {
+  if (!audioEl || trackId == null || trackId === '') return false;
+  const src = audioEl.currentSrc || audioEl.src || '';
+  if (!src || !isPausedMidPlayback(audioEl)) return false;
+  return urlTargetsTrack(src, trackId);
 }
 
 /**
