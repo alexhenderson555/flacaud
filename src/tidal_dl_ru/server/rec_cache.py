@@ -6,8 +6,8 @@ import os
 import time
 from typing import Any
 
-# 0 = fresh recommendations every request (default). Set e.g. 120 to reduce Tidal API load.
-_TTL_SEC = float(os.environ.get("TIDALDLRU_REC_CACHE_TTL", "0"))
+# Seconds to reuse a built recommendation list (reduces Tidal load). Override via TIDALDLRU_REC_CACHE_TTL.
+_TTL_SEC = float(os.environ.get("TIDALDLRU_REC_CACHE_TTL", "120"))
 _store: dict[tuple[Any, ...], tuple[float, list]] = {}
 
 

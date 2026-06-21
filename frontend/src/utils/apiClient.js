@@ -115,7 +115,15 @@ export function messageForApiError(err, lang = 'en') {
 
 export async function apiGetJson(path, options = {}) {
   const res = await apiFetch(path, { ...options, method: 'GET' });
-  return parseJsonSafe(res);
+  const body = await parseJsonSafe(res);
+  if (!res.ok) {
+    const message = detailFromBody(body)
+      || (typeof body?.detail === 'string' ? body.detail : null)
+      || res.statusText
+      || 'Request failed';
+    throw new ApiError(message, { status: res.status, code: codeFromBody(body) || 'http_error' });
+  }
+  return body;
 }
 export async function apiPostJson(path, body, options = {}) {
   const res = await apiFetch(path, {
