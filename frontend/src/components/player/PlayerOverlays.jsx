@@ -1,7 +1,9 @@
+import { lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import KaraokeMode from '../KaraokeMode';
-import PartyMode from '../party/PartyMode';
 import DJMode from '../DJMode';
+
+const PartyMode = lazy(() => import('../party/PartyMode'));
 import PlaybackQueue from '../PlaybackQueue';
 import Equalizer from '../Equalizer';
 import LyricsView from '../LyricsView';
@@ -53,18 +55,20 @@ export default function PlayerOverlays({
       )}
 
       {isPartyOpen && currentTrack && (
-        <PartyMode
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          isLoading={isLoading}
-          togglePlay={togglePlay}
-          playNext={playNext}
-          toggleLike={toggleLike}
-          likedTracks={likedTracks}
-          audioRef={audioRef}
-          onClose={closeParty}
-          lang={lang}
-        />
+        <Suspense fallback={null}>
+          <PartyMode
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            isLoading={isLoading}
+            togglePlay={togglePlay}
+            playNext={playNext}
+            toggleLike={toggleLike}
+            likedTracks={likedTracks}
+            audioRef={audioRef}
+            onClose={closeParty}
+            lang={lang}
+          />
+        </Suspense>
       )}
 
       {isDJOpen && (

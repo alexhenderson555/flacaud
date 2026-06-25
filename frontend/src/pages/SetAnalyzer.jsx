@@ -19,7 +19,6 @@ import { startDownloadJob, cancelJob } from '../utils/downloadJobs';
 import { enableDjAnalysisPreference } from '../utils/enableDjAnalysis';
 import { apiPostJson } from '../utils/apiClient';
 import { fetchJobStatus } from '../utils/downloadJobs';
-import { getAccessToken } from '../utils/tokenStorage';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
 import { classifySetUrl, SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';

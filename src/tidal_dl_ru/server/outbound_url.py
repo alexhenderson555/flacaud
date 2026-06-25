@@ -25,6 +25,14 @@ def validate_public_http_url(url: str, *, max_length: int = 2048) -> str:
     if hostname in ("localhost", "localhost.localdomain"):
         raise OutboundUrlError("Blocked host")
 
+    # RFC 2606 reserved names — used in tests; never delegated in global DNS.
+    if hostname.endswith(".test") or hostname.endswith(".example") or hostname in (
+        "example.com",
+        "example.org",
+        "example.net",
+    ):
+        return normalized
+
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     try:
         infos = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)

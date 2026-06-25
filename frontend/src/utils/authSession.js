@@ -140,8 +140,11 @@ export function userDataFromLogin(data, fallbackUsername) {
 }
 
 export async function verifyEmailToken(token) {
-  const res = await fetch(`/api/auth/verify-email?token=${token}`, { method: 'POST' });
-  return res.json().catch(() => ({}));
+  const res = await apiFetch(
+    `/api/auth/verify-email?token=${encodeURIComponent(token)}`,
+    { method: 'POST', timeoutMs: 15000, retries: 0 },
+  );
+  return parseJsonSafe(res);
 }
 
 export async function signOut() {

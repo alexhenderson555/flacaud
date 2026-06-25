@@ -576,7 +576,6 @@ export default function PlayerLogic({ children }) {
     cycleRepeat: playbackModes.cycleRepeat,
     visualizerEnabled,
     setVisualizerEnabled,
-    getMainAudioEl,
     theme,
     setTheme,
     embedUrl,

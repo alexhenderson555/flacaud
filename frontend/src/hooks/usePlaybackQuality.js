@@ -356,9 +356,10 @@ export function usePlaybackQuality({
       return () => { cancelled = true; };
     }
 
-    const qualityRequest = hasAuthSession()
-      ? apiFetch(`/api/quality/${provider}/${trackId}/available`, { auth: true, timeoutMs: 15000, retries: 0 })
-      : fetch(`/api/quality/${provider}/${trackId}/available`);
+    const qualityRequest = apiFetch(
+      `/api/quality/${provider}/${trackId}/available`,
+      { auth: hasAuthSession(), timeoutMs: 15000, retries: 0 },
+    );
 
     qualityRequest
       .then((r) => (r.ok ? r.json() : null))
@@ -415,12 +416,10 @@ export function usePlaybackQuality({
       return undefined;
     }
 
-    const metaRequest = hasAuthSession()
-      ? apiFetch(
-        `/api/quality/${currentTrack.provider || 'tidal'}/${currentTrack.provider_id}?quality=${streamQuality}`,
-        { auth: true, timeoutMs: 15000, retries: 0 },
-      )
-      : fetch(`/api/quality/${currentTrack.provider || 'tidal'}/${currentTrack.provider_id}?quality=${streamQuality}`);
+    const metaRequest = apiFetch(
+      `/api/quality/${currentTrack.provider || 'tidal'}/${currentTrack.provider_id}?quality=${streamQuality}`,
+      { auth: hasAuthSession(), timeoutMs: 15000, retries: 0 },
+    );
 
     metaRequest
       .then((qRes) => (qRes.ok ? qRes.json() : null))

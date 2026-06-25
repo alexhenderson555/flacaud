@@ -23,3 +23,8 @@ def test_rejects_localhost():
 def test_rejects_too_short():
     with pytest.raises(OutboundUrlError):
         validate_public_http_url("http://")
+
+
+def test_accepts_rfc2606_test_host_without_dns():
+    url = validate_public_http_url("https://stub.test/album/1")
+    assert url == "https://stub.test/album/1"

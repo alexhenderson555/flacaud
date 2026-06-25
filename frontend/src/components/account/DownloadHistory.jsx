@@ -109,7 +109,7 @@ export default function DownloadHistory({ open, onClose, lang, isLoggedIn }) {
         window.alert(t('fileUnavailable'));
         return;
       }
-      const res = await fetch(`/api/files/${token}`);
+      const res = await apiFetch(`/api/files/${token}`, { auth: true, timeoutMs: 120000, retries: 0 });
       if (!res.ok) throw new Error(String(res.status));
       const blob = await res.blob();
       const ext = extensionFromResponse(
