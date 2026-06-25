@@ -47,6 +47,16 @@ export async function installE2EAuth(page, { token = 'e2e-token', library = null
       localStorage.removeItem('tidal-current-index');
       sessionStorage.removeItem('tidal_search_realResults');
       if (lib) localStorage.setItem('tidal-library', JSON.stringify(lib));
+      // Headless CI blocks real media decode; stub play() so player state advances.
+      const proto = HTMLMediaElement.prototype;
+      proto.play = function stubPlay() {
+        try {
+          this.dispatchEvent(new Event('loadedmetadata'));
+          this.dispatchEvent(new Event('canplay'));
+          this.dispatchEvent(new Event('playing'));
+        } catch { /* ignore */ }
+        return Promise.resolve();
+      };
     },
     { token, library, lang },
   );
