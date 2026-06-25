@@ -214,8 +214,8 @@ function Search() {
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
               body: JSON.stringify({ provider: 'tidal', query: alt, limit: PAGE_SIZE, offset: 0 })
             });
-            const altData = await altRes.json();
-            if (altData.tracks?.length) {
+            const altData = altRes.ok ? await altRes.json() : null;
+            if (altData?.tracks?.length) {
               setRealResults(altData.tracks);
               setHasMore(Boolean(altData.has_more));
               setSearchOffset(altData.tracks.length);

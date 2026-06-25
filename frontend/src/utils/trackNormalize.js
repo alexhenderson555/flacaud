@@ -124,15 +124,22 @@ export function serializeTrackForStorage(track) {
   };
 }
 
+/** Coerce one artist entry (plain string or `{name}`/`{title}` object) to a name. */
+function artistDisplayName(a) {
+  if (typeof a === 'string') return a.trim();
+  if (a && typeof a === 'object') return String(a.name || a.title || '').trim();
+  return '';
+}
+
 export function normalizeArtists(track) {
   if (!track) return [];
-  if (Array.isArray(track.artists)) return track.artists.map(String);
-  if (typeof track.artists === 'string') return [track.artists];
+  if (Array.isArray(track.artists)) return track.artists.map(artistDisplayName).filter(Boolean);
+  if (typeof track.artists === 'string' && track.artists.trim()) return [track.artists.trim()];
   if (typeof track.artist === 'string' && track.artist.trim()) return [track.artist.trim()];
   if (typeof track.artists_json === 'string') {
     try {
       const parsed = JSON.parse(track.artists_json || '[]');
-      return Array.isArray(parsed) ? parsed.map(String) : [];
+      return Array.isArray(parsed) ? parsed.map(artistDisplayName).filter(Boolean) : [];
     } catch {
       return [];
     }

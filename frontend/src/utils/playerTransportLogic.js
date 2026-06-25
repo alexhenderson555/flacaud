@@ -1,6 +1,7 @@
 import { tracksMatch } from './trackNormalize';
-import { isPausedMidPlayback } from './qualityPrefs';
+import { isPausedMidPlayback, sameStreamResource } from './qualityPrefs';
 import { CROSSFADE_SEC } from './playerConfig';
+import { effectivePlaybackDuration } from './effectivePlaybackDuration';
 
 /** Seconds before catalog end when we auto-advance (rAF + native ended guard). */
 export const END_THRESHOLD_SEC = 0.35;
@@ -134,12 +135,85 @@ export function urlTargetsTrack(url, trackId) {
   return url.includes(`/${id}?`) || url.includes(`/${id}&`);
 }
 
+/** Ignore stale/aborted stream errors during rapid track switches. */
+export function shouldIgnoreStreamError({
+  activeSrc = '',
+  currentTrackId = null,
+  currentAudioSrc = '',
+  suppressUntilMs = 0,
+  trackChangePending = false,
+  now = performance.now(),
+}) {
+  if (trackChangePending) return true;
+  if (suppressUntilMs > 0 && now < suppressUntilMs) return true;
+  if (currentTrackId && activeSrc && !urlTargetsTrack(activeSrc, currentTrackId)) return true;
+  if (activeSrc && currentAudioSrc && !sameStreamResource(activeSrc, currentAudioSrc)) return true;
+  return false;
+}
+
+/**
+ * Decide whether to call play() on the main element right now.
+ *
+ * Matches the wanted stream against EITHER the freshly-assigned `src` or the
+ * live `currentSrc`: after a Web Audio clear (`src = ''` without load()) the
+ * element keeps the previous track's `currentSrc` for a beat, so gating only on
+ * `currentSrc` would skip the play() and leave a freshly selected track paused
+ * until a second click.
+ */
+export function shouldStartPlayback({
+  pendingPlay,
+  pendingSeek = null,
+  deferUntilReady = false,
+  losslessReady = false,
+  hasError = false,
+  wantSrc = '',
+  elSrc = '',
+  elCurrentSrc = '',
+}) {
+  if (!pendingPlay) return false;
+  if (pendingSeek != null) return false;
+  if (deferUntilReady && !losslessReady) return false;
+  if (hasError) return false;
+  if (!wantSrc) return false;
+  return sameStreamResource(elSrc, wantSrc) || sameStreamResource(elCurrentSrc, wantSrc);
+}
+
+/** Seconds of media buffered ahead of currentTime. */
+export function bufferedSecondsAhead(audioEl) {
+  if (!audioEl?.buffered?.length) return 0;
+  const t = audioEl.currentTime || 0;
+  let ahead = 0;
+  for (let i = 0; i < audioEl.buffered.length; i += 1) {
+    const start = audioEl.buffered.start(i);
+    const end = audioEl.buffered.end(i);
+    if (t >= start && t <= end) {
+      ahead = Math.max(ahead, end - t);
+    } else if (start > t) {
+      ahead = Math.max(ahead, end - start);
+    }
+  }
+  return ahead;
+}
+
+/** Enough buffered audio to resume or hand off without a one-blip stall. */
+export function hasAdequatePlaybackBuffer(audioEl, trackDurationSec, { minAheadSec = 8 } = {}) {
+  if (!audioEl) return false;
+  const ahead = bufferedSecondsAhead(audioEl);
+  const effective = effectivePlaybackDuration(trackDurationSec, audioEl.duration);
+  if (!effective || effective <= 0) return ahead >= minAheadSec;
+  const remaining = effective - (audioEl.currentTime || 0);
+  if (remaining <= minAheadSec) return ahead > 0.25;
+  return ahead >= Math.min(minAheadSec, remaining * 0.5);
+}
+
 /** Keep paused stream only when it still belongs to the requested track. */
-export function shouldPreservePausedStream(audioEl, trackId) {
+export function shouldPreservePausedStream(audioEl, trackId, trackDurationSec = 0) {
   if (!audioEl || trackId == null || trackId === '') return false;
   const src = audioEl.currentSrc || audioEl.src || '';
   if (!src || !isPausedMidPlayback(audioEl)) return false;
-  return urlTargetsTrack(src, trackId);
+  if (!urlTargetsTrack(src, trackId)) return false;
+  if (audioEl.ended || isAtTrackEnd(audioEl, trackDurationSec)) return false;
+  return hasAdequatePlaybackBuffer(audioEl, trackDurationSec);
 }
 
 /**
@@ -202,13 +276,23 @@ export function pauseAudioForTrackSwitch(audioEl) {
 }
 
 /**
- * Pause for a new track. Plain elements are cleared; Web Audio elements keep src
- * until React assigns the next stream URL (avoid empty-src blip on play()).
+ * Pause for a new track and drop stale media so the next src starts from 0.
  */
 export function prepareMainAudioForTrackSwitch(audioEl) {
   if (!audioEl) return;
   pauseAudioForTrackSwitch(audioEl);
-  if (!audioEl._sourceNode) {
+  try {
+    audioEl.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+  if (audioEl._sourceNode) {
+    try {
+      audioEl.src = '';
+    } catch {
+      /* ignore */
+    }
+  } else {
     clearAudioElementSrc(audioEl);
   }
 }
@@ -303,6 +387,25 @@ export function shouldTriggerTrackEnd({
     && !crossfading
     && currentTime >= effectiveDuration - thresholdSec
   );
+}
+
+/** Natural end — `ended` event or catalog time (streams often pause without firing `ended`). */
+export function isAtTrackEnd(audioEl, trackDurationSec, thresholdSec = END_THRESHOLD_SEC) {
+  if (!audioEl) return false;
+  if (audioEl.ended) return true;
+  const effective = effectivePlaybackDuration(trackDurationSec, audioEl.duration);
+  if (!effective || effective <= 0) return false;
+  return (audioEl.currentTime || 0) >= effective - thresholdSec;
+}
+
+/** Shared guard for onEnded / onPause-at-end before calling playNext. */
+export function shouldAdvanceToNextTrack({ crossfading, skipEndedRef }) {
+  if (crossfading) return false;
+  if (skipEndedRef?.current) {
+    skipEndedRef.current = false;
+    return false;
+  }
+  return true;
 }
 
 export function isPreloadReadyForCrossfade(audioEl) {

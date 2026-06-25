@@ -30,7 +30,7 @@ import {
 } from '../utils/qualityPrefs';
 import { readQualityProbeCache, writeQualityProbeCache } from '../utils/qualityProbeCache';
 import { waitForLosslessStreamReady } from '../utils/streamReady';
-import { shouldPreservePausedStream } from '../utils/playerTransportLogic';
+import { shouldPreservePausedStream, shouldIgnoreStreamError } from '../utils/playerTransportLogic';
 
 const LOSSLESS_TIERS = new Set(['LOSSLESS', 'HI_RES']);
 
@@ -78,6 +78,7 @@ export function usePlaybackQuality({
   downloadRegistryTick = 0,
   effectivePlan = 'free',
   autoQuality = true,
+  onManualQualityPick,
   pendingPlayRef,
   lang,
   showToast,
@@ -120,6 +121,9 @@ export function usePlaybackQuality({
   const retryTimerRef = useRef(null);
   const warmInFlightRef = useRef('');
   const streamLoadGenRef = useRef(0);
+  const qualitySwitchRef = useRef(false);
+  const autoQualityRef = useRef(autoQuality);
+  const streamErrorSuppressUntilRef = useRef(0);
 
   const resolveMainEl = useCallback(
     () => getMainAudioEl?.() ?? audioRef?.current ?? null,
@@ -134,6 +138,7 @@ export function usePlaybackQuality({
   useEffect(() => { streamQualityRef.current = streamQuality; }, [streamQuality]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { trackKeyRef.current = trackKey; }, [trackKey]);
+  useEffect(() => { autoQualityRef.current = autoQuality; }, [autoQuality]);
 
   const setPlaybackQuality = useCallback((q) => {
     const capped = clampQualityToPlan(q, effectivePlan);
@@ -143,8 +148,8 @@ export function usePlaybackQuality({
   }, [effectivePlan]);
 
   const resolveWantedQuality = useCallback((wanted) => (
-    autoQuality ? planMaxPlaybackQuality(effectivePlan) : clampQualityToPlan(wanted ?? playbackQualityRef.current, effectivePlan)
-  ), [autoQuality, effectivePlan]);
+    autoQualityRef.current ? planMaxPlaybackQuality(effectivePlan) : clampQualityToPlan(wanted ?? playbackQualityRef.current, effectivePlan)
+  ), [effectivePlan]);
 
   const updateDeliveredMeta = useCallback((tier, probe = null, meta = {}) => {
     const normalized = !tier || tier === 'LOW' || tier === 'HIGH'
@@ -173,7 +178,8 @@ export function usePlaybackQuality({
 
     const wantedQ = resolveWantedQuality(wanted);
     const streamable = streamableQualitiesForTrack(visibleQualities, activeProbe);
-    const effective = autoQuality
+    const useAuto = autoQualityRef.current;
+    const effective = useAuto
       ? pickMaxQualityForTrack(streamable, effectivePlan, activeProbe)
       : pickQualityForPlan(wantedQ, streamable, effectivePlan);
 
@@ -188,9 +194,9 @@ export function usePlaybackQuality({
     }
 
     setStreamQuality(effective);
-    if (autoQuality) setPlaybackQualityState(effective);
+    if (useAuto) setPlaybackQualityState(effective);
 
-    if (!autoQuality && effective !== wantedQ) {
+    if (!useAuto && effective !== wantedQ) {
       const planBlocked = !isQualityAllowedForPlan(wantedQ, effectivePlan);
       const trackKeyNow = trackKeyRef.current;
       if (trackKeyNow && isProbeReadyForTrack(activeProbe, trackKeyNow)) {
@@ -237,7 +243,7 @@ export function usePlaybackQuality({
       if (!mt) return;
       await apiFetch(
         `/api/stream/${provider}/${track.provider_id}/warm?quality=${quality}&mt=${encodeURIComponent(mt)}`,
-        { auth: true, lang, timeoutMs: 20000, retries: 0 },
+        { method: 'POST', auth: true, lang, timeoutMs: 20000, retries: 0 },
       );
     } catch {
       /* warm is best-effort */
@@ -280,6 +286,7 @@ export function usePlaybackQuality({
 
     let cancelled = false;
     trackChangePendingRef.current = true;
+    streamErrorSuppressUntilRef.current = performance.now() + 1200;
     streamRetryNonceRef.current = 0;
     setStreamRetryNonce(0);
     lastStreamErrorKeyRef.current = '';
@@ -290,6 +297,9 @@ export function usePlaybackQuality({
       retryTimerRef.current = null;
     }
     setQualitiesReady(false);
+    if (pendingPlayRef?.current || isPlayingRef.current) {
+      setIsLoading?.(true);
+    }
     setProbeData(null);
     probeDataRef.current = null;
     qualityActualRef.current = {};
@@ -435,12 +445,21 @@ export function usePlaybackQuality({
     let cancelled = false;
     const loadGen = streamLoadGenRef.current + 1;
     streamLoadGenRef.current = loadGen;
+    streamErrorSuppressUntilRef.current = performance.now() + 800;
     const abortReady = new AbortController();
 
     const updateAudioSrc = async () => {
       const mainEl = resolveMainEl();
       const elSrc = mainEl?.currentSrc || mainEl?.src || '';
-      const pausedMidTrack = shouldPreservePausedStream(mainEl, currentTrack?.provider_id);
+      const trackDur = Number(currentTrack?.duration_s ?? currentTrack?.duration ?? 0);
+      const forceQualitySwitch = qualitySwitchRef.current;
+      if (forceQualitySwitch) qualitySwitchRef.current = false;
+
+      const pausedMidTrack = !forceQualitySwitch && shouldPreservePausedStream(
+        mainEl,
+        currentTrack?.provider_id,
+        trackDur,
+      );
 
       if (pausedMidTrack && elSrc) {
         setCurrentAudioSrc((prev) => {
@@ -450,7 +469,12 @@ export function usePlaybackQuality({
         return;
       }
 
-      const activelyPlaying = isActivelyPlayingAudio(isPlayingRef.current, mainEl);
+      if (pendingPlayRef?.current || forceQualitySwitch) {
+        setIsLoading?.(true);
+      }
+
+      const activelyPlaying = !forceQualitySwitch
+        && isActivelyPlayingAudio(isPlayingRef.current, mainEl);
       const skipUrl = skipAudioSrcSyncRef?.current;
       if (skipUrl) {
         const elSrc = mainEl?.currentSrc || mainEl?.src || '';
@@ -587,7 +611,14 @@ export function usePlaybackQuality({
   }, [pendingPlayRef, setIsLoading]);
 
   const changeQuality = useCallback((newQ) => {
-    if (newQ === playbackQuality) return;
+    const mainEl = resolveMainEl();
+    const elSrc = mainEl?.currentSrc || mainEl?.src || '';
+    const streamMatches = elSrc && (
+      elSrc.includes(`quality=${newQ}&`)
+      || elSrc.includes(`quality=${newQ}`)
+    );
+    if (newQ === playbackQuality && newQ === streamQualityRef.current && streamMatches) return;
+
     if (!isQualityAllowedForPlan(newQ, effectivePlan)) {
       showToast?.(lang === 'ru' ? 'Это качество доступно на платном тарифе' : 'This quality requires a paid plan');
       return;
@@ -599,11 +630,11 @@ export function usePlaybackQuality({
       return;
     }
     if (autoQuality) {
-      showToast?.(lang === 'ru'
-        ? 'Отключите «Авто» в профиле, чтобы зафиксировать качество'
-        : 'Turn off Auto in profile to lock a fixed quality');
-      return;
+      onManualQualityPick?.();
+      autoQualityRef.current = false;
     }
+    qualitySwitchRef.current = true;
+    streamErrorSuppressUntilRef.current = performance.now() + 800;
     const time = audioRef?.current?.currentTime || 0;
     pendingSeekRef.current = time;
     pendingPlayAfterSeekRef.current = isPlaying;
@@ -612,6 +643,10 @@ export function usePlaybackQuality({
     setStreamRetryNonce(0);
     loadedSrcKeyRef.current = '';
     setPlaybackQuality(newQ);
+    applyStreamQuality(newQ, availableQualities, qualityActualRef.current, {
+      force: true,
+      probe: probeDataRef.current,
+    });
     const actual = qualityActualRef.current[newQ];
     updateDeliveredMeta(actual || newQ, probeDataRef.current);
     setIsLoading?.(true);
@@ -622,7 +657,9 @@ export function usePlaybackQuality({
     maxTrackQuality,
     effectivePlan,
     autoQuality,
+    onManualQualityPick,
     audioRef,
+    resolveMainEl,
     isPlaying,
     setPlaybackQuality,
     setIsLoading,
@@ -630,14 +667,22 @@ export function usePlaybackQuality({
     showToast,
     updateDeliveredMeta,
     requestPlaybackRetry,
+    applyStreamQuality,
   ]);
 
   const handleStreamError = useCallback(async () => {
     const mainEl = resolveMainEl();
     const activeSrc = mainEl?.currentSrc || mainEl?.src || '';
-    if (activeSrc && currentAudioSrc && !sameStreamResource(activeSrc, currentAudioSrc)) {
+    if (shouldIgnoreStreamError({
+      activeSrc,
+      currentTrackId: currentTrack?.provider_id,
+      currentAudioSrc,
+      suppressUntilMs: streamErrorSuppressUntilRef.current,
+      trackChangePending: trackChangePendingRef.current,
+    })) {
       return;
     }
+    if (!pendingPlayRef?.current && !isPlayingRef.current) return;
 
     const errorKey = `${currentTrack?.provider_id}-${streamQuality}-${streamRetryNonceRef.current}`;
     if (lastStreamErrorKeyRef.current === errorKey) {
@@ -650,6 +695,7 @@ export function usePlaybackQuality({
     lastStreamErrorKeyRef.current = errorKey;
 
     const neverStarted = (mainEl?.currentTime || 0) < 0.5;
+    const isLossless = streamQuality === 'LOSSLESS' || streamQuality === 'HI_RES';
     const probe = probeDataRef.current;
     const qualityUnavailable = !isPlaybackQualityAvailable(
       streamQuality,
@@ -678,7 +724,7 @@ export function usePlaybackQuality({
       return true;
     };
 
-    if (lower && currentTrack && (qualityUnavailable || (neverStarted && streamQuality !== 'HIGH'))) {
+    if (lower && currentTrack && qualityUnavailable) {
       const tidalOnly = probeMatchesTrack(probe) && isTidalCatalogOnlyLossless(probe)
         && (streamQuality === 'LOSSLESS' || streamQuality === 'HI_RES');
       const toast = tidalOnly
@@ -690,14 +736,16 @@ export function usePlaybackQuality({
       return;
     }
 
-    const maxSilentRetries = neverStarted ? 1 : 3;
+    const maxSilentRetries = neverStarted ? (isLossless ? 10 : 1) : 3;
     if (currentTrack && streamRetryNonceRef.current < maxSilentRetries) {
       const time = mainEl?.currentTime || 0;
       if (time > 0) pendingSeekRef.current = time;
       pendingPlayAfterSeekRef.current = isPlayingRef.current || pendingPlayRef?.current;
       await removeCachedAudioTrack(currentTrack, streamQuality);
       await getMediaToken({ force: true });
-      const delay = neverStarted ? 400 : Math.min(1200 * (2 ** streamRetryNonceRef.current), 6000);
+      const delay = neverStarted
+        ? (isLossless ? Math.min(800 * (2 ** streamRetryNonceRef.current), 6000) : 400)
+        : Math.min(1200 * (2 ** streamRetryNonceRef.current), 6000);
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       retryTimerRef.current = setTimeout(() => {
         retryTimerRef.current = null;

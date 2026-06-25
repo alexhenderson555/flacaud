@@ -22,6 +22,54 @@ export function cacheKeyFor(track, quality = 'HIGH') {
   return `${provider}_${track.provider_id}_${quality}`;
 }
 
+/** Parse total size from Content-Range: bytes 0-524287/9000000 */
+export function parseContentRangeTotal(header) {
+  if (!header) return null;
+  const m = String(header).match(/\/(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Rough minimum bytes for a full track file (below this = partial stream chunk). */
+export function minExpectedAudioBytes(track, quality = 'HIGH') {
+  const dur = Number(track?.duration_s ?? track?.duration ?? 0);
+  if (!dur || dur <= 0) return 768 * 1024;
+  const kbps = quality === 'LOSSLESS' || quality === 'HI_RES' || quality === 'HI_RES_LOSSLESS'
+    ? 900
+    : quality === 'HIGH' ? 320 : 96;
+  return Math.max(192 * 1024, Math.floor((dur * kbps * 1000) / 8 * 0.75));
+}
+
+export function isBlobCompleteEnough(blob, track, quality = 'HIGH') {
+  if (!blob || blob.size < 65536) return false;
+  return blob.size >= minExpectedAudioBytes(track, quality);
+}
+
+/** True when fetch body is the full resource, not a 512k BTS preview chunk. */
+export function isFetchCompleteResponse(response, blob) {
+  if (!response?.ok || !blob) return false;
+  if (response.status === 200) {
+    const cl = parseInt(response.headers.get('content-length') || '', 10);
+    if (cl > 0 && blob.size < cl * 0.9) return false;
+    return blob.size >= 65536;
+  }
+  if (response.status === 206) {
+    const total = parseContentRangeTotal(response.headers.get('content-range'));
+    if (!total) return false;
+    return blob.size >= total * 0.9;
+  }
+  return false;
+}
+
+export async function isCacheCompleteForDownload(track, quality = 'HIGH') {
+  const cacheKey = cacheKeyFor(track, quality);
+  try {
+    const blob = await localforage.getItem(cacheKey);
+    return isBlobCompleteEnough(blob, track, quality);
+  } catch {
+    return false;
+  }
+}
+
 export const cacheAudioTrack = async (track, quality = 'HIGH') => {
   const cacheKey = cacheKeyFor(track, quality);
   try {
@@ -39,6 +87,9 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
     if (!response.ok) throw new Error('Network response was not ok');
 
     const blob = await response.blob();
+    if (!isFetchCompleteResponse(response, blob) || !isBlobCompleteEnough(blob, track, quality)) {
+      return false;
+    }
     await localforage.setItem(cacheKey, blob);
     notifyOfflineCacheUpdated();
     return true;
@@ -68,8 +119,7 @@ export const getCachedAudioUrl = async (track, quality = 'HIGH') => {
   try {
     const blob = await localforage.getItem(cacheKey);
     if (blob) {
-      // Reject tiny blobs (401 HTML / partial fetch) — they cause one-blip playback.
-      if (blob.size < 65536) {
+      if (!isBlobCompleteEnough(blob, track, quality)) {
         await localforage.removeItem(cacheKey);
         return null;
       }
@@ -82,13 +132,7 @@ export const getCachedAudioUrl = async (track, quality = 'HIGH') => {
 };
 
 export const isTrackCached = async (track, quality = 'HIGH') => {
-  const cacheKey = cacheKeyFor(track, quality);
-  try {
-    const blob = await localforage.getItem(cacheKey);
-    return !!blob;
-  } catch {
-    return false;
-  }
+  return isCacheCompleteForDownload(track, quality);
 };
 
 export async function downloadCachedTrack(track, quality = 'HIGH') {

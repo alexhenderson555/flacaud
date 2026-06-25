@@ -464,7 +464,9 @@ async def _ensure_dash_cache(
         if need_partial is not None and tmp_path.exists():
             if tmp_path.stat().st_size >= need_partial:
                 return tmp_path
-        if task.done():
+        # task is None when another request owns the merge — keep polling for its
+        # output files rather than crashing on None.done().
+        if task is not None and task.done():
             if final_path.exists():
                 return final_path
             if fallback.exists():
@@ -646,7 +648,8 @@ async def _ensure_bts_cache(url: str, dest: Path) -> Path:
     for _ in range(36000):
         if dest.is_file() and dest.stat().st_size > 0:
             return dest
-        if task.done():
+        # task is None when another request owns the fetch — keep polling.
+        if task is not None and task.done():
             err = task.exception()
             if err:
                 raise err

@@ -25,6 +25,8 @@ import {
   clearIdleAudioSlot,
   resumePausedPlayback,
   resumeMainPlaybackAfterHandoff,
+  isAtTrackEnd,
+  hasAdequatePlaybackBuffer,
 } from '../utils/playerTransportLogic';
 import { initAudioEngine as setupAudioEngine, resumeAudioContext } from '../utils/audioEngine';
 import {
@@ -256,6 +258,15 @@ export function usePlayerQueue({
       pauseSetEmbed?.();
       releaseSetEmbed?.();
       initAudioEngine();
+      const dur = Number(merged?.duration_s ?? merged?.duration ?? 0);
+      const needsReload = !main
+        || main.ended
+        || isAtTrackEnd(main, dur)
+        || !hasAdequatePlaybackBuffer(main, dur);
+      if (needsReload) {
+        beginPlayback(track, contextPlaylist);
+        return;
+      }
       resumePausedPlayback(main, {
         deferPlayUntilReady,
         pendingPlayRef,
@@ -269,7 +280,7 @@ export function usePlayerQueue({
   }, [
     beginPlayback, playQueue, audioRef, getMainAudioEl, currentTrackRef, initAudioEngine,
     deferPlayUntilReady, setIsLoading, setIsPlaying, pendingPlayRef, pauseSetEmbed, releaseSetEmbed,
-    queueOriginRef, playlistRef, setPlaylist, setCurrentTrackIndex,
+    queueOriginRef, playlistRef, setPlaylist, setCurrentTrackIndex, setCurrentTrack,
   ]);
 
   const handleReorderQueue = useCallback((newPlaylist) => {
@@ -335,6 +346,8 @@ export function usePlayerQueue({
     const handoffUrl = pre.currentSrc || preloadAudioSrc || '';
     if (!handoffUrl || !urlTargetsTrack(handoffUrl, nextId)) return false;
     if (pre.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return false;
+    const nextDur = Number(nextTrack.duration_s ?? nextTrack.duration ?? 0);
+    if (!hasAdequatePlaybackBuffer(pre, nextDur, { minAheadSec: 12 })) return false;
 
     pendingPlayRef.current = true;
     setIsLoading(true);

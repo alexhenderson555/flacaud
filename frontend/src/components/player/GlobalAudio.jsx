@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import { initAudioEngine, resumeAudioContext } from '../../utils/audioEngine';
 import { PRELOAD_ENABLED } from '../../utils/playerConfig';
 import { sameStreamResource } from '../../utils/qualityPrefs';
+import {
+  shouldAdvanceToNextTrack,
+  shouldIgnoreStreamError,
+  shouldStartPlayback,
+} from '../../utils/playerTransportLogic';
 
 const HIDDEN_AUDIO_STYLE = {
   position: 'absolute',
@@ -62,13 +67,17 @@ export default function GlobalAudio({
 
   const tryStartPlayback = useCallback(() => {
     const el = resolveMainEl();
-    if (!pendingPlayRef.current || !el) return;
-    if (pendingSeekRef.current != null) return;
-    if (deferPlayUntilReady && !losslessReadyRef.current) return;
-    if (el.error) return;
-    if (!currentAudioSrc) return;
-    const activeSrc = el.currentSrc || el.src || '';
-    if (!activeSrc || !sameStreamResource(activeSrc, currentAudioSrc)) return;
+    if (!el) return;
+    if (!shouldStartPlayback({
+      pendingPlay: pendingPlayRef.current,
+      pendingSeek: pendingSeekRef.current,
+      deferUntilReady: deferPlayUntilReady,
+      losslessReady: losslessReadyRef.current,
+      hasError: Boolean(el.error),
+      wantSrc: currentAudioSrc,
+      elSrc: el.src || '',
+      elCurrentSrc: el.currentSrc || '',
+    })) return;
     skipEndedRef.current = false;
     el.volume = volume;
     el
@@ -108,85 +117,74 @@ export default function GlobalAudio({
     currentAudioSrc,
   ]);
 
-  // Retry when stream URL lands — canplay may have fired before handlers attached (slot swap).
+  // Single playback watchdog. Once there is intent to play (the queue armed
+  // pendingPlayRef, or the UI shows playing) and a stream URL is committed,
+  // keep nudging the element until it actually starts — or until intent is
+  // withdrawn or a stream error / seek takes over. This replaces several
+  // one-shot timer "kicks" that gave up after ~300ms: if the element was not
+  // ready in that window and no further media event or dep change arrived, a
+  // freshly selected track stayed paused until the user clicked it a second
+  // time (which fell through to the resume path).
   useEffect(() => {
-    if (!currentAudioSrc || !pendingPlayRef.current) return undefined;
-    const el = resolveMainEl();
-    if (!el || !el.paused) return undefined;
-
-    const kick = () => tryStartPlayback();
-    const raf = requestAnimationFrame(kick);
-    const t1 = setTimeout(kick, 80);
-    const t2 = setTimeout(kick, 300);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [currentAudioSrc, resolveMainEl, pendingPlayRef, tryStartPlayback]);
-
-  // Cached stream / rapid track switch: src unchanged but user still wants play.
-  useEffect(() => {
-    if (!pendingPlayRef.current) return undefined;
-    if (crossfadingRef?.current) return undefined;
-    const el = resolveMainEl();
-    if (!el || !el.paused) return undefined;
-    if (pendingSeekRef.current != null) return undefined;
     if (!currentAudioSrc) return undefined;
-    if (el.readyState < HTMLMediaElement.HAVE_METADATA) return undefined;
-
-    const kick = () => tryStartPlayback();
-    const raf = requestAnimationFrame(kick);
-    const t1 = setTimeout(kick, 80);
-    const t2 = setTimeout(kick, 300);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [
-    currentTrackId,
-    currentAudioSrc,
-    resolveMainEl,
-    pendingPlayRef,
-    pendingSeekRef,
-    crossfadingRef,
-    tryStartPlayback,
-  ]);
-
-  // UI/audio desync: intended play but element still paused after track switch.
-  useEffect(() => {
     if (crossfadingRef?.current) return undefined;
-    const el = resolveMainEl();
-    if (!el || !el.paused) return undefined;
-    if (el.error) return undefined;
-    if (Date.now() - streamErrorAtRef.current < 2000) return undefined;
-    if (pendingSeekRef.current != null) return undefined;
-    if (!currentAudioSrc) return undefined;
-    const elSrc = el.currentSrc || el.src || '';
-    if (elSrc && !sameStreamResource(elSrc, currentAudioSrc)) return undefined;
-    if (el.readyState < HTMLMediaElement.HAVE_METADATA) return undefined;
     if (!pendingPlayRef.current && !isPlaying) return undefined;
 
-    pendingPlayRef.current = true;
-    setIsLoading(true);
-    const kick = () => tryStartPlayback();
-    const raf = requestAnimationFrame(kick);
-    const t1 = setTimeout(kick, 80);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t1);
+    let stopped = false;
+    let timerId = null;
+    let rafId = 0;
+    const deadline = Date.now() + 8000;
+
+    const stop = () => {
+      stopped = true;
+      if (timerId) clearTimeout(timerId);
+      if (rafId) cancelAnimationFrame(rafId);
     };
+
+    const schedule = () => {
+      if (stopped || Date.now() >= deadline) {
+        stop();
+        return;
+      }
+      timerId = setTimeout(() => { rafId = requestAnimationFrame(tick); }, 160);
+    };
+
+    function tick() {
+      if (stopped) return;
+      const el = resolveMainEl();
+      // Done: playing, finished, or hard error (error path drives recovery).
+      if (el && (!el.paused || el.ended || el.error)) {
+        stop();
+        return;
+      }
+      // Intent withdrawn (user paused, or stream error gave up).
+      if (!pendingPlayRef.current && !isPlaying) {
+        stop();
+        return;
+      }
+      // Let stream-error recovery or an active seek settle first; keep watching.
+      if (Date.now() - streamErrorAtRef.current < 1200 || pendingSeekRef.current != null) {
+        schedule();
+        return;
+      }
+      // Recover intent when the UI shows "playing" but the element is paused
+      // (a rapid src swap aborted the play() and it was never re-armed).
+      if (isPlaying && !pendingPlayRef.current) pendingPlayRef.current = true;
+      tryStartPlayback();
+      schedule();
+    }
+
+    rafId = requestAnimationFrame(tick);
+    return stop;
   }, [
-    isPlaying,
     currentAudioSrc,
     currentTrackId,
+    isPlaying,
     resolveMainEl,
     pendingPlayRef,
     pendingSeekRef,
     crossfadingRef,
     tryStartPlayback,
-    setIsLoading,
   ]);
 
   // Sync element src when React stream URL updated (Web Audio slot keeps stale blob until React commits).
@@ -294,11 +292,7 @@ export default function GlobalAudio({
       if (el) setProgress(el.currentTime || 0);
     },
     onEnded: () => {
-      if (crossfadingRef?.current) return;
-      if (skipEndedRef.current) {
-        skipEndedRef.current = false;
-        return;
-      }
+      if (!shouldAdvanceToNextTrack({ crossfading: crossfadingRef?.current, skipEndedRef })) return;
       playNext();
     },
     onWaiting: () => {
@@ -388,9 +382,15 @@ export default function GlobalAudio({
       if (code === 1) return; // MEDIA_ERR_ABORTED
       if (!el?.src && !el?.currentSrc) return;
       const elSrc = el.currentSrc || el.src || '';
-      if (currentAudioSrc && elSrc && !sameStreamResource(elSrc, currentAudioSrc)) return;
+      if (shouldIgnoreStreamError({
+        activeSrc: elSrc,
+        currentTrackId,
+        currentAudioSrc,
+      })) {
+        return;
+      }
       const now = Date.now();
-      if (now - streamErrorAtRef.current < 400) return;
+      if (now - streamErrorAtRef.current < 800) return;
       streamErrorAtRef.current = now;
       handleStreamError();
     },

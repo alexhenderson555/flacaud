@@ -1,4 +1,5 @@
 import os
+import re
 import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -147,6 +148,10 @@ def job_status(job_id: str, current_user: User = Depends(get_current_user)) -> J
 
 @router.get("/{job_id}/zip")
 def download_job_zip(job_id: str, current_user: User = Depends(get_media_user)):
+    # job_id is a uuid4 hex slice; reject anything else so it can't traverse
+    # out of jobs_dir (e.g. "../../etc") when used as a path segment below.
+    if not re.fullmatch(r"[0-9a-fA-F]{8,64}", job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
     s = job_state.load(job_id)
     if s is not None and s.owner_id is not None and s.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your job")

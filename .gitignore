@@ -20,6 +20,9 @@ downloads/
 pool.key
 tokens.json
 tidal_auth.json
+# Xray/Marzban REALITY configs hold private keys — keep on the server only
+xray_config*.json
+ops/xray_config*.json
 
 # Throwaway ops/debug scripts & build artifacts
 scratch/

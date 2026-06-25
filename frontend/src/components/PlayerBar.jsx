@@ -266,17 +266,17 @@ export default function PlayerBar({
         className="player-transport-btn"
         style={{ width: size, height: size }}
       >
-        {!setActive && isLoading && !playing ? (
+        {!setActive && isLoading ? (
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
             className="player-transport-spinner"
             style={{ width: size * 0.45, height: size * 0.45 }}
           />
+        ) : playing ? (
+          <Pause size={size * 0.5} fill="currentColor" />
         ) : (
-          playing
-            ? <Pause size={size * 0.5} fill="currentColor" />
-            : <Play size={size * 0.5} fill="currentColor" style={{ marginLeft: 2 }} />
+          <Play size={size * 0.5} fill="currentColor" style={{ marginLeft: 2 }} />
         )}
       </button>
     );
@@ -317,6 +317,7 @@ export default function PlayerBar({
     streamQuality,
     playbackQuality,
     qualitiesReady,
+    isLoading,
   });
 
   const activeQualityId = uiQualityId;

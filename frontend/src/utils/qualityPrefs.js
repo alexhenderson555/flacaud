@@ -269,18 +269,28 @@ function isAacTier(tier) {
   return !u || u === 'HIGH' || u === 'LOW';
 }
 
-/** Map delivered / stream tier to a player UI button id (HIGH | LOSSLESS). */
+/** Map a stream tier to player UI button id (HIGH | LOSSLESS). */
+export function uiQualityButtonId(tier) {
+  return isAacTier(tier) ? 'HIGH' : 'LOSSLESS';
+}
+
+/** Active quality button — requested tier wins while switching or loading. */
 export function resolvePlayerUiQuality({
   deliveredStream = null,
   streamQuality = 'HIGH',
   playbackQuality = 'HIGH',
   qualitiesReady = false,
+  isLoading = false,
 }) {
+  const requested = streamQuality || playbackQuality || 'HIGH';
+  const requestedUi = uiQualityButtonId(requested);
   const delivered = deliveredStream?.tier;
-  if (qualitiesReady && delivered) {
-    return isAacTier(delivered) ? 'HIGH' : 'LOSSLESS';
-  }
-  return streamQuality || playbackQuality || 'HIGH';
+  const deliveredUi = delivered ? uiQualityButtonId(delivered) : null;
+
+  if (isLoading) return requestedUi;
+  if (deliveredUi && requestedUi !== deliveredUi) return requestedUi;
+  if (qualitiesReady && delivered) return deliveredUi;
+  return requestedUi;
 }
 
 /**

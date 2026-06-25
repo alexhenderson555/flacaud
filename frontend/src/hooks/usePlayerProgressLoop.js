@@ -9,6 +9,8 @@ import {
   isPreloadReadyForCrossfade,
   clearIdleAudioSlot,
   resumeMainPlaybackAfterHandoff,
+  isAtTrackEnd,
+  shouldAdvanceToNextTrack,
 } from '../utils/playerTransportLogic';
 import { initAudioEngine as setupAudioEngine } from '../utils/audioEngine';
 
@@ -100,9 +102,10 @@ export function usePlayerProgressLoop({
 
         const seeking = main.seeking;
         const seekCooldown = performance.now() < seekCooldownUntilRef.current;
+        const atNaturalEnd = isAtTrackEnd(main, trackDuration);
 
         if (shouldTriggerTrackEnd({
-          isPlaying,
+          isPlaying: isPlaying || atNaturalEnd,
           currentTime: ct,
           effectiveDuration,
           seeking,
@@ -218,13 +221,28 @@ export function usePlayerProgressLoop({
           startCrossfade();
         }
       }
-      if (isPlaying && document.visibilityState !== 'hidden') {
+      const keepProgressLoop = isPlaying || (
+        main
+        && trackDuration > 0
+        && isAtTrackEnd(main, trackDuration)
+        && !endedGuardRef.current
+        && !crossfadingRef.current
+      );
+      if (keepProgressLoop && document.visibilityState !== 'hidden') {
         animationFrameId = requestAnimationFrame(updateProgress);
       }
     };
 
     const kick = () => {
-      if (isPlaying && document.visibilityState !== 'hidden') {
+      const main = getMainAudioEl?.() ?? audioRef.current;
+      const keepProgressLoop = isPlaying || (
+        main
+        && trackDuration > 0
+        && isAtTrackEnd(main, trackDuration)
+        && !endedGuardRef.current
+        && !crossfadingRef?.current
+      );
+      if (keepProgressLoop && document.visibilityState !== 'hidden') {
         animationFrameId = requestAnimationFrame(updateProgress);
       }
     };

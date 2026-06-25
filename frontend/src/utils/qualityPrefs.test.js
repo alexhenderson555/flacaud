@@ -61,11 +61,11 @@ describe('qualityPrefs', () => {
     )).toBe(true);
   });
 
-  it('resolvePlayerUiQuality follows delivered codec', () => {
+  it('resolvePlayerUiQuality follows delivered codec when stable', () => {
     expect(resolvePlayerUiQuality({
       deliveredStream: { tier: 'HIGH' },
-      streamQuality: 'LOSSLESS',
-      playbackQuality: 'LOSSLESS',
+      streamQuality: 'HIGH',
+      playbackQuality: 'HIGH',
       qualitiesReady: true,
     })).toBe('HIGH');
     expect(resolvePlayerUiQuality({
@@ -74,6 +74,22 @@ describe('qualityPrefs', () => {
       playbackQuality: 'LOSSLESS',
       qualitiesReady: true,
     })).toBe('LOSSLESS');
+  });
+
+  it('resolvePlayerUiQuality prefers requested tier while switching', () => {
+    expect(resolvePlayerUiQuality({
+      deliveredStream: { tier: 'HIGH' },
+      streamQuality: 'LOSSLESS',
+      playbackQuality: 'LOSSLESS',
+      qualitiesReady: true,
+    })).toBe('LOSSLESS');
+    expect(resolvePlayerUiQuality({
+      deliveredStream: { tier: 'LOSSLESS' },
+      streamQuality: 'HIGH',
+      playbackQuality: 'HIGH',
+      qualitiesReady: true,
+      isLoading: true,
+    })).toBe('HIGH');
   });
 
   it('clamps free plan to 320k (HIGH)', () => {

@@ -19,7 +19,7 @@ import {
   shouldNotifyDownloadTierFallback,
 } from '../../utils/qualityPrefs';
 import { startDownloadJob, notifyDownloadJobStarted } from '../../utils/downloadJobs';
-import { isTrackCached, downloadCachedTrack } from '../../utils/cache';
+import { downloadCachedTrack, isCacheCompleteForDownload } from '../../utils/cache';
 import {
   resolveDownloadQualityForTrack,
   resolvePlayingTrackDownloadQuality,
@@ -185,6 +185,12 @@ export default function PlayerLogic({ children }) {
     downloadRegistryTick,
     effectivePlan,
     autoQuality: autoPlaybackQuality,
+    onManualQualityPick: () => {
+      if (autoPlaybackQuality) {
+        setAutoPlaybackQualityState(false);
+        persistAutoQuality(false);
+      }
+    },
     lang,
     showToast,
     audioRef,
@@ -404,7 +410,7 @@ export default function PlayerLogic({ children }) {
           effectivePlan,
           lang,
         });
-      const cached = await isTrackCached(track, quality);
+      const cached = await isCacheCompleteForDownload(track, quality);
       if (cached) {
         const saved = await downloadCachedTrack(track, quality);
         if (saved) showToast(t('quickCacheSave'));

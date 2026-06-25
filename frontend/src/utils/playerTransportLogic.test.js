@@ -14,6 +14,11 @@ import {
   unlockPlaybackElement,
   resolveVolumeUpdate,
   formatTime,
+  isAtTrackEnd,
+  shouldAdvanceToNextTrack,
+  hasAdequatePlaybackBuffer,
+  shouldIgnoreStreamError,
+  shouldStartPlayback,
   END_THRESHOLD_SEC,
 } from './playerTransportLogic';
 
@@ -86,15 +91,17 @@ describe('resumePausedPlayback', () => {
 });
 
 describe('prepareMainAudioForTrackSwitch', () => {
-  it('pauses Web Audio element without blanking src', () => {
+  it('pauses and clears Web Audio element src for a fresh load', () => {
     const el = {
       _sourceNode: {},
       src: 'blob:track-a',
+      currentTime: 42,
       pause: () => { el.paused = true; },
       paused: false,
     };
     prepareMainAudioForTrackSwitch(el);
-    expect(el.src).toBe('blob:track-a');
+    expect(el.src).toBe('');
+    expect(el.currentTime).toBe(0);
     expect(el.paused).toBe(true);
   });
 
@@ -251,17 +258,113 @@ describe('urlTargetsTrack', () => {
   });
 });
 
+describe('shouldIgnoreStreamError', () => {
+  it('ignores errors from another track or during switch', () => {
+    expect(shouldIgnoreStreamError({
+      activeSrc: '/api/stream/tidal/111?quality=HIGH',
+      currentTrackId: '222',
+      currentAudioSrc: '/api/stream/tidal/222?quality=HIGH',
+    })).toBe(true);
+    expect(shouldIgnoreStreamError({
+      activeSrc: '/api/stream/tidal/111?quality=HIGH',
+      currentTrackId: '111',
+      currentAudioSrc: '/api/stream/tidal/111?quality=HIGH',
+      trackChangePending: true,
+    })).toBe(true);
+    expect(shouldIgnoreStreamError({
+      activeSrc: '/api/stream/tidal/111?quality=HIGH',
+      currentTrackId: '111',
+      currentAudioSrc: '/api/stream/tidal/111?quality=HIGH',
+      suppressUntilMs: performance.now() + 5000,
+    })).toBe(true);
+    expect(shouldIgnoreStreamError({
+      activeSrc: '/api/stream/tidal/111?quality=LOSSLESS',
+      currentTrackId: '111',
+      currentAudioSrc: '/api/stream/tidal/111?quality=LOSSLESS',
+    })).toBe(false);
+  });
+});
+
 describe('shouldPreservePausedStream', () => {
-  it('preserves only when paused stream matches track id', () => {
+  it('preserves only when paused stream matches track id with enough buffer', () => {
     const el = {
       paused: true,
       currentTime: 42,
+      ended: false,
+      duration: 200,
       currentSrc: '/api/stream/tidal/111?quality=HIGH',
       src: '/api/stream/tidal/111?quality=HIGH',
+      buffered: {
+        length: 1,
+        start: () => 0,
+        end: () => 120,
+      },
     };
-    expect(shouldPreservePausedStream(el, '111')).toBe(true);
-    expect(shouldPreservePausedStream(el, '222')).toBe(false);
-    expect(shouldPreservePausedStream({ ...el, paused: false }, '111')).toBe(false);
+    expect(shouldPreservePausedStream(el, '111', 200)).toBe(true);
+    expect(shouldPreservePausedStream(el, '222', 200)).toBe(false);
+    expect(shouldPreservePausedStream({ ...el, paused: false }, '111', 200)).toBe(false);
+  });
+
+  it('does not preserve at catalog end or with tiny buffer', () => {
+    const atEnd = {
+      paused: true,
+      currentTime: 199.8,
+      ended: false,
+      duration: 200,
+      currentSrc: '/api/stream/tidal/111?quality=HIGH',
+      src: '/api/stream/tidal/111?quality=HIGH',
+      buffered: { length: 1, start: () => 0, end: () => 200 },
+    };
+    expect(shouldPreservePausedStream(atEnd, '111', 200)).toBe(false);
+
+    const thin = {
+      paused: true,
+      currentTime: 2,
+      ended: false,
+      duration: 200,
+      currentSrc: '/api/stream/tidal/111?quality=HIGH',
+      src: '/api/stream/tidal/111?quality=HIGH',
+      buffered: { length: 1, start: () => 0, end: () => 3 },
+    };
+    expect(shouldPreservePausedStream(thin, '111', 200)).toBe(false);
+  });
+});
+
+describe('hasAdequatePlaybackBuffer', () => {
+  it('requires meaningful lookahead mid-track', () => {
+    const el = {
+      currentTime: 10,
+      duration: 200,
+      buffered: { length: 1, start: () => 0, end: () => 12 },
+    };
+    expect(hasAdequatePlaybackBuffer(el, 200)).toBe(false);
+    el.buffered = { length: 1, start: () => 0, end: () => 30 };
+    expect(hasAdequatePlaybackBuffer(el, 200)).toBe(true);
+  });
+});
+
+describe('isAtTrackEnd', () => {
+  it('detects ended element', () => {
+    expect(isAtTrackEnd({ ended: true, currentTime: 0, duration: 200 }, 200)).toBe(true);
+  });
+
+  it('detects near catalog end when stream pauses without ended', () => {
+    const el = { ended: false, currentTime: 199.8, duration: 30 };
+    expect(isAtTrackEnd(el, 200)).toBe(true);
+  });
+
+  it('is false mid-track', () => {
+    expect(isAtTrackEnd({ ended: false, currentTime: 60, duration: 200 }, 200)).toBe(false);
+  });
+});
+
+describe('shouldAdvanceToNextTrack', () => {
+  it('blocks when crossfading or skipEnded is set', () => {
+    const skipEndedRef = { current: true };
+    expect(shouldAdvanceToNextTrack({ crossfading: true, skipEndedRef })).toBe(false);
+    expect(shouldAdvanceToNextTrack({ crossfading: false, skipEndedRef })).toBe(false);
+    expect(skipEndedRef.current).toBe(false);
+    expect(shouldAdvanceToNextTrack({ crossfading: false, skipEndedRef: { current: false } })).toBe(true);
   });
 });
 
@@ -321,5 +424,63 @@ describe('resolveVolumeUpdate', () => {
 
   it('accepts direct numeric values', () => {
     expect(resolveVolumeUpdate(0.5, 0.8)).toBe(0.8);
+  });
+});
+
+describe('shouldStartPlayback', () => {
+  const WANT = '/api/stream/tidal/2?quality=LOSSLESS&bypass_registry=true&mt=aaa&_rn=0';
+  // Same resource, differing only by short-lived cache-buster params (mt, _rn).
+  const SAME_ABS = 'http://localhost/api/stream/tidal/2?quality=LOSSLESS&bypass_registry=true&mt=zzz&_rn=3';
+  const OLD_TRACK = 'http://localhost/api/stream/tidal/1?quality=LOSSLESS&mt=bbb&_rn=0';
+
+  const base = {
+    pendingPlay: true,
+    pendingSeek: null,
+    deferUntilReady: false,
+    losslessReady: false,
+    hasError: false,
+    wantSrc: WANT,
+    elSrc: WANT,
+    elCurrentSrc: WANT,
+  };
+
+  it('starts when the assigned src matches even if currentSrc is still the previous track', () => {
+    // The regression: after a Web Audio clear, currentSrc lags on the old URL.
+    expect(shouldStartPlayback({ ...base, elSrc: WANT, elCurrentSrc: OLD_TRACK })).toBe(true);
+  });
+
+  it('starts when only currentSrc matches (src already advanced)', () => {
+    expect(shouldStartPlayback({ ...base, elSrc: '', elCurrentSrc: SAME_ABS })).toBe(true);
+  });
+
+  it('ignores mt/_rn cache-busters when matching the stream resource', () => {
+    expect(shouldStartPlayback({ ...base, elSrc: SAME_ABS, elCurrentSrc: SAME_ABS })).toBe(true);
+  });
+
+  it('does not start when neither src points at the wanted stream', () => {
+    expect(shouldStartPlayback({ ...base, elSrc: OLD_TRACK, elCurrentSrc: OLD_TRACK })).toBe(false);
+  });
+
+  it('does not start a different quality of the same track', () => {
+    const other = WANT.replace('quality=LOSSLESS', 'quality=HIGH');
+    expect(shouldStartPlayback({ ...base, elSrc: other, elCurrentSrc: other })).toBe(false);
+  });
+
+  it('requires play intent', () => {
+    expect(shouldStartPlayback({ ...base, pendingPlay: false })).toBe(false);
+  });
+
+  it('waits while a seek is pending', () => {
+    expect(shouldStartPlayback({ ...base, pendingSeek: 42 })).toBe(false);
+  });
+
+  it('holds lossless until the full buffer is ready', () => {
+    expect(shouldStartPlayback({ ...base, deferUntilReady: true, losslessReady: false })).toBe(false);
+    expect(shouldStartPlayback({ ...base, deferUntilReady: true, losslessReady: true })).toBe(true);
+  });
+
+  it('does not start on a media error or with no wanted src', () => {
+    expect(shouldStartPlayback({ ...base, hasError: true })).toBe(false);
+    expect(shouldStartPlayback({ ...base, wantSrc: '' })).toBe(false);
   });
 });
