@@ -5,8 +5,8 @@ export default function SearchDidYouMean({ label, suggestion, onApply, className
       type="button"
       className={`search-typo-hint ${className}`.trim()}
       onClick={onApply}
-    >
-      {label}: <strong>{suggestion}</strong>
+      aria-label={`${label}: ${suggestion}`}
+    >      {label}: <strong>{suggestion}</strong>
     </button>
   );
 }

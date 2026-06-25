@@ -56,7 +56,7 @@ export default function ArtistProfile() {
     let cancelled = false;
     setBioLoading(true);
     setBio('');
-    void apiGetJson(`/api/artist/${id}/bio`, { lang })
+    void apiGetJson(`/api/artist/${id}/bio`, { lang, auth: true })
       .then((d) => {
         if (!cancelled) setBio((d?.bio || '').trim());
       })

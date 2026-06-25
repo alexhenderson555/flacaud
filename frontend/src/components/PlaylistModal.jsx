@@ -82,24 +82,28 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
   };
 
   return (
-    <div 
-      onClick={onClose} 
+    <div
+      onClick={onClose}
+      role="presentation"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
     >
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="glass-panel"
         data-testid="playlist-modal"
-        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="playlist-modal-title"
+        onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: '400px', padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--bg-surface)' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
+          <h3 id="playlist-modal-title" style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
             {track ? 'Add to Playlist' : 'Create Playlist'}
           </h3>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <X size={24} />
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            <X size={24} aria-hidden />
           </button>
         </div>
 

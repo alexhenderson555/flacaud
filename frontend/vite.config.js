@@ -27,6 +27,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         navigateFallback: '/index.html',
+        globIgnores: [
+          '**/vendor-three*.js',
+          '**/PartyMode*.js',
+          '**/vendor-motion*.js',
+          '**/videos/**',
+          '**/*.mp4',
+        ],
+        maximumFileSizeToCacheInBytes: 512000,
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\/.*/i,

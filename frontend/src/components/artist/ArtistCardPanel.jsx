@@ -53,7 +53,7 @@ export default function ArtistCardPanel({
     setBioLoading(true);
     setBio('');
 
-    void apiGetJson(`/api/artist/${artistId}/bio`, { lang })
+    void apiGetJson(`/api/artist/${artistId}/bio`, { lang, auth: true })
       .then((data) => {
         if (!cancelled) setBio((data?.bio || '').trim());
       })

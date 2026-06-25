@@ -1,31 +1,31 @@
 # FlacAud — quality scorecard (living doc)
 
-Last updated: 2026-06-25. Scores are honest ceilings for a solo-maintained lossless streaming product, not vanity 10/10.
+Last updated: 2026-06-25. Honest ceilings for a solo-maintained lossless streaming product.
 
 | Axis | Score | Notes |
 |------|-------|-------|
-| **Security** | **8.5** | IDOR fixes, SSRF on URLs, rate limits, GDPR delete, session hygiene. Residual: yt-dlp surface, set-audio URL sharing. |
-| **Backend** | **8.5** | FastAPI/ARQ/SQLModel solid; outbound URL validation; job ZIP hardened. Residual: broad exception handlers. |
-| **Frontend** | **8.7** | apiClient on main flows; PartyMode + three.js lazy; dead LandingCanvas removed. Residual: stream/blob fetches by design. |
-| **UX / product** | **8.0** | Full feature set; party hidden by choice. Stem splitter still English-only. |
-| **Testing** | **8.5** | 351+ pytest, stream registry HTTP test, 267 vitest, E2E blocking. Residual: few component tests. |
-| **DevOps / CI** | **8.5** | pip-audit, npm audit, deploy script, INFO logs default, E2E required. |
-| **Performance** | **8.5** | vendor-three no longer on critical path; lazy routes, virtual lists, manualChunks. |
-| **Accessibility** | **7.5** | Player overlay aria-labels, ArtistLine. jsx-a11y blocked on ESLint 10. |
-| **Documentation** | **8.5** | README prod-accurate, SECURITY_AUDIT, ops/RUNBOOK. |
-| **Observability** | **8.5** | Sentry wired, Prom/Loki/Grafana stack, client error POST. |
+| **Security** | **8.7** | IDOR/SSRF/GDPR/session hygiene. Artist bio requires auth (Gemini cost). Residual: yt-dlp surface. |
+| **Backend** | **8.7** | Search errors narrowed; OpenAPI contract tests; outbound URL validation. Residual: some broad handlers in worker. |
+| **Frontend** | **8.8** | apiClient, lazy chunks, stem splitter i18n, modal dialog roles. Residual: stream/blob fetch by design. |
+| **UX / product** | **8.5** | Full feature set; stem splitter RU/EN; mobile player polish. Party hidden by choice. |
+| **Testing** | **8.8** | 355+ pytest incl. OpenAPI contract; 272 vitest; axe a11y E2E; blocking Playwright. |
+| **DevOps / CI** | **8.5** | pip-audit, npm audit, deploy script, E2E required. Residual: single-region, no canary. |
+| **Performance** | **8.8** | PWA precache ~962 KiB (excludes three.js/video); lazy routes; manualChunks. |
+| **Accessibility** | **8.5** | axe Playwright smoke (landing/terms/library); player/modal aria-labels. jsx-a11y still blocked on ESLint 10. |
+| **Documentation** | **8.5** | README, SECURITY_AUDIT, RUNBOOK, this scorecard. |
+| **Observability** | **8.5** | Sentry, Prom/Loki/Grafana, client error POST. |
 
-**Weighted overall: ~8.5 / 10** — practical maximum without rewriting scope (Tidal dependency, yt-dlp, single-region deploy).
+**Weighted overall: ~8.7 / 10** — up from ~8.5; structural ceiling (Tidal, yt-dlp, solo ops) until canary deploy + full a11y lint.
 
 ## What would NOT move the needle
 
-- Chasing literal 10/10 on all rows simultaneously
-- Full WCAG AAA audit without dedicated QA
-- Replacing yt-dlp/set-analyzer with a different product
+- Vanity 10/10 on every row
+- WCAG AAA without dedicated QA
+- Replacing yt-dlp / set-analyzer
 
-## Next increments (if ever needed)
+## Remaining increments toward 9.0
 
-1. ~~Lazy-load `@react-three` only on Landing canvas mount~~ — PartyMode lazy; LandingCanvas removed
-2. eslint-plugin-jsx-a11y when ESLint 9-compatible or project downgrades ESLint
-3. Contract tests: API OpenAPI snapshot vs frontend types
-4. Blue/green or canary deploy
+1. eslint-plugin-jsx-a11y (ESLint 9 pin or wait for ESLint 10 support)
+2. Blue/green or canary deploy
+3. More React component tests (player overlays, search UI)
+4. Narrow worker `except Exception` in hot download paths

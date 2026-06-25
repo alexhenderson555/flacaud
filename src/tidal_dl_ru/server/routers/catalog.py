@@ -304,12 +304,20 @@ async def search(req: SearchRequest) -> SearchResponse:
                     suggestion_kind=kind,
                 )
         return SearchResponse(tracks=tracks, has_more=has_more)
-    except Exception as e:
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, OSError, TimeoutError, ValueError) as e:
         logger.info(f"Tidal search failed: {e}")
         raise HTTPException(
             status_code=503,
             detail={"code": "search_unavailable", "message": "Search temporarily unavailable"},
-        )
+        ) from e
+    except Exception as e:
+        logger.exception("Tidal search unexpected error: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "search_unavailable", "message": "Search temporarily unavailable"},
+        ) from e
 
 @router.post("/api/recognize", response_model=SearchResponse)
 async def recognize_endpoint(
@@ -403,7 +411,12 @@ async def get_artist_api(artist_id: str):
 
 
 @router.get("/api/artist/{artist_id}/bio")
-async def get_artist_bio_api(artist_id: str, lang: str = "en"):
+async def get_artist_bio_api(
+    artist_id: str,
+    lang: str = "en",
+    current_user: User = Depends(get_current_user),
+):
+    _ = current_user
     locale = "ru" if (lang or "").lower().startswith("ru") else "en"
     cached = bio_cache_get(artist_id, locale)
     if cached:
