@@ -286,7 +286,7 @@ describe('shouldIgnoreStreamError', () => {
 });
 
 describe('shouldPreservePausedStream', () => {
-  it('preserves only when paused stream matches track id with enough buffer', () => {
+  it('preserves when paused stream matches track id', () => {
     const el = {
       paused: true,
       currentTime: 42,
@@ -305,7 +305,7 @@ describe('shouldPreservePausedStream', () => {
     expect(shouldPreservePausedStream({ ...el, paused: false }, '111', 200)).toBe(false);
   });
 
-  it('does not preserve at catalog end or with tiny buffer', () => {
+  it('does not preserve at catalog end', () => {
     const atEnd = {
       paused: true,
       currentTime: 199.8,
@@ -326,7 +326,7 @@ describe('shouldPreservePausedStream', () => {
       src: '/api/stream/tidal/111?quality=HIGH',
       buffered: { length: 1, start: () => 0, end: () => 3 },
     };
-    expect(shouldPreservePausedStream(thin, '111', 200)).toBe(false);
+    expect(shouldPreservePausedStream(thin, '111', 200)).toBe(true);
   });
 });
 

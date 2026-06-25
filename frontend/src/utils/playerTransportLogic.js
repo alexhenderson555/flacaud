@@ -206,14 +206,14 @@ export function hasAdequatePlaybackBuffer(audioEl, trackDurationSec, { minAheadS
   return ahead >= Math.min(minAheadSec, remaining * 0.5);
 }
 
-/** Keep paused stream only when it still belongs to the requested track. */
+/** Keep paused stream when it still belongs to the requested track. */
 export function shouldPreservePausedStream(audioEl, trackId, trackDurationSec = 0) {
   if (!audioEl || trackId == null || trackId === '') return false;
   const src = audioEl.currentSrc || audioEl.src || '';
   if (!src || !isPausedMidPlayback(audioEl)) return false;
   if (!urlTargetsTrack(src, trackId)) return false;
   if (audioEl.ended || isAtTrackEnd(audioEl, trackDurationSec)) return false;
-  return hasAdequatePlaybackBuffer(audioEl, trackDurationSec);
+  return true;
 }
 
 /**

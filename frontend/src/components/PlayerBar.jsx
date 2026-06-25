@@ -28,6 +28,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePartyModeAvailable } from '../hooks/usePartyModeAvailable';
 import PlayerMobileActions from './player/PlayerMobileActions';
 import PlayerMarqueeTitle from './player/PlayerMarqueeTitle';
+import '../styles/player-bar.css';
 
 const QUALITY_OPTIONS = [
   { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
@@ -694,6 +695,9 @@ export default function PlayerBar({
                   >
                     {displayTitle}
                   </PlayerMarqueeTitle>
+                </div>
+                <div className="player-track-sub">
+                  <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
                   {!setActive && currentTrack && (
                     <div className="player-track-badges">
                       {formatTrackYear(currentTrack) && (
@@ -715,7 +719,6 @@ export default function PlayerBar({
                     </div>
                   )}
                 </div>
-                <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
                 {!setActive && nextTrack && !isMobile && (
                   <div
                     data-testid="player-up-next"

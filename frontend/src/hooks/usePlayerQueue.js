@@ -28,6 +28,7 @@ import {
   resumeMainPlaybackAfterHandoff,
   isAtTrackEnd,
   hasAdequatePlaybackBuffer,
+  shouldPreservePausedStream,
 } from '../utils/playerTransportLogic';
 import { initAudioEngine as setupAudioEngine, resumeAudioContext } from '../utils/audioEngine';
 import {
@@ -247,11 +248,18 @@ export function usePlayerQueue({
     if (playingId === trackId) {
       const merged = mergePlaybackTracks(currentTrackRef.current, track);
       if (currentTrackRef) currentTrackRef.current = merged;
-      setCurrentTrack(merged);
+      const dur = Number(merged?.duration_s ?? merged?.duration ?? 0);
+      const preserving = main?.paused && shouldPreservePausedStream(main, trackId, dur);
+
       if (main && !main.paused) {
+        setCurrentTrack(merged);
         main.pause();
         setIsPlaying(false);
         return;
+      }
+
+      if (!preserving) {
+        setCurrentTrack(merged);
       }
       if (contextPlaylist?.length) {
         const normalized = contextPlaylist.map((tr) => ({
@@ -267,11 +275,19 @@ export function usePlayerQueue({
       pauseSetEmbed?.();
       releaseSetEmbed?.();
       initAudioEngine();
-      const dur = Number(merged?.duration_s ?? merged?.duration ?? 0);
+      if (preserving) {
+        resumePausedPlayback(main, {
+          deferPlayUntilReady,
+          pendingPlayRef,
+          setIsPlaying,
+          setIsLoading,
+        });
+        return;
+      }
       const needsReload = !main
         || main.ended
         || isAtTrackEnd(main, dur)
-        || !hasAdequatePlaybackBuffer(main, dur);
+        || !(main.currentSrc || main.src);
       if (needsReload) {
         beginPlayback(track, contextPlaylist);
         return;

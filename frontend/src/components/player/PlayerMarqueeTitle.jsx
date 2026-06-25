@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** Player bar title — ellipsis by default, slow marquee on hover when truncated. */
+/** Player bar title — ellipsis by default, slow auto-marquee when truncated. */
 export default function PlayerMarqueeTitle({
   className = '',
   title,
