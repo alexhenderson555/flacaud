@@ -11,6 +11,7 @@ import {
   resolveMaxTrackQuality,
   resolvePlayerUiQuality,
   isPausedMidPlayback,
+  qualityPreferenceFallbackToast,
 } from './qualityPrefs.js';
 
 describe('qualityPrefs', () => {
@@ -101,5 +102,15 @@ describe('qualityPrefs', () => {
 
   it('allows lifetime MAX when track supports it', () => {
     expect(pickQualityForPlan('HI_RES', ['LOW', 'HI_RES'], 'lifetime')).toBe('HI_RES');
+  });
+
+  it('qualityPreferenceFallbackToast never returns empty without dict', () => {
+    const msg = qualityPreferenceFallbackToast('en', {
+      planBlocked: false,
+      tidalCatalogOnly: false,
+      pref: 'LOSSLESS',
+      effective: 'HIGH',
+    });
+    expect(msg.trim().length).toBeGreaterThan(0);
   });
 });

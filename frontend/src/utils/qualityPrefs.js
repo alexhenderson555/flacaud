@@ -518,20 +518,27 @@ export function qualityPreferenceFallbackToast(lang, {
   const d = dict || {};
   const prefLabel = uiQualityLabel(pref);
   const effectiveLabel = uiQualityLabel(effective);
+  const ru = lang === 'ru';
   if (planBlocked) {
     return d.qualityPreferencePlanBlocked
-      || 'Upgrade plan for this quality — switched to 320k';
+      || (ru ? 'Это качество на платном тарифе — переключили на 320k' : 'Upgrade plan for this quality — switched to 320k');
   }
   if (tidalCatalogOnly) {
     return fillQualityTemplate(d.qualityPreferenceTidalFallback, {
       preferred: prefLabel,
       effective: effectiveLabel,
-    });
+    })
+      || (ru
+        ? `Tidal не отдаёт ${prefLabel} для этого трека — играем ${effectiveLabel}`
+        : `Tidal has no ${prefLabel} stream for this track — playing ${effectiveLabel}`);
   }
   return fillQualityTemplate(d.qualityPreferenceGenericFallback, {
     preferred: prefLabel,
     effective: effectiveLabel,
-  });
+  })
+    || (ru
+      ? `${prefLabel} недоступно — переключили на ${effectiveLabel}`
+      : `${prefLabel} unavailable — switched to ${effectiveLabel}`);
 }
 
 export function qualityTierBlockedToast(lang, { tidalCatalogOnly, dict }) {
