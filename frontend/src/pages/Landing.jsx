@@ -18,10 +18,13 @@ import LandingReveal from '../components/landing/LandingReveal';
 import LandingAuthStrip from '../components/landing/LandingAuthStrip';
 import { LANDING_COPY } from '../content/landingCopy';
 import { useLandingLang } from '../hooks/useLandingLang';
+import { useLandingCinemaMode } from '../hooks/useLandingCinemaMode';
+import '../styles/landing.css';
 
 export default function Landing() {
   const navigate = useNavigate();
   const { lang, toggleLang } = useLandingLang();
+  const cinema = useLandingCinemaMode();
   const t = LANDING_COPY[lang] || LANDING_COPY.en;
   const [billing, setBilling] = useState('monthly');
 
@@ -42,8 +45,14 @@ export default function Landing() {
   const platformMarquee = [...SYNC_PLATFORMS, ...SYNC_PLATFORMS];
 
   return (
-    <div className="landing" style={{ position: 'relative' }}>
-      <LandingVideoBg />
+    <div className={`landing${cinema ? ' landing--cinema' : ''}`} style={{ position: 'relative' }}>
+      <LandingVideoBg cinema={cinema} />
+
+      {cinema && (
+        <p className="landing__cinema-hint" aria-live="polite">
+          {lang === 'ru' ? 'Shift+V или Esc — выйти' : 'Shift+V or Esc to exit'}
+        </p>
+      )}
 
       <LandingHeader t={t} onToggleLang={toggleLang} />
 

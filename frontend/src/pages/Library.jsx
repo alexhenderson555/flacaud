@@ -109,6 +109,8 @@ export default function Library() {
     djFeaturesActive = false,
     likedTracks,
     toggleLike,
+    startTrackRadio,
+    radioLoadingTrackId,
   } = useOutletContext();
 
   const { getFeatures, pendingCount } = useTrackFeaturesForList(library, {
@@ -332,6 +334,9 @@ export default function Library() {
           onToggleLike={toggleLike}
           onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
           onDownload={handleDownloadLocal}
+          onStartRadio={startTrackRadio}
+          radioLoading={radioLoadingTrackId === String(track.provider_id)}
+          radioBusy={Boolean(radioLoadingTrackId)}
           onRemove={onRemove || undefined}
           onDragStart={dragHandleStart || undefined}
           removeTitle={onRemove ? t('libRemove') : undefined}

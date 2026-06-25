@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { showToast } from '../utils/toast';
 import { apiGetJson, apiPostJson, messageForApiError } from '../utils/apiClient';
 import { buildRadioQueue, pickRadioStartTrack } from '../utils/trackNormalize';
@@ -10,8 +10,13 @@ export function usePlayerRadio({
   playQueue,
   startTrackRadioRef,
 }) {
+  const [radioLoadingTrackId, setRadioLoadingTrackId] = useState(null);
+
   const startTrackRadio = useCallback(async (track, { advancePastSeed = false } = {}) => {
-    const pid = String(track.provider_id);
+    const pid = String(track?.provider_id || '');
+    if (!pid) return false;
+    setRadioLoadingTrackId(pid);
+
     const provider = track.provider || 'tidal';
 
     if (!advancePastSeed) {
@@ -85,6 +90,8 @@ export function usePlayerRadio({
     } catch (err) {
       showToast(messageForApiError(err, lang));
       return false;
+    } finally {
+      setRadioLoadingTrackId((cur) => (cur === pid ? null : cur));
     }
   }, [lang, playQueue, t]);
 
@@ -92,5 +99,5 @@ export function usePlayerRadio({
     if (startTrackRadioRef) startTrackRadioRef.current = startTrackRadio;
   }, [startTrackRadio, startTrackRadioRef]);
 
-  return { startTrackRadio };
+  return { startTrackRadio, radioLoadingTrackId };
 }

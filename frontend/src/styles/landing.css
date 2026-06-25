@@ -97,3 +97,33 @@
   border-radius: 999px;
   cursor: pointer;
 }
+
+/* Easter egg: Shift+V — video-only cinema mode */
+.landing--cinema .landing__header,
+.landing--cinema .landing__main,
+.landing--cinema .landing__legal {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.landing--cinema .landing__canvas-wrap {
+  z-index: 5;
+}
+
+.landing__cinema-hint {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  user-select: none;
+}

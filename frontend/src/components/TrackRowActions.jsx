@@ -1,4 +1,4 @@
-import { Play, Pause, Heart, Plus, Download, Check, Trash2, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
+import { Play, Pause, Heart, Plus, Download, Check, Trash2, ArrowUp, ArrowDown, GripVertical, Radio, Loader2 } from 'lucide-react';
 import { isTrackLiked } from '../utils/trackNormalize';
 
 /**
@@ -17,6 +17,9 @@ export default function TrackRowActions({
   onAddToPlaylist,
   onDownload,
   onRemove,
+  onStartRadio,
+  radioLoading = false,
+  radioBusy = false,
   removeTitle,
   onMoveUp,
   onMoveDown,
@@ -72,6 +75,23 @@ export default function TrackRowActions({
           aria-label={t('addToPlaylist')}
         >
           <Plus size={20} color="var(--text-muted)" />
+        </button>
+      )}
+      {onStartRadio && (
+        <button
+          type="button"
+          className="track-row__icon-btn track-row__icon-btn--ghost"
+          data-testid={`${testIdPrefix}-radio-${track.provider_id}`}
+          disabled={radioBusy}
+          onClick={(e) => { e.stopPropagation(); onStartRadio(track); }}
+          title={radioLoading ? (t('trackRadioStarting') || 'Starting radio…') : (t('startTrackRadio') || 'Track radio')}
+          aria-label={radioLoading ? (t('trackRadioStarting') || 'Starting radio') : (t('startTrackRadio') || 'Track radio')}
+        >
+          {radioLoading ? (
+            <Loader2 size={18} className="spin" color="var(--accent-solid)" />
+          ) : (
+            <Radio size={18} color="var(--text-muted)" />
+          )}
         </button>
       )}
       {showPlay && onTogglePlay && (

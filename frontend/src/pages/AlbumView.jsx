@@ -22,6 +22,8 @@ export default function AlbumView() {
     handleDownload,
     downloadedTracks,
     t: globalT,
+    startTrackRadio,
+    radioLoadingTrackId,
   } = useOutletContext();
 
   const rowT = globalT || ((k) => k);
@@ -140,6 +142,8 @@ export default function AlbumView() {
             onToggleLike={toggleLike}
             onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
             onDownload={handleDownload}
+            onStartRadio={startTrackRadio}
+            radioLoadingTrackId={radioLoadingTrackId}
             testIdPrefix="album"
           />
         ))}

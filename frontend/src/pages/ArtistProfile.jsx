@@ -29,6 +29,8 @@ export default function ArtistProfile() {
     downloadedTracks,
     lang,
     t: globalT,
+    startTrackRadio,
+    radioLoadingTrackId,
   } = useOutletContext();
 
   const rowT = globalT || ((k) => k);
@@ -163,6 +165,8 @@ export default function ArtistProfile() {
                 onToggleLike={toggleLike}
                 onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
                 onDownload={handleDownload}
+                onStartRadio={startTrackRadio}
+                radioLoadingTrackId={radioLoadingTrackId}
                 testIdPrefix="artist"
               />
             ))}

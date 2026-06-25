@@ -55,6 +55,8 @@ export default function Radio() {
     playlist = [],
     t: globalT,
     lang,
+    startTrackRadio,
+    radioLoadingTrackId,
   } = useOutletContext();
 
   const t = (k) => dict[lang]?.[k] || dict.en[k];
@@ -169,6 +171,8 @@ export default function Radio() {
                 onToggleLike={toggleLike}
                 onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
                 onDownload={handleDownload}
+                onStartRadio={startTrackRadio}
+                radioLoadingTrackId={radioLoadingTrackId}
                 djFeaturesActive={djFeaturesActive}
                 getFeatures={getFeatures}
                 testIdPrefix="radio"

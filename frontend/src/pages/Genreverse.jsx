@@ -65,6 +65,8 @@ export default function Genreverse() {
     playlist = [],
     t: globalT,
     lang,
+    startTrackRadio,
+    radioLoadingTrackId,
   } = useOutletContext();
 
   const t = (k) => dict[lang]?.[k] || dict.en[k];
@@ -447,6 +449,8 @@ export default function Genreverse() {
                 onToggleLike={toggleLike}
                 onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
                 onDownload={handleDownload}
+                onStartRadio={startTrackRadio}
+                radioLoadingTrackId={radioLoadingTrackId}
                 djFeaturesActive={djFeaturesActive}
                 getFeatures={getFeatures}
                 testIdPrefix="radio"

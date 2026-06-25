@@ -37,6 +37,8 @@ export default function Recommendations() {
     djFeaturesActive = false,
     lang,
     t: globalT,
+    startTrackRadio,
+    radioLoadingTrackId,
   } = useOutletContext();
 
   const rowT = globalT || ((k) => k);
@@ -207,6 +209,8 @@ export default function Recommendations() {
                 onToggleLike={toggleLike}
                 onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
                 onDownload={handleDownload}
+                onStartRadio={startTrackRadio}
+                radioLoadingTrackId={radioLoadingTrackId}
                 djFeaturesActive={djFeaturesActive}
                 getFeatures={getFeatures}
                 testIdPrefix="recommendations"

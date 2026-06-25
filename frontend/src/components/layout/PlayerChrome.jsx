@@ -158,6 +158,7 @@ function PlayerChrome({ playbackEnabled = true }) {
         setVolume={setVolume}
         nextTrack={transport.nextTrack}
         startTrackRadio={transport.startTrackRadio}
+        radioLoadingTrackId={transport.radioLoadingTrackId}
         shuffleEnabled={shuffleEnabled}
         repeatMode={repeatMode}
         toggleShuffle={toggleShuffle}

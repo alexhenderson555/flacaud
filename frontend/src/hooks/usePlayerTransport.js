@@ -45,6 +45,7 @@ export function usePlayerTransport(props) {
     playNext: queue.playNext,
     playPrevious: queue.playPrevious,
     startTrackRadio: radio.startTrackRadio,
+    radioLoadingTrackId: radio.radioLoadingTrackId,
     nextTrack: queue.nextTrack,
     handleSeekPreview: progress.handleSeekPreview,
     handleSeekCommit: progress.handleSeekCommit,

@@ -20,6 +20,8 @@ export default function LibraryTrackRow({
   onAddToPlaylist,
   onDownload,
   onRemove,
+  onStartRadio,
+  radioLoadingTrackId = null,
   removeTitle,
   djFeaturesActive = false,
   getFeatures,
@@ -68,6 +70,9 @@ export default function LibraryTrackRow({
           onAddToPlaylist={onAddToPlaylist}
           onDownload={onDownload}
           onRemove={onRemove}
+          onStartRadio={onStartRadio}
+          radioLoading={radioLoadingTrackId === String(track.provider_id)}
+          radioBusy={Boolean(radioLoadingTrackId)}
           removeTitle={removeTitle}
           testIdPrefix={testIdPrefix}
         />

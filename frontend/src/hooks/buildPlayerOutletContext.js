@@ -62,6 +62,7 @@ export function buildPlayerOutletContext({
     downloadedTracks,
     playlist,
     startTrackRadio: transport.startTrackRadio,
+    radioLoadingTrackId: transport.radioLoadingTrackId,
     effectivePlan,
     djAnalysisEnabled,
     setDjAnalysisEnabled,

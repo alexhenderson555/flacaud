@@ -118,7 +118,7 @@ function Search() {
   useEffect(() => { persistSearchState({ realResults }); }, [realResults, persistSearchState]);
   useEffect(() => { persistSearchState({ aiResults }); }, [aiResults, persistSearchState]);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
-  const { togglePlay: playerContextTogglePlay, currentTrackId, isPlaying, isLoading, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext, t: globalT } = useOutletContext();
+  const { togglePlay: playerContextTogglePlay, currentTrackId, isPlaying, isLoading, lang, downloadedTracks, likedTracks, toggleLike: toggleLikeContext, startTrackRadio, radioLoadingTrackId, t: globalT } = useOutletContext();
   
   const t = (key) => dict[lang][key] || key;
   const rowT = globalT || ((k) => k);
@@ -397,6 +397,8 @@ function Search() {
       onToggleLike={toggleLike}
       onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
       onDownload={handleDownload}
+      onStartRadio={startTrackRadio}
+      radioLoadingTrackId={radioLoadingTrackId}
       testIdPrefix={testIdPrefix}
     />
   );

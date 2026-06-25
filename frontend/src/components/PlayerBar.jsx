@@ -18,7 +18,7 @@ import { useArtistCardStore } from '../store/useArtistCardStore';
 import { resolveArtistId } from '../utils/resolveArtist';
 import {
   Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders,
-  ListMusic, Volume2, Waves, Radio, Shuffle, Repeat, Repeat1, ChevronUp, ChevronDown, Sparkles,
+  ListMusic, Volume2, Waves, Radio, Shuffle, Repeat, Repeat1, ChevronUp, ChevronDown, Sparkles, Loader2,
 } from 'lucide-react';
 import { REPEAT_ALL, REPEAT_ONE } from '../utils/playbackModes';
 import { PLAYER_HOTKEYS, withHotkey } from '../utils/playerHotkeys';
@@ -82,6 +82,7 @@ export default function PlayerBar({
   toggleOverlay,
   setVolume,
   startTrackRadio,
+  radioLoadingTrackId = null,
   shuffleEnabled = false,
   repeatMode = 'off',
   toggleShuffle,
@@ -89,6 +90,9 @@ export default function PlayerBar({
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const partyModeAvailable = usePartyModeAvailable();
+  const radioLoading = Boolean(
+    currentTrack && radioLoadingTrackId === String(currentTrack.provider_id),
+  );
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
   const coverRefreshAttempted = useRef(false);
@@ -380,6 +384,7 @@ export default function PlayerBar({
       toggleLike={toggleLike}
       setIsPlaylistModalOpenPlayer={setIsPlaylistModalOpenPlayer}
       startTrackRadio={startTrackRadio}
+      radioLoadingTrackId={radioLoadingTrackId}
       handleDownloadPlayer={handleDownloadPlayer}
       toggleOverlay={toggleOverlay}
       isKaraokeOpen={isKaraokeOpen}
@@ -411,13 +416,19 @@ export default function PlayerBar({
         style={{ color: 'var(--player-text)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
         title="Add to Playlist"
       />
-      <Radio
-        size={22}
-        cursor={currentTrack ? 'pointer' : 'default'}
+      <button
+        type="button"
+        className="player-overlay-btn"
+        disabled={!currentTrack || Boolean(radioLoadingTrackId)}
         onClick={() => currentTrack && startTrackRadio(currentTrack)}
-        style={{ color: 'var(--player-text)', transition: 'all 0.2s', opacity: currentTrack ? 1 : 0.5 }}
-        title={withHotkey(t('startTrackRadio') || 'Start Track Radio', PLAYER_HOTKEYS.trackRadio)}
-      />
+        title={withHotkey(
+          radioLoading ? (t('trackRadioStarting') || 'Starting radio…') : (t('startTrackRadio') || 'Start Track Radio'),
+          PLAYER_HOTKEYS.trackRadio,
+        )}
+        aria-label={t('startTrackRadio') || 'Start Track Radio'}
+      >
+        {radioLoading ? <Loader2 size={22} className="spin" /> : <Radio size={22} />}
+      </button>
       {currentTrack && (
         <Download
           size={22}

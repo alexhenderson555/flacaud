@@ -1,4 +1,4 @@
-import { Heart, Plus, Download, Mic2, Disc3, Sliders, ListMusic, Radio } from 'lucide-react';
+import { Heart, Plus, Download, Mic2, Disc3, Sliders, ListMusic, Radio, Loader2 } from 'lucide-react';
 
 export default function PlayerMobileActions({
   lang,
@@ -8,6 +8,7 @@ export default function PlayerMobileActions({
   toggleLike,
   setIsPlaylistModalOpenPlayer,
   startTrackRadio,
+  radioLoadingTrackId = null,
   handleDownloadPlayer,
   toggleOverlay,
   isKaraokeOpen,
@@ -32,6 +33,8 @@ export default function PlayerMobileActions({
 
   if (!currentTrack) return null;
 
+  const radioLoading = radioLoadingTrackId === String(currentTrack.provider_id);
+
   return (
     <div className="player-mobile-actions">
       <div className="player-mobile-actions__row">
@@ -46,9 +49,10 @@ export default function PlayerMobileActions({
           () => setIsPlaylistModalOpenPlayer(true),
         )}
         {actionBtn(
-          <Radio size={20} />,
-          t('startTrackRadio') || (lang === 'ru' ? 'Радио' : 'Radio'),
+          radioLoading ? <Loader2 size={20} className="spin" /> : <Radio size={20} />,
+          radioLoading ? (t('trackRadioStarting') || (lang === 'ru' ? 'Радио…' : 'Radio…')) : (t('startTrackRadio') || (lang === 'ru' ? 'Радио' : 'Radio')),
           () => startTrackRadio(currentTrack),
+          { disabled: Boolean(radioLoadingTrackId) },
         )}
         {actionBtn(
           <Download size={20} />,
