@@ -1,4 +1,3 @@
-import os
 code = open('frontend/src/pages/Landing.jsx', 'r', encoding='utf-8').read()
 
 code += '''

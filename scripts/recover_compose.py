@@ -2,7 +2,6 @@
 """Recover prod compose after interrupted deploy (container name conflicts)."""
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 

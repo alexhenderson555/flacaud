@@ -19,9 +19,8 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)
 
 import paramiko
-from scp import SCPClient
-
 from repair_servers import DEPLOY_PATH, TIDAL_HOST, TIDAL_USER, _password
+from scp import SCPClient
 
 BUNDLE = "index-DqMBVLZD.js"
 CSS = "index-C8IQtxPH.css"

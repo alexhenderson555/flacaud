@@ -1,7 +1,7 @@
+import glob
 import json
 import os
 import re
-import glob
 
 brain_dir = r'C:\Users\Alex\.gemini\antigravity\brain'
 transcripts = glob.glob(os.path.join(brain_dir, '*', '.system_generated', 'logs', 'transcript_full.jsonl'))
@@ -23,15 +23,15 @@ for log_path in transcripts:
                             filepath = match.group(1).replace('\\', '/')
                             if not filepath.startswith('frontend/'):
                                 continue
-                                
+
                             lines = content.split('\n')
                             code_lines = []
                             for l in lines:
                                 if re.match(r'^\d+:', l):
                                     code_lines.append(l.split(':', 1)[1].strip('\r')[1:])
-                            
+
                             new_content = '\n'.join(code_lines)
-                            
+
                             # Keep the version with the MAXIMUM lines because some views were truncated!
                             if filepath not in restored or len(new_content) > len(restored[filepath]):
                                 restored[filepath] = new_content

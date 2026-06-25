@@ -21,7 +21,7 @@ with open(log_path, 'r', encoding='utf-8') as f:
                         for l in lines:
                             if re.match(r'^\d+:', l):
                                 code_lines.append(l.split(':', 1)[1].strip('\r')[1:])
-                        
+
                         # Only keep the longest version of the file in case we viewed it multiple times
                         new_content = '\n'.join(code_lines)
                         if filepath not in files or len(new_content) > len(files[filepath]):

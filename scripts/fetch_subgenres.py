@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import sys
@@ -7,9 +6,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from tidal_dl_ru.providers.tidal.client import TidalClient
 
+
 def main():
     api = TidalClient()
-    
+
     genres = [
       {'name': 'Electronic', 'subs': ['Melodic House', 'Deep House', 'Techno', 'Synthwave', 'Trance', 'Dubstep', 'Drum and Bass', 'Chillwave', 'IDM', 'House', 'Hardstyle']},
       {'name': 'Rock', 'subs': ['Indie Rock', 'Punk', 'Alternative', 'Classic Rock', 'Grunge', 'Psychedelic Rock', 'Hard Rock', 'Post-Punk']},
@@ -24,7 +24,7 @@ def main():
       {'name': 'Global & World', 'subs': ['Afrobeats', 'Afro', 'K-Pop', 'J-Pop', 'Reggae', 'Dancehall', 'Bollywood', 'Celtic']},
       {'name': 'Chill & Focus', 'subs': ['Lo-Fi Beats', 'Nature Sounds', 'Meditation', 'White Noise', 'Cinematic', 'Ambient', 'Downtempo', 'Binaural Beats']}
     ]
-    
+
     res = {}
     for g in genres:
         print(f"Genre: {g['name']}")
@@ -44,7 +44,7 @@ def main():
                 print(f"  Error {sub}: {e}")
             subs_data.append({'name': sub, 'image': None})
             print(f"  {sub}: No image")
-            
+
         res[g['name']] = subs_data
 
     with open("subgenres.json", "w", encoding="utf-8") as f:

@@ -27,9 +27,8 @@ except ImportError:
     pass
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from _ops_env import tidal_host  # noqa: E402
-
 import paramiko  # noqa: E402
+from _ops_env import tidal_host  # noqa: E402
 
 from scripts.repair_servers import compose_files  # noqa: E402
 

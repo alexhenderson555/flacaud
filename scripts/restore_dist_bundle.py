@@ -20,9 +20,8 @@ except ImportError:
     pass
 
 import paramiko
-from scp import SCPClient
-
 from repair_servers import DEPLOY_PATH, TIDAL_HOST, TIDAL_USER, _password
+from scp import SCPClient
 
 DEFAULT_BUNDLE = "index-DqMBVLZD.js"
 REMOTE_DIST = f"{DEPLOY_PATH}/frontend/dist"

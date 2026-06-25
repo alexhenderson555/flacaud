@@ -1,9 +1,23 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readSessionJson } from './sessionStorageJson';
+
+function stubSessionStorage() {
+  const store = new Map();
+  vi.stubGlobal('sessionStorage', {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+    clear: () => { store.clear(); },
+  });
+}
 
 describe('readSessionJson', () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    stubSessionStorage();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('returns fallback when missing', () => {

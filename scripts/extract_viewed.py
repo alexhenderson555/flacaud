@@ -13,7 +13,7 @@ with open(log_path, 'r', encoding='utf-8') as f:
         try:
             data = json.loads(line)
             content = data.get('content', '')
-            
+
             if 'PlayerLogic.jsx' in content and 'import ' in content and 'export ' in content:
                 # We found a big chunk of code!
                 # Is it a view_file output?
@@ -28,7 +28,7 @@ with open(log_path, 'r', encoding='utf-8') as f:
                             code_lines.append(l.split(':', 1)[1].strip('\r')[1:]) # strip the space after colon
                     if code_lines:
                         restored['PlayerLogic.jsx'] = '\n'.join(code_lines)
-                        
+
             # We can also check for other files
             for t in ['usePlayerQueue.js', 'usePlayerProgressLoop.js', 'usePlayerPersistence.js', 'useAudioSlotPair.js', 'GlobalAudio.jsx', 'App.jsx']:
                 if t in content and 'import ' in content and 'export ' in content:
@@ -58,7 +58,7 @@ for k, v in restored.items():
         path = 'frontend/src/components/player/GlobalAudio.jsx'
     else:
         continue
-    
+
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(v)

@@ -76,6 +76,7 @@ ignore = ["E501", "F841", "E402", "E701"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E402", "F401", "F811"]
 "src/tidal_dl_ru/server/app.py" = ["E402"]
+"scripts/**" = ["E741", "W291", "W293"]
 
 [dependency-groups]
 dev = [
@@ -83,4 +84,7 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.5",
+    "alembic>=1.13",
 ]

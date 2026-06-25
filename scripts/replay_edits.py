@@ -1,7 +1,6 @@
+import glob
 import json
 import os
-import glob
-import sys
 
 brain_dir = r'C:\Users\Alex\.gemini\antigravity\brain'
 
@@ -40,7 +39,7 @@ def apply_replace(content, target_content, replacement_content):
 for transcript in transcripts:
     if transcript == transcripts[-1]:
         break # don't replay the current active agent session
-    
+
     with open(transcript, 'r', encoding='utf-8') as f:
         for line in f:
             try:
@@ -53,13 +52,13 @@ for transcript in transcripts:
                         args_str = func.get('arguments', '{}')
                         args = json.loads(args_str)
                         target = normalize_path(args.get('TargetFile', ''))
-                        
+
                         match_key = None
                         for k in file_states:
                             if target.endswith(k.split('tidal-dl-ru/')[-1]):
                                 match_key = k
                                 break
-                        
+
                         if match_key:
                             if name == 'default_api:write_to_file':
                                 file_states[match_key] = args.get('CodeContent', '')

@@ -1,5 +1,5 @@
-import os
 import glob
+import os
 
 brain_dir = r'C:\Users\Alex\.gemini\antigravity\brain'
 transcripts = glob.glob(os.path.join(brain_dir, '*', '.system_generated', 'logs', 'transcript.jsonl'))

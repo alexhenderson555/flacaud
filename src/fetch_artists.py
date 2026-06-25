@@ -1,6 +1,7 @@
-import httpx
 import json
 import time
+
+import httpx
 
 SUBGENRES = [
     "Electronic", "Melodic House", "Deep House", "Techno", "Synthwave", "Trance", "Dubstep", "Drum and Bass", "Chillwave", "IDM", "House", "Hardstyle",
@@ -59,7 +60,7 @@ def main():
             if len(artists_set) >= 200:
                 break
             time.sleep(0.5)
-            
+
         artists_list = list(artists_set)
         if len(artists_list) > 200:
             artists_list = artists_list[:200]

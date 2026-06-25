@@ -1,4 +1,3 @@
-import os
 
 code = open('frontend/src/main.jsx', 'r', encoding='utf-8').read()
 

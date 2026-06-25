@@ -1,7 +1,6 @@
+import glob
 import json
 import os
-import glob
-import sys
 
 brain_dir = r'C:\Users\Alex\.gemini\antigravity\brain'
 transcripts = glob.glob(os.path.join(brain_dir, '*', '.system_generated', 'logs', 'transcript_full.jsonl'))
@@ -44,7 +43,7 @@ with open(current_transcript, 'r', encoding='utf-8') as f:
         # Stop replaying if we reach the screw-up command
         if 'git checkout HEAD' in line and 'frontend/src/App.jsx' in line:
             break
-            
+
         try:
             data = json.loads(line)
             calls = data.get('tool_calls', [])
@@ -55,13 +54,13 @@ with open(current_transcript, 'r', encoding='utf-8') as f:
                     args_str = func.get('arguments', '{}')
                     args = json.loads(args_str)
                     target = normalize_path(args.get('TargetFile', ''))
-                    
+
                     match_key = None
                     for k in file_states:
                         if target.endswith(k.split('tidal-dl-ru/')[-1]):
                             match_key = k
                             break
-                    
+
                     if match_key:
                         if name == 'default_api:write_to_file':
                             file_states[match_key] = args.get('CodeContent', '')

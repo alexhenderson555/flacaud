@@ -1,4 +1,3 @@
-import os
 code = open('frontend/src/index.css', 'r', encoding='utf-8').read()
 
 code += '''

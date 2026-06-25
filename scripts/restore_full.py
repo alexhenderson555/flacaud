@@ -1,6 +1,6 @@
-import os
 import glob
 import json
+import os
 
 brain_dir = r'C:\Users\Alex\.gemini\antigravity\brain'
 
@@ -29,7 +29,7 @@ for t in transcripts:
                     try:
                         data = json.loads(line)
                         content = data.get('content', '')
-                        
+
                         for file_key in files_to_restore:
                             if f'File Path: `file:///C:/Users/Alex/Cursor/tidal-dl-ru/{file_key}`' in content:
                                 lines = content.split('\n')
@@ -39,15 +39,15 @@ for t in transcripts:
                                     if re.match(r'^\d+:', l):
                                         # strip the line number and the space
                                         code_lines.append(l.split(':', 1)[1].strip('\r')[1:])
-                                
+
                                 new_content = '\n'.join(code_lines)
                                 # Only take it if it's larger than what we have (to avoid truncated views)
                                 if len(new_content) > len(restored[file_key]):
                                     restored[file_key] = new_content
                     except Exception:
                         pass
-                
-                # Also try to catch full contents from 'write_to_file' 
+
+                # Also try to catch full contents from 'write_to_file'
                 if 'default_api:write_to_file' in line:
                     try:
                         data = json.loads(line)

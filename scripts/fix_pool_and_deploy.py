@@ -17,7 +17,14 @@ os.environ.setdefault("DEPLOY_DOMAIN", "flacaud.ru")
 os.environ.setdefault("DOMAIN", "flacaud.ru")
 os.environ.setdefault("TIDALDLRU_PUBLIC_API_BASE", "https://flacaud.ru")
 
-from scripts.repair_servers import TIDAL_HOST, TIDAL_USER, _password, _ssh_run, deploy_tidal_server, smoke_tidal
+from scripts.repair_servers import (
+    TIDAL_HOST,
+    TIDAL_USER,
+    _password,
+    _ssh_run,
+    deploy_tidal_server,
+    smoke_tidal,
+)
 
 pw = _password("TIDAL_SSH_PASSWORD")
 

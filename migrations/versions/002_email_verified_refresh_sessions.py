@@ -32,7 +32,7 @@ def upgrade() -> None:
         )
 
     # Existing accounts are grandfathered as verified.
-    op.execute(sa.text('UPDATE "user" SET email_verified = 1'))
+    op.execute(sa.text('UPDATE "user" SET email_verified = true'))
 
     op.create_table(
         "refreshsession",

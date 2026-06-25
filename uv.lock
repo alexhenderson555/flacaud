@@ -2744,10 +2744,13 @@ worker = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "alembic" },
     { name = "fakeredis" },
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -2794,10 +2797,13 @@ provides-extras = ["worker", "dj", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "alembic", specifier = ">=1.13" },
     { name = "fakeredis", specifier = ">=2.26" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pytest-cov", specifier = ">=6.0" },
+    { name = "ruff", specifier = ">=0.5" },
 ]
 
 [[package]]

@@ -2,7 +2,6 @@
 """Verify observability stack on production server."""
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -16,7 +15,13 @@ try:
 except ImportError:
     pass
 
-from scripts.repair_servers import TIDAL_HOST, TIDAL_USER, _password, _ssh_run, compose_files  # noqa: E402
+from scripts.repair_servers import (  # noqa: E402
+    TIDAL_HOST,
+    TIDAL_USER,
+    _password,
+    _ssh_run,
+    compose_files,
+)
 
 
 def main() -> None:

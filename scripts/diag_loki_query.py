@@ -8,9 +8,9 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=True)
-from scripts.repair_servers import DEPLOY_PATH, TIDAL_HOST, TIDAL_USER, _password, compose_files
-
 import paramiko
+
+from scripts.repair_servers import DEPLOY_PATH, TIDAL_HOST, TIDAL_USER, _password, compose_files
 
 pw = _password("TIDAL_SSH_PASSWORD")
 cf = compose_files()

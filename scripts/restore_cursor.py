@@ -1,7 +1,5 @@
-import os
-import glob
-import json
 import codecs
+import os
 
 history_dir = r'C:\Users\Alex\AppData\Roaming\Cursor\User\History'
 

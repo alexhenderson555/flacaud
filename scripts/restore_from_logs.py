@@ -1,14 +1,14 @@
+import glob
 import json
 import os
-import glob
 
 files = {}
 targets = [
-    'PlayerLogic.jsx', 
-    'usePlayerQueue.js', 
-    'usePlayerProgressLoop.js', 
-    'usePlayerPersistence.js', 
-    'useAudioSlotPair.js', 
+    'PlayerLogic.jsx',
+    'usePlayerQueue.js',
+    'usePlayerProgressLoop.js',
+    'usePlayerPersistence.js',
+    'useAudioSlotPair.js',
     'App.jsx'
 ]
 
@@ -71,7 +71,7 @@ for path, content in file_states.items():
                     clean_path = 'frontend/src/hooks/' + path.split('/')[-1].split('\\')[-1]
                 elif 'App.jsx' in path:
                     clean_path = 'frontend/src/App.jsx'
-                    
+
             os.makedirs(os.path.dirname(clean_path), exist_ok=True)
             with open(clean_path, 'w', encoding='utf-8') as f:
                 f.write(content)

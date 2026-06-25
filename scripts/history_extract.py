@@ -1,6 +1,6 @@
-import os
 import glob
 import json
+import os
 
 brain_dir = r'C:\Users\Alex\.gemini\antigravity\brain'
 transcripts = glob.glob(os.path.join(brain_dir, '*', '.system_generated', 'logs', 'transcript_full.jsonl'))
@@ -22,7 +22,7 @@ for log_path in transcripts:
                         data = json.loads(line)
                         content = data.get('content', '')
                         tool_calls = data.get('tool_calls', [])
-                        
+
                         # Check view_file response
                         if data.get('type') == 'VIEW_FILE' or 'File Path: `file:///C:/Users/Alex/Cursor/tidal-dl-ru/frontend/' in content:
                             if 'The following code has been modified to include a line number' in content:
@@ -36,7 +36,7 @@ for log_path in transcripts:
                                                 code_lines.append(l.split(':', 1)[1].strip('\r')[1:])
                                         if len(code_lines) > 0:
                                             files_to_track[file_key] = '\n'.join(code_lines)
-                        
+
                         # Check write_to_file
                         for call in tool_calls:
                             if call.get('function', {}).get('name') == 'default_api:write_to_file':
@@ -46,7 +46,7 @@ for log_path in transcripts:
                                 for file_key in files_to_track:
                                     if file_key in target.replace('\\', '/'):
                                         files_to_track[file_key] = args.get('CodeContent', '')
-                                        
+
                         # We won't simulate replace_file_content perfectly unless we write a diff applier,
                         # but let's see what we get from view and write first.
                     except Exception:

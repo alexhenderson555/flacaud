@@ -1,9 +1,8 @@
 import asyncio
 import json
-import time
-from collections import defaultdict
 import os
 import sys
+import time
 
 # Ensure imports work from src directory
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -11,51 +10,51 @@ from tidal_dl_ru.core.router import get_provider_by_name
 
 CATEGORIES = {
     "Electronic": [
-        "Melodic House", "Deep House", "Techno", "Synthwave", "Trance", "Dubstep", "Drum and Bass", 
+        "Melodic House", "Deep House", "Techno", "Synthwave", "Trance", "Dubstep", "Drum and Bass",
         "Chillwave", "IDM", "House", "Hardstyle", "Electro House", "Tech House", "Progressive House", "Future Bass"
     ],
     "Rock": [
-        "Indie Rock", "Punk Rock", "Alternative Rock", "Classic Rock", "Grunge", "Psychedelic Rock", "Hard Rock", 
+        "Indie Rock", "Punk Rock", "Alternative Rock", "Classic Rock", "Grunge", "Psychedelic Rock", "Hard Rock",
         "Post-Punk", "Pop Punk", "Math Rock", "Shoegaze", "Garage Rock", "Folk Rock", "Southern Rock", "Blues Rock"
     ],
     "Metal": [
-        "Heavy Metal", "Death Metal", "Black Metal", "Metalcore", "Doom Metal", "Nu Metal", "Thrash Metal", 
+        "Heavy Metal", "Death Metal", "Black Metal", "Metalcore", "Doom Metal", "Nu Metal", "Thrash Metal",
         "Symphonic Metal", "Power Metal", "Groove Metal", "Progressive Metal", "Sludge Metal", "Folk Metal", "Industrial Metal", "Gothic Metal"
     ],
     "Hip-Hop / Rap": [
-        "Trap", "Boom Bap", "Lo-Fi Hip Hop", "Drill", "Conscious Rap", "Cloud Rap", "Old School Hip-Hop", 
+        "Trap", "Boom Bap", "Lo-Fi Hip Hop", "Drill", "Conscious Rap", "Cloud Rap", "Old School Hip-Hop",
         "Mumble Rap", "Grime", "East Coast Hip Hop", "West Coast Hip Hop", "Southern Hip Hop", "Alternative Hip Hop", "UK Drill", "Jazz Rap"
     ],
     "Pop": [
-        "Synth-Pop", "Dream Pop", "Electropop", "Hyperpop", "Dance-Pop", "Indie Pop", "Teen Pop", 
+        "Synth-Pop", "Dream Pop", "Electropop", "Hyperpop", "Dance-Pop", "Indie Pop", "Teen Pop",
         "Art Pop", "K-Pop", "J-Pop", "Latin Pop", "Chamber Pop", "Britpop", "Bubblegum Pop", "Sophisti-Pop"
     ],
     "R&B / Soul": [
-        "Neo-Soul", "Contemporary R&B", "Funk", "Motown", "Quiet Storm", "Alternative R&B", "Classic Soul", 
+        "Neo-Soul", "Contemporary R&B", "Funk", "Motown", "Quiet Storm", "Alternative R&B", "Classic Soul",
         "Northern Soul", "Blue-Eyed Soul", "Psychedelic Soul", "Southern Soul", "PBR&B", "Boogie", "New Jack Swing", "Smooth Soul"
     ],
     "Jazz & Blues": [
-        "Bebop", "Smooth Jazz", "Delta Blues", "Chicago Blues", "Jazz Fusion", "Cool Jazz", "Free Jazz", 
+        "Bebop", "Smooth Jazz", "Delta Blues", "Chicago Blues", "Jazz Fusion", "Cool Jazz", "Free Jazz",
         "Soul Jazz", "Vocal Jazz", "Swing", "Hard Bop", "Gypsy Jazz", "Contemporary Jazz", "Texas Blues", "Jump Blues"
     ],
     "Latin": [
-        "Reggaeton", "Salsa", "Bossa Nova", "Bachata", "Latin Pop", "Cumbia", "Merengue", 
+        "Reggaeton", "Salsa", "Bossa Nova", "Bachata", "Latin Pop", "Cumbia", "Merengue",
         "Samba", "Tango", "Ranchera", "Vallenato", "Latin Trap", "Urbano Latino", "Mambo", "Bolero"
     ],
     "Classical": [
-        "Symphony", "Baroque", "Romantic", "Chamber Music", "Contemporary Classical", "Opera", "Choral", 
+        "Symphony", "Baroque", "Romantic", "Chamber Music", "Contemporary Classical", "Opera", "Choral",
         "Minimalism", "Renaissance", "Classical Piano", "Gregorian Chant", "Neoclassical", "Atonal", "Film Score", "Impressionism"
     ],
     "Country & Folk": [
-        "Modern Country", "Bluegrass", "Americana", "Indie Folk", "Acoustic", "Alt-Country", "Traditional Country", 
+        "Modern Country", "Bluegrass", "Americana", "Indie Folk", "Acoustic", "Alt-Country", "Traditional Country",
         "Outlaw Country", "Bro-Country", "Country Pop", "Folk Punk", "Contemporary Folk", "Anti-Folk", "Neofolk", "Celtic Folk"
     ],
     "Global & World": [
-        "Afrobeats", "Afro", "Reggae", "Dancehall", "Bollywood", "Celtic", "Flamenco", 
+        "Afrobeats", "Afro", "Reggae", "Dancehall", "Bollywood", "Celtic", "Flamenco",
         "Ska", "Highlife", "Qawwali", "Gamelan", "Klezmer", "Fado", "Mbalax", "Soca"
     ],
     "Chill & Focus": [
-        "Lo-Fi Beats", "Nature Sounds", "Meditation", "White Noise", "Cinematic", "Ambient", "Downtempo", 
+        "Lo-Fi Beats", "Nature Sounds", "Meditation", "White Noise", "Cinematic", "Ambient", "Downtempo",
         "Binaural Beats", "ASMR", "Dark Ambient", "Drone", "New Age", "Space Music", "Chillout", "Trip Hop"
     ]
 }
@@ -65,9 +64,9 @@ async def generate():
     if not p:
         print("Tidal provider not found")
         return
-        
+
     genres_db = {}
-    
+
     genre_images = {
         "Electronic": "/genres/genre_electronic_1781783267241.png",
         "Rock": "/genres/genre_rock_1781783278795.png",
@@ -82,7 +81,7 @@ async def generate():
         "Global & World": "/genres/genre_world_1781783382572.png",
         "Chill & Focus": "/genres/genre_chill_1781783392590.png"
     }
-    
+
     genre_colors = {
         "Electronic": "linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%)",
         "Rock": "linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%)",
@@ -100,7 +99,7 @@ async def generate():
 
     total_subgenres = sum(len(subs) for subs in CATEGORIES.values())
     count = 0
-    
+
     for category, subs in CATEGORIES.items():
         genres_db[category] = {
             "name": category,
@@ -108,15 +107,15 @@ async def generate():
             "color": genre_colors.get(category),
             "subgenres": []
         }
-        
+
         for sub in subs:
             count += 1
             print(f"[{count}/{total_subgenres}] Fetching {sub} via Tidal...", flush=True)
-            
+
             try:
                 # We search 250 tracks to ensure we get as many unique artists as possible
-                tracks = p.search(sub, 250) 
-                
+                tracks = p.search(sub, 250)
+
                 artists_set = set()
                 sub_image = None
                 for t in tracks:
@@ -124,10 +123,10 @@ async def generate():
                         artists_set.add(t.artists[0]) # Get primary artist
                         if not sub_image and t.cover_url:
                             sub_image = t.cover_url # Grab first cover as genre image
-                            
+
                 artists_list = list(artists_set)[:200]
                 print(f"   -> Found {len(artists_list)} artists", flush=True)
-                
+
                 genres_db[category]["subgenres"].append({
                     "name": sub,
                     "image": sub_image,
@@ -135,9 +134,9 @@ async def generate():
                 })
             except Exception as e:
                 print(f"Error fetching {sub}: {e}")
-                
+
             time.sleep(0.5)
-            
+
     with open("src/tidal_dl_ru/server/genres_db.json", "w", encoding="utf-8") as f:
         json.dump(genres_db, f, ensure_ascii=False, indent=2)
     print("Done! Generated src/tidal_dl_ru/server/genres_db.json")

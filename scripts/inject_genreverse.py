@@ -32,7 +32,7 @@ for gname, icon in genre_icons.items():
     elif gname == "Country & Folk": gid = "country"
     elif gname == "Global & World": gid = "world"
     elif gname == "Chill & Focus": gid = "ambient"
-    
+
     out += f"  {{\n    id: '{gid}',\n    name: '{gname}',\n    icon: {icon},\n    subgenres: [\n"
     for sub in subs[gname]:
         img = f"'{sub['image']}'" if sub['image'] else "null"

@@ -41,7 +41,7 @@ with open(log_path, 'r', encoding='utf-8') as f:
 
 for k, v in restored.items():
     print(f"Extracted {k} ({len(v)} bytes)")
-    
+
     path = None
     if k == 'PlayerLogic.jsx':
         path = 'frontend/src/components/player/' + k

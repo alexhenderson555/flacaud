@@ -2,7 +2,7 @@ import re
 
 try:
     content = open('Account-mbDUfmE7.js', 'r', encoding='utf-8').read()
-    
+
     themes = re.findall(r'id:\s*[\'\"].*?[\'\"],\s*label:\s*.*?[,}],?\s*color:\s*[\'\"].*?[\'\"]', content)
     if themes:
         print('Themes found:')

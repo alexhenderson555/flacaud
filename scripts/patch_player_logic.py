@@ -1,4 +1,3 @@
-import os
 code = open('frontend/src/components/player/PlayerLogic.jsx', 'r', encoding='utf-8').read()
 
 code += '''  ]);

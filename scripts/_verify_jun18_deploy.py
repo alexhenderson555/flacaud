@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import re
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 dist = ROOT / "frontend" / "dist"
 main = (dist / "assets" / "index-DqMBVLZD.js").read_text(encoding="utf-8")

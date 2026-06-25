@@ -26,7 +26,7 @@ def test_public_search() -> None:
     ctx = ssl.create_default_context()
     body = json.dumps({"query": "moderat", "limit": 3}).encode()
     req = urllib.request.Request(
-        f"https://flacaud.ru/api/search",
+        "https://flacaud.ru/api/search",
         data=body,
         headers={"Content-Type": "application/json", "Host": "flacaud.ru"},
         method="POST",
