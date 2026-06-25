@@ -27,6 +27,7 @@ import { motion } from 'framer-motion';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePartyModeAvailable } from '../hooks/usePartyModeAvailable';
 import PlayerMobileActions from './player/PlayerMobileActions';
+import PlayerMarqueeTitle from './player/PlayerMarqueeTitle';
 
 const QUALITY_OPTIONS = [
   { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
@@ -675,13 +676,13 @@ export default function PlayerBar({
               {coverThumb(isMobile ? 72 : 56)}
               <div className="player-track-meta">
                 <div className="player-track-title">
-                  <span
-                    data-testid="player-track-title"
+                  <PlayerMarqueeTitle
+                    testId="player-track-title"
                     className="player-track-title__text"
                     title={titleTooltip}
                   >
                     {displayTitle}
-                  </span>
+                  </PlayerMarqueeTitle>
                   {!setActive && currentTrack && (
                     <div className="player-track-badges">
                       {formatTrackYear(currentTrack) && (

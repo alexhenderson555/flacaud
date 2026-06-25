@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { showToast } from '../utils/toast';
 import { apiGetJson, messageForApiError } from '../utils/apiClient';
 import { fetchLibraryTracks } from '../utils/libraryApi';
@@ -79,6 +79,13 @@ export function usePlayerQueue({
 }) {
   const playbackGenRef = useRef(0);
   const playNextInFlightRef = useRef(false);
+
+  useEffect(() => {
+    const pl = playlist || [];
+    if (pl[0]?.__queue_origin && queueOriginRef) {
+      queueOriginRef.current = pl[0].__queue_origin;
+    }
+  }, [playlist, queueOriginRef]);
 
   const initAudioEngine = useCallback(() => {
     const el = getMainAudioEl?.() ?? audioRef.current;
@@ -393,7 +400,10 @@ export function usePlayerQueue({
   ]);
 
   const appendVibeRadioTracks = useCallback(async (pl) => {
-    if (queueOriginRef?.current !== VIBE_RADIO_ORIGIN) return false;
+    const isVibeRadio = queueOriginRef?.current === VIBE_RADIO_ORIGIN
+      || pl?.[0]?.__queue_origin === VIBE_RADIO_ORIGIN;
+    if (!isVibeRadio) return false;
+    if (queueOriginRef) queueOriginRef.current = VIBE_RADIO_ORIGIN;
     try {
       const excludeIds = pl.map((tr) => String(tr.provider_id));
       const genre = pl[0]?.__queue_genre || null;
@@ -412,7 +422,10 @@ export function usePlayerQueue({
   }, [lang, playlistRef, queueOriginRef, setPlaylist]);
 
   const prefetchVibeRadioIfNeeded = useCallback(async (pl, safeIdx) => {
-    if (queueOriginRef?.current !== VIBE_RADIO_ORIGIN) return;
+    if (queueOriginRef?.current !== VIBE_RADIO_ORIGIN && pl?.[0]?.__queue_origin !== VIBE_RADIO_ORIGIN) {
+      return;
+    }
+    if (queueOriginRef) queueOriginRef.current = VIBE_RADIO_ORIGIN;
     if (safeIdx < pl.length - 3) return;
     await appendVibeRadioTracks(pl);
   }, [appendVibeRadioTracks, queueOriginRef]);
@@ -428,6 +441,9 @@ export function usePlayerQueue({
       setIsLoading(true);
       setIsPlaying(true);
       const pl = playlistRef.current || [];
+      if (pl[0]?.__queue_origin && queueOriginRef) {
+        queueOriginRef.current = pl[0].__queue_origin;
+      }
       if (pl.length > 0) {
         const idx = resolveQueueIndex();
         const safeIdx = idx >= 0 ? idx : 0;

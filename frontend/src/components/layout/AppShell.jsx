@@ -19,6 +19,7 @@ export default function AppShell({ shellPaddingTop = '0' }) {
   visualizerEnabled,
   isPlaying,
   audioRef,
+  getMainAudioEl,
   overlays,
   t,
   lang,
@@ -57,7 +58,7 @@ export default function AppShell({ shellPaddingTop = '0' }) {
     >
       <Titlebar />
       {showVisualizer ? (
-        <AudioVisualizer audioRef={audioRef} isPlaying={isPlaying} />
+        <AudioVisualizer audioRef={audioRef} getMainAudioEl={getMainAudioEl} isPlaying={isPlaying} />
       ) : (
         <>
           <div className="ambient-glow glow-1" />

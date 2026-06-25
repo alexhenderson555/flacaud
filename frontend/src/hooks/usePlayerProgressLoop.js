@@ -86,12 +86,17 @@ export function usePlayerProgressLoop({
       const main = getMainAudioEl?.() ?? audioRef.current;
       if (main && trackDuration > 0) {
         const ct = main.currentTime;
+        const audioActive = !main.paused && !main.ended;
         const now = performance.now();
         if (now - lastProgressSync >= 250) {
           lastProgressSync = now;
           if (!seekScrubbingRef.current) {
             setProgress(ct);
           }
+        }
+
+        if (audioActive && !isPlaying && !seekScrubbingRef.current) {
+          setIsPlaying(true);
         }
 
         const effectiveDuration = effectivePlaybackDuration(
@@ -104,7 +109,7 @@ export function usePlayerProgressLoop({
         const atNaturalEnd = isAtTrackEnd(main, trackDuration);
 
         if (shouldTriggerTrackEnd({
-          isPlaying: isPlaying || atNaturalEnd,
+          isPlaying: isPlaying || audioActive || atNaturalEnd,
           currentTime: ct,
           effectiveDuration,
           seeking,
@@ -127,7 +132,7 @@ export function usePlayerProgressLoop({
         const preloadReady = isPreloadReadyForCrossfade(preloadAudioRef?.current);
 
         if (PRELOAD_ENABLED && CROSSFADE_ENABLED && canStartCrossfade({
-          isPlaying,
+          isPlaying: isPlaying || audioActive,
           seeking,
           seekCooldownActive: seekCooldown,
           crossfading: crossfadingRef.current,
@@ -220,7 +225,8 @@ export function usePlayerProgressLoop({
           startCrossfade();
         }
       }
-      const keepProgressLoop = isPlaying || (
+      const audioActive = main && !main.paused && !main.ended;
+      const keepProgressLoop = isPlaying || audioActive || (
         main
         && trackDuration > 0
         && isAtTrackEnd(main, trackDuration)
@@ -234,7 +240,8 @@ export function usePlayerProgressLoop({
 
     const kick = () => {
       const main = getMainAudioEl?.() ?? audioRef.current;
-      const keepProgressLoop = isPlaying || (
+      const audioActive = main && !main.paused && !main.ended;
+      const keepProgressLoop = isPlaying || audioActive || (
         main
         && trackDuration > 0
         && isAtTrackEnd(main, trackDuration)

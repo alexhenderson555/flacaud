@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { getAudioAnalyser, initAudioEngine } from '../utils/audioEngine';
 import {
   computeBarLevels,
@@ -25,7 +25,7 @@ function resizeVisualizerCanvas(canvas) {
   canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
 }
 
-export default function AudioVisualizer({ audioRef, isPlaying = false }) {
+export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = false }) {
   const canvasRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -49,6 +49,11 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
     return () => observer.disconnect();
   }, []);
 
+  const resolveAudioEl = useCallback(
+    () => getMainAudioEl?.() ?? audioRef?.current ?? null,
+    [audioRef, getMainAudioEl],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -63,7 +68,8 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
   }, []);
 
   useEffect(() => {
-    if (!isPlaying) return undefined;
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
 
     let cancelled = false;
     let waitRaf = null;
@@ -71,9 +77,10 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
     let lastFrame = 0;
 
     const bindAnalyser = () => {
-      if (!audioRef?.current) return false;
-      initAudioEngine(audioRef);
-      const analyser = getAudioAnalyser(audioRef);
+      const el = resolveAudioEl();
+      if (!el) return false;
+      initAudioEngine({ current: el });
+      const analyser = getAudioAnalyser({ current: el });
       if (!analyser) return false;
       analyserRef.current = analyser;
       dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
@@ -84,13 +91,14 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
 
     const waitForAudio = () => {
       if (cancelled) return;
-      const el = audioRef?.current;
+      const el = resolveAudioEl();
       if (!el) {
         waitRaf = requestAnimationFrame(waitForAudio);
         return;
       }
       if (playEl !== el) {
         playEl?.removeEventListener('play', onPlay);
+        analyserRef.current = null;
         playEl = el;
         playEl.addEventListener('play', onPlay);
       }
@@ -99,15 +107,6 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
       }
     };
     waitForAudio();
-
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return () => {
-        cancelled = true;
-        if (waitRaf) cancelAnimationFrame(waitRaf);
-        playEl?.removeEventListener('play', onPlay);
-      };
-    }
 
     const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
 
@@ -131,7 +130,9 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
 
     const draw = (time = 0) => {
       if (cancelled) return;
-      if (document.visibilityState === 'hidden' || !isPlaying) return;
+      const el = resolveAudioEl();
+      const audioActive = el && !el.paused && !el.ended;
+      if (document.visibilityState === 'hidden' || (!isPlaying && !audioActive)) return;
 
       if (time - lastFrame < FRAME_MS) {
         reqRef.current = requestAnimationFrame(draw);
@@ -180,7 +181,7 @@ export default function AudioVisualizer({ audioRef, isPlaying = false }) {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       playEl?.removeEventListener('play', onPlay);
     };
-  }, [audioRef, isPlaying]);
+  }, [audioRef, getMainAudioEl, isPlaying, resolveAudioEl]);
 
   return (
     <canvas
