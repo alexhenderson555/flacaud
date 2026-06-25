@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { PARTY_MODE_ENABLED } from './usePartyModeAvailable';
 
 function enterFullscreen() {
   if (!document.fullscreenElement) {
@@ -36,6 +37,7 @@ export function usePlayerOverlays() {
   }, []);
 
   const toggleOverlay = useCallback((overlay) => {
+    if (overlay === 'party' && !PARTY_MODE_ENABLED) return;
     if (overlay === 'party') {
       setIsPartyOpen((prev) => {
         const next = !prev;

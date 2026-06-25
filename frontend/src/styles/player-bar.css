@@ -1,58 +1,90 @@
-/* Player bar title — full width; badges sit on the artist row. */
+/* Compact player bar — shorter height, smaller type, tighter spacing */
+
+:root {
+  --layout-player-height: 72px;
+  --layout-page-pad-bottom: 100px;
+}
+
+@media (width <= 768px) {
+  :root {
+    --layout-player-height: 74px;
+    --layout-page-pad-bottom: 88px;
+  }
+}
+
+.player-bar {
+  gap: 0 16px;
+  padding: 0 16px;
+}
+
+.player-left {
+  gap: 12px;
+}
+
+.player-cover-thumb {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+}
+
+.player-bar--mobile:not(.player-bar--expanded) .player-cover-thumb {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+}
 
 .player-track-title {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  margin-bottom: 2px;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.player-track-title__text {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.player-track-title__text--marquee {
-  text-overflow: clip;
-}
-
-/* Auto-scroll when truncated — no hover required */
-.player-track-title__text--marquee .player-track-title__marquee-inner {
-  display: inline-block;
-  padding-right: 2.5em;
-  animation: player-title-marquee 16s linear infinite;
-  animation-play-state: running;
-}
-
-.player-track-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  width: 100%;
+  margin-bottom: 1px;
+  font-size: 0.875rem;
+  line-height: 1.2;
 }
 
 .player-track-sub .player-track-artist {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-bottom: 0;
-}
-
-.player-track-badges {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .player-up-next {
-  margin-top: 2px;
+  display: none;
+}
+
+@media (width >= 1480px) {
+  .player-up-next {
+    display: block;
+    margin-top: 1px;
+    font-size: 0.6875rem;
+  }
+}
+
+.player-seek-row {
+  gap: 12px;
+  font-size: 0.8rem;
+}
+
+.player-time {
+  font-size: 0.75rem;
+  min-width: 2.25rem;
+}
+
+.player-transport-row {
+  gap: 14px;
+}
+
+.player-overlay-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.player-right__cluster {
+  gap: 10px;
+}
+
+.player-quality-slot {
+  padding-left: 16px;
+  margin-left: 0;
+}
+
+.player-track-badges .meta-badge {
+  font-size: 0.625rem;
+  padding: 2px 6px;
 }

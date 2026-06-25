@@ -28,7 +28,6 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePartyModeAvailable } from '../hooks/usePartyModeAvailable';
 import PlayerMobileActions from './player/PlayerMobileActions';
 import PlayerMarqueeTitle from './player/PlayerMarqueeTitle';
-import '../styles/player-bar.css';
 
 const QUALITY_OPTIONS = [
   { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
@@ -205,9 +204,9 @@ export default function PlayerBar({
       : t('selectTrack'));
   const titleTooltip = (setActive && embedTitle) || currentTrack ? displayTitle : undefined;
   const artistTooltip = (setActive && embedTitle) || currentTrack ? displayArtistTooltip : undefined;
-  const transportPlaySize = isMobile ? 36 : 48;
-  const transportSkipSize = isMobile ? 20 : 24;
-  const transportMinorSize = isMobile ? 18 : 22;
+  const transportPlaySize = isMobile ? 34 : 42;
+  const transportSkipSize = isMobile ? 18 : 22;
+  const transportMinorSize = isMobile ? 16 : 20;
 
   const coverThumb = (size = 56) => (
     <div
@@ -685,7 +684,7 @@ export default function PlayerBar({
             )}
 
             <div className="player-left">
-              {coverThumb(isMobile ? 72 : 56)}
+              {coverThumb(isMobile ? 48 : 48)}
               <div className="player-track-meta">
                 <div className="player-track-title">
                   <PlayerMarqueeTitle

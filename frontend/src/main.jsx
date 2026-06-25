@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { initClientObservability } from './clientObservability.js'
 import { lazyRoute } from './utils/lazyRoute.js'
 import './index.css'
+import './styles/player-bar.css'
 import './styles/mobile-shell.css'
 
 initClientObservability()

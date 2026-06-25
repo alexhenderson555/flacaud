@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { PARTY_MODE_ENABLED } from './usePartyModeAvailable';
 
 const SEEK_STEP = 5;
 
@@ -122,7 +123,7 @@ export function usePlayerHotkeys({
           }
           break;
         case 'KeyP':
-          if (!e.ctrlKey && !e.metaKey) {
+          if (!e.ctrlKey && !e.metaKey && PARTY_MODE_ENABLED) {
             e.preventDefault();
             toggleOverlay('party');
           }
