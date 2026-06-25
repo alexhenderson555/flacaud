@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { showToast } from '../utils/toast';
 import { Disc, Download, Loader2, Music, Mic2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { enqueueDownloadJob } from '../utils/downloadJobs';
-import { getAccessToken } from '../utils/tokenStorage';
+import { enqueueDownloadJob, fetchJobStatus, startDownloadJob } from '../utils/downloadJobs';
 
 export default function StemSplitter() {
   const [url, setUrl] = useState('');
@@ -16,13 +15,13 @@ export default function StemSplitter() {
     if (!url.trim()) return;
     try {
       setError(null);
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
-        body: JSON.stringify({ url, job_type: 'download', quality: 'LOSSLESS', split: true })
+      const data = await startDownloadJob({
+        url: url.trim(),
+        quality: 'LOSSLESS',
+        jobType: 'download',
+        prefetch: false,
+        split: true,
       });
-      if (!res.ok) throw new Error('Failed to start stem splitting');
-      const data = await res.json();
       setJobId(data.job_id);
       setStatus(data.status);
       enqueueDownloadJob(data.job_id);
@@ -46,17 +45,15 @@ export default function StemSplitter() {
           return;
         }
         try {
-          const res = await fetch(`/api/jobs/${jobId}`, { headers: { Authorization: `Bearer ${getAccessToken() || ''}` } });
-          if (res.ok) {
-            const data = await res.json();
-            setStatus(data.status);
-            if (data.status === 'failed') {
-              setError(data.tracks?.[0]?.error || 'Job failed');
-              clearInterval(interval);
-            } else if (data.status === 'done') {
-              setTracks(data.tracks || []);
-              clearInterval(interval);
-            }
+          const data = await fetchJobStatus(jobId);
+          if (!data) return;
+          setStatus(data.status);
+          if (data.status === 'failed') {
+            setError(data.tracks?.[0]?.error || 'Job failed');
+            clearInterval(interval);
+          } else if (data.status === 'done') {
+            setTracks(data.tracks || []);
+            clearInterval(interval);
           }
         } catch (e) {
           console.error(e);
@@ -83,6 +80,7 @@ export default function StemSplitter() {
           <input
             type="text"
             placeholder="Paste Tidal track URL here..."
+            aria-label="Tidal track URL"
             style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1.2rem', padding: '12px 0' }}
             value={url}
             onChange={(e) => setUrl(e.target.value)}

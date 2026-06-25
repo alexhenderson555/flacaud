@@ -3,7 +3,7 @@ import { showToast } from '../utils/toast';
 import { motion } from 'framer-motion';
 import { X, Check, Zap, Star, Crown, CreditCard, ArrowRight } from 'lucide-react';
 import { PLAN_CATALOG } from '../constants/plans';
-import { getAccessToken } from '../utils/tokenStorage';
+import { apiPostJson } from '../utils/apiClient';
 
 const ICONS = {
   free: <Zap size={24} color="#a1a1aa" />,
@@ -29,20 +29,11 @@ export default function UpgradeModal({ onClose, lang, onPlanUpdated }) {
     if (!code) return;
     setRedeeming(true);
     try {
-      const token = getAccessToken();
-      const res = await fetch('/api/activation/redeem', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        showToast(data.detail || t('Invalid code', 'Неверный код'));
-        return;
-      }
+      const data = await apiPostJson(
+        '/api/activation/redeem',
+        { code },
+        { auth: true },
+      );
       showToast(data.message || t('Plan activated!', 'Тариф активирован!'));
       onPlanUpdated?.();
       onClose();
@@ -175,19 +166,15 @@ export default function UpgradeModal({ onClose, lang, onPlanUpdated }) {
                 type="button"
                 onClick={async () => {
                   try {
-                    const res = await fetch('/api/payments/create', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${getAccessToken() || ''}`,
-                      },
-                      body: JSON.stringify({ plan: selectedPlan }),
-                    });
-                    const data = await res.json();
+                    const data = await apiPostJson(
+                      '/api/payments/create',
+                      { plan: selectedPlan },
+                      { auth: true },
+                    );
                     if (data.url) window.location.href = data.url;
                     else showToast(data.detail || t('Payment unavailable', 'Оплата недоступна'));
-                  } catch {
-                    showToast(t('Server error', 'Ошибка сервера'));
+                  } catch (err) {
+                    showToast(err?.message || t('Server error', 'Ошибка сервера'));
                   }
                 }}
                 style={{

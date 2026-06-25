@@ -7,6 +7,20 @@ export default defineConfig({
   esbuild: {
     drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('three') || id.includes('@react-three')) return 'vendor-three'
+          if (id.includes('framer-motion')) return 'vendor-motion'
+          if (id.includes('lucide-react')) return 'vendor-icons'
+          if (id.includes('react-dom') || id.includes('/react/')) return 'vendor-react'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

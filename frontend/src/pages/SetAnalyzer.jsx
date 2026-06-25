@@ -18,6 +18,7 @@ import { normalizeTrack } from '../utils/trackNormalize';
 import { startDownloadJob, cancelJob } from '../utils/downloadJobs';
 import { enableDjAnalysisPreference } from '../utils/enableDjAnalysis';
 import { apiPostJson } from '../utils/apiClient';
+import { fetchJobStatus } from '../utils/downloadJobs';
 import { getAccessToken } from '../utils/tokenStorage';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
@@ -255,11 +256,8 @@ export default function SetAnalyzer() {
         return;
       }
       try {
-        const res = await fetch(`/api/jobs/${jobId}`, {
-          headers: { Authorization: `Bearer ${getAccessToken() || ''}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await fetchJobStatus(jobId);
+        if (!data) return;
         const outcome = resolveAnalyzerJobOutcome(data, t);
         const tracks = data.set_tracks || [];
 

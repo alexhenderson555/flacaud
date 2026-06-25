@@ -1,69 +1,70 @@
 # FlacAud (tidal-dl-ru)
 
-![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker)
+Production: **https://flacaud.ru**
 
-**FlacAud** — это передовая музыкальная платформа, разработанная для ценителей качественного звука. Проект предоставляет инструменты для загрузки Lossless-аудио, непрерывного воспроизведения и мощной обработки звука с использованием машинного обучения.
+Lossless Tidal streaming, FLAC downloads, library sync from 8 platforms, set analyzer, DJ tools, and AI playlists.
 
-## 🚀 Ключевые особенности
+## Stack
 
-- **Lossless загрузка**: Поддержка скачивания треков в максимальном качестве (FLAC, ALAC) без потери аудиоданных.
-- **ML Stem Splitting**: Интеграция с алгоритмами машинного обучения (Demucs) для разделения аудиодорожек на изолированные стемы (вокал, ударные, бас и другие инструменты).
-- **Gapless Playback**: Идеально плавное, непрерывное воспроизведение треков без пауз и задержек между ними, реализованное с использованием продвинутых Web Audio API техник.
-- **3D WebGL Party Mode**: Завораживающие 3D-визуализации, реагирующие на звук в реальном времени, работающие прямо в браузере.
-- **Кроссплатформенная синхронизация**: Мгновенная синхронизация вашей медиатеки, плейлистов и настроек между всеми устройствами.
+| Layer | Tech |
+|-------|------|
+| Frontend | React 19, Vite, Zustand, framer-motion, PWA |
+| API | FastAPI, SQLModel, JWT + HttpOnly refresh |
+| Worker | ARQ, Redis, yt-dlp, Demucs (optional) |
+| DB | PostgreSQL (prod) / SQLite (dev) |
+| Edge | Caddy TLS reverse proxy |
 
-## 🛠 Стек технологий
+## Local development
 
-Проект построен на основе современного, высокопроизводительного стека:
-
-### Frontend
-- **React 19** + **Vite**: Быстрый рендеринг и мгновенная сборка.
-- **Zustand**: Легковесное и предсказуемое управление глобальным состоянием приложения.
-- **react-three-fiber**: Декларативный 3D-рендеринг для WebGL визуализаций (Party Mode).
-- **@tanstack/react-virtual**: Эффективный рендеринг огромных списков треков и плейлистов без падения производительности.
-- **framer-motion**: Плавные, физически корректные анимации пользовательского интерфейса.
-
-### Backend & ML
-- **FastAPI**: Высокопроизводительный асинхронный веб-фреймворк для API.
-- **SQLModel**: Интуитивно понятный ORM, объединяющий возможности SQLAlchemy и валидацию Pydantic.
-- **ARQ + Redis**: Надежная и быстрая система асинхронных очередей для обработки фоновых задач.
-- **aubio & Demucs**: Мощные ML-модели и библиотеки для глубокого анализа аудио и разделения треков на стемы.
-
-### Инфраструктура
-- **Docker & Docker Compose**: Полная изоляция среды разработки и простота развертывания.
-
-## ⚙️ Установка и развертывание
-
-Проект легко разворачивается с помощью Docker. Убедитесь, что у вас установлены **Docker** и **Docker Compose**.
-
-### Шаг 1: Клонирование репозитория
 ```bash
-git clone https://github.com/yourusername/tidal-dl-ru.git
-cd tidal-dl-ru
+# Backend
+uv sync --dev --extra worker
+cp .env.example .env   # fill secrets
+uv run uvicorn tidal_dl_ru.server.app:app --reload --port 8000
+
+# Frontend
+cd frontend && npm ci && npm run dev
 ```
 
-### Шаг 2: Настройка переменных окружения
-Создайте файл `.env` в корневой директории проекта и скопируйте в него содержимое из шаблона (если имеется), либо настройте необходимые переменные:
-```bash
-cp .env.example .env
-```
-*Не забудьте указать ключи API, пароли для БД и настройки подключения к Redis.*
+Open http://localhost:5173 (API proxied to :8000).
 
-### Шаг 3: Запуск проекта
-Используйте Docker Compose для сборки и запуска всех сервисов:
+## Tests
+
 ```bash
-docker-compose up --build -d
+uv run pytest tests/ -q -k "not remote_flow_live"
+cd frontend && npm run test && npm run lint && npm run build
 ```
 
-### Шаг 4: Доступ к приложению
-- **Frontend клиент**: [http://localhost:3000](http://localhost:3000)
-- **Backend API документация (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+## Production deploy
 
-## 📄 Документация
+From repo root (Windows):
 
-Более подробная техническая информация об архитектуре проекта, взаимодействии компонентов и ML-моделях доступна в файле [ARCHITECTURE.md](./ARCHITECTURE.md).
+```powershell
+$env:TIDAL_SSH_PASSWORD = "..."
+python scripts/deploy_tidal.py
+```
 
----
-*Проект разработан для демонстрации продвинутых архитектурных навыков, интеграции ML-решений в современные веб-приложения и создания сложных высоконагруженных пользовательских интерфейсов.*
+Deploy builds frontend, pushes Docker images tagged `FLACAUD_TAG`, runs compose with `docker-compose.prod.yml`, smoke-checks `https://flacaud.ru/api/providers`.
+
+After deploy: **Ctrl+Shift+R** in the browser.
+
+## Required production env
+
+See `.env.example`. Critical:
+
+- `TIDALDLRU_JWT_SECRET`, `TIDALDLRU_SIGNING_SECRET`
+- `DATABASE_URL` (Postgres)
+- `TIDALDLRU_POOL_KEY` (Tidal account pool)
+- `GRAFANA_ADMIN_PASSWORD` (if observability overlay)
+
+Optional: `SENTRY_DSN`, `RESEND_API_KEY`, YooKassa keys.
+
+## Docs
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
+- [docs/SECURITY_AUDIT.md](./docs/SECURITY_AUDIT.md) — security checklist
+- [ops/RUNBOOK.md](./ops/RUNBOOK.md) — on-call operations
+
+## Repository
+
+https://github.com/alexhenderson555/flacaud

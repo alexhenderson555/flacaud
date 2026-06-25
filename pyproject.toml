@@ -32,7 +32,6 @@ dependencies = [
     "alembic>=1.13",
     "filelock>=3.13",
     "sentry-sdk[fastapi]>=2.20",
-    "slowapi>=0.1.10",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +48,7 @@ dev = [
     "ruff>=0.5",
     "fakeredis>=2.26",
     "alembic>=1.13",
+    "pip-audit>=2.7",
 ]
 
 [project.scripts]

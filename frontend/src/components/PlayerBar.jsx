@@ -444,6 +444,7 @@ export default function PlayerBar({
         className="player-overlay-btn"
         data-active={isKaraokeOpen}
         title={withHotkey('Karaoke Mode', PLAYER_HOTKEYS.karaoke)}
+        aria-label={lang === 'ru' ? 'Караоке' : 'Karaoke mode'}
       >
         <Mic2 size={22} />
       </button>
@@ -455,6 +456,7 @@ export default function PlayerBar({
           data-active={isPartyOpen}
           data-testid="player-party-btn"
           title={withHotkey(lang === 'ru' ? 'Party mode' : 'Party mode', PLAYER_HOTKEYS.party)}
+          aria-label={lang === 'ru' ? 'Party mode' : 'Party mode'}
         >
           <Sparkles size={22} />
         </button>
@@ -465,6 +467,7 @@ export default function PlayerBar({
         className="player-overlay-btn"
         data-active={isDJOpen}
         title={withHotkey('DJ Tools', PLAYER_HOTKEYS.dj)}
+        aria-label={lang === 'ru' ? 'DJ инструменты' : 'DJ tools'}
       >
         <Disc3 size={22} />
       </button>
@@ -474,6 +477,7 @@ export default function PlayerBar({
         className="player-overlay-btn"
         data-active={isEQOpen}
         title={withHotkey('Equalizer', PLAYER_HOTKEYS.eq)}
+        aria-label={lang === 'ru' ? 'Эквалайзер' : 'Equalizer'}
       >
         <Sliders size={22} />
       </button>
@@ -484,6 +488,7 @@ export default function PlayerBar({
         data-testid="player-queue-btn"
         data-active={isQueueOpen}
         title={withHotkey('Queue', PLAYER_HOTKEYS.queue)}
+        aria-label={lang === 'ru' ? 'Очередь' : 'Queue'}
       >
         <ListMusic size={22} />
       </button>

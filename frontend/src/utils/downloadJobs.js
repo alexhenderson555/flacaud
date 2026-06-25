@@ -1,7 +1,6 @@
 /** Track server download jobs shown in DownloadToast (bottom-right). */
 
 import { apiGetJson, apiPostJson } from './apiClient';
-import { getAccessToken } from './tokenStorage';
 import { prefetchAudioToCache } from './cache';
 
 const QUEUE_KEY = 'tidal-queue-jobs';
@@ -107,17 +106,16 @@ export async function startDownloadJob({
   track = null,
   optimisticId = null,
   prefetch = true,
+  split = false,
+  lyrics = false,
+  karaoke = false,
+  dj_analyze = false,
 }) {
-  const token = getAccessToken() || '';
-  const res = await fetch('/api/jobs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ url, job_type: jobType, quality }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.detail || 'Failed to start download');
-  }
+  const data = await apiPostJson(
+    '/api/jobs',
+    { url, job_type: jobType, quality, split, lyrics, karaoke, dj_analyze },
+    { auth: true },
+  );
   const title = track?.title || data.tracks?.[0]?.title || null;
   enqueueDownloadJob(data.job_id, { title, quality, replaces: optimisticId || null });
   if (prefetch && track?.provider_id) {

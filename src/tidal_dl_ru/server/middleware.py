@@ -49,6 +49,8 @@ def _rate_limit_rule(path: str, method: str) -> tuple[int, int] | None:
     # Quality probes require auth; keep a modest per-IP cap as defense in depth.
     if method == "GET" and "/api/quality/" in path and path.endswith("/available"):
         return (60, 60)
+    if method == "GET" and "/api/artist/" in path and path.endswith("/bio"):
+        return (60, 30)
     if method == "GET" and "/api/stream/" in path:
         return (60, 120)
     return None

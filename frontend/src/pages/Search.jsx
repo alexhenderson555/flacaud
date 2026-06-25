@@ -10,6 +10,8 @@ import VirtualTrackList from '../components/VirtualTrackList';
 import { suggestSearchCorrection, fixKeyboardLayout } from '../utils/searchQueryFix';
 import { tracksForPlaylistApi } from '../utils/playlistApi';
 import { getAccessToken } from '../utils/tokenStorage';
+import { startDownloadJob } from '../utils/downloadJobs';
+import { apiFetch, apiPostJson, apiPutJson, parseJsonSafe } from '../utils/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const dict = {
@@ -140,22 +142,12 @@ function Search() {
       showToast(lang === 'ru' ? 'Войдите, чтобы сохранить плейлист' : 'Sign in to save playlist');
       return;
     }
-    const res = await fetch('/api/playlists', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name }),
-    });
-    const created = await res.json();
-    if (!res.ok) throw new Error(created.detail || 'Failed to create playlist');
-    const update = await fetch(`/api/playlists/${created.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ tracks: tracksForPlaylistApi(tracks) }),
-    });
-    if (!update.ok) {
-      const err = await update.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to save tracks');
-    }
+    const created = await apiPostJson('/api/playlists', { name }, { auth: true });
+    await apiPutJson(
+      `/api/playlists/${created.id}`,
+      { tracks: tracksForPlaylistApi(tracks) },
+      { auth: true },
+    );
     showToast(lang === 'ru' ? 'Плейлист сохранён' : 'Playlist saved');
   };
 
@@ -184,17 +176,11 @@ function Search() {
   const performSearch = useCallback(async (searchQuery, offset = 0, append = false) => {
     setIsSearching(true);
     try {
-      const res = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
-        body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: PAGE_SIZE, offset })
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        const detail = errBody.detail || res.statusText;
-        throw new Error(typeof detail === 'string' ? detail : 'Search failed');
-      }
-      const data = await res.json();
+      const data = await apiPostJson(
+        '/api/search',
+        { provider: 'tidal', query: searchQuery, limit: PAGE_SIZE, offset },
+        { auth: true },
+      );
       if (data.tracks) {
         setRealResults((prev) => (append && prev ? [...prev, ...data.tracks] : data.tracks));
         setHasMore(Boolean(data.has_more));
@@ -209,12 +195,11 @@ function Search() {
         if (!append && data.tracks.length === 0) {
           const alt = fixKeyboardLayout(searchQuery);
           if (alt !== searchQuery) {
-            const altRes = await fetch('/api/search', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
-              body: JSON.stringify({ provider: 'tidal', query: alt, limit: PAGE_SIZE, offset: 0 })
-            });
-            const altData = altRes.ok ? await altRes.json() : null;
+            const altData = await apiPostJson(
+              '/api/search',
+              { provider: 'tidal', query: alt, limit: PAGE_SIZE, offset: 0 },
+              { auth: true },
+            );
             if (altData?.tracks?.length) {
               setRealResults(altData.tracks);
               setHasMore(Boolean(altData.has_more));
@@ -300,13 +285,13 @@ function Search() {
         formData.append('file', audioBlob, 'recording.webm');
         
         try {
-          const res = await fetch('/api/recognize', {
+          const res = await apiFetch('/api/recognize', {
             method: 'POST',
-            body: formData
+            auth: true,
+            body: formData,
           });
-          
           if (res.ok) {
-            const data = await res.json();
+            const data = await parseJsonSafe(res);
             if (data.tracks && data.tracks.length > 0) {
               const primaryArtist = data.tracks[0].artists?.[0] || 'Unknown';
               setQuery(`${primaryArtist} - ${data.tracks[0].title}`);
@@ -350,34 +335,20 @@ function Search() {
     }
     
     try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
-        body: JSON.stringify({
-          url: url,
-          quality: 'LOSSLESS',
-          lyrics: true,
-          karaoke: false,
-          dj_analyze: false
-        })
+      const data = await startDownloadJob({
+        url,
+        quality: 'LOSSLESS',
+        lyrics: true,
+        prefetch: true,
       });
-      
-      const data = await res.json();
-      if (res.ok) {
-        // Start caching the file in browser storage for offline playback
-        cacheAudioTrack(result, 'LOSSLESS').then(() => {});
-        
-        // Save job_id to queue
-        const saved = localStorage.getItem('tidal-queue-jobs');
-        const jobs = saved ? JSON.parse(saved) : [];
-        jobs.push(data.job_id);
-        localStorage.setItem('tidal-queue-jobs', JSON.stringify(jobs));
-      } else {
-        showToast(`Failed to start download:\n${data.detail || 'Unknown error'}`);
-      }
+      void cacheAudioTrack(result, 'LOSSLESS');
+      const saved = localStorage.getItem('tidal-queue-jobs');
+      const jobs = saved ? JSON.parse(saved) : [];
+      jobs.push(data.job_id);
+      localStorage.setItem('tidal-queue-jobs', JSON.stringify(jobs));
     } catch (err) {
       console.error(err);
-      showToast('Failed to connect to backend for downloading.');
+      showToast(err?.message || 'Failed to connect to backend for downloading.');
     }
   };
 
@@ -408,20 +379,19 @@ function Search() {
     setIsGenerating(true);
     setAiResults(null);
     try {
-      const res = await fetch('/api/ai-playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
-        body: JSON.stringify({ query: aiQuery, imageBase64: aiImageBase64, limit: 10 })
-      });
-      const data = await res.json();
-      if (res.ok && data.tracks?.length) {
+      const data = await apiPostJson(
+        '/api/ai-playlist',
+        { query: aiQuery, imageBase64: aiImageBase64, limit: 10 },
+        { auth: true },
+      );
+      if (data.tracks?.length) {
         setAiResults(data.tracks);
       } else {
-        showToast(`Failed to generate playlist: ${data.detail || 'No tracks found'}`);
+        showToast('Failed to generate playlist: No tracks found');
       }
     } catch (err) {
       console.error(err);
-      showToast('Network error while generating playlist.');
+      showToast(err?.message || 'Network error while generating playlist.');
     }
     setIsGenerating(false);
   };
@@ -431,25 +401,22 @@ function Search() {
     setIsGenerating(true);
     try {
       const existingTitles = aiResults.map(t => t.title).join(', ');
-      // We send a request asking for more tracks, avoiding the ones we already have
-      const res = await fetch('/api/ai-playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
-        body: JSON.stringify({ 
-          query: aiQuery + ` (Do NOT include these: ${existingTitles})`, 
-          limit: 10 
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.tracks) {
-        // Append new tracks to the existing results
+      const data = await apiPostJson(
+        '/api/ai-playlist',
+        {
+          query: `${aiQuery} (Do NOT include these: ${existingTitles})`,
+          limit: 10,
+        },
+        { auth: true },
+      );
+      if (data.tracks) {
         setAiResults(prev => [...prev, ...data.tracks]);
       } else {
-        showToast(`Failed to generate more: ${data.detail || 'Unknown error'}`);
+        showToast('Failed to generate more tracks');
       }
     } catch (err) {
       console.error(err);
-      showToast('Network error while generating more tracks.');
+      showToast(err?.message || 'Network error while generating more tracks.');
     }
     setIsGenerating(false);
   };

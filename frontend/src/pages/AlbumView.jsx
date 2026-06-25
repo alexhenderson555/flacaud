@@ -4,6 +4,7 @@ import { useParams, useOutletContext, useNavigate, Link } from 'react-router-dom
 import { Play, ChevronLeft, Heart } from 'lucide-react';
 import PlaylistModal from '../components/PlaylistModal';
 import LibraryTrackRow from '../components/LibraryTrackRow';
+import { apiGetJson } from '../utils/apiClient';
 
 export default function AlbumView() {
   const { id } = useParams();
@@ -32,11 +33,8 @@ export default function AlbumView() {
     const fetchAlbum = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/album/${id}`);
-        if (res.ok) {
-          const d = await res.json();
-          setData(d);
-        }
+        const d = await apiGetJson(`/api/album/${id}`);
+        setData(d);
       } catch (err) {
         console.error(err);
       }

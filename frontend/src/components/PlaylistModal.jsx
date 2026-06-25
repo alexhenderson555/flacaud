@@ -1,32 +1,21 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, ListMusic } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { apiGetJson, apiPostJson, apiPutJson } from '../utils/apiClient';
 import { getAccessToken } from '../utils/tokenStorage';
-
-async function putPlaylistTracks(token, playlistId, tracks) {
-  return fetch(`/api/playlists/${playlistId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ tracks }),
-  });
-}
 
 export default function PlaylistModal({ track, onClose, onUpdated }) {
   const [playlists, setPlaylists] = useState([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
-  const getToken = () => getAccessToken();
+  const isLoggedIn = () => Boolean(getAccessToken());
 
   useEffect(() => {
     const fetchPlaylists = async () => {
-      const token = getToken();
-      if (token) {
+      if (isLoggedIn()) {
         try {
-          const res = await fetch('/api/playlists', { headers: { Authorization: `Bearer ${token}` } });
-          if (res.ok) {
-            const data = await res.json();
-            setPlaylists(data.map(p => ({ ...p, tracks: JSON.parse(p.tracks_json || '[]') })));
-          }
+          const data = await apiGetJson('/api/playlists', { auth: true });
+          setPlaylists(data.map((p) => ({ ...p, tracks: JSON.parse(p.tracks_json || '[]') })));
         } catch (e) { console.error(e); }
       } else {
         const saved = localStorage.getItem('tidal-playlists');
@@ -47,22 +36,14 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
     if (!newPlaylistName.trim()) return;
 
     let newPlaylist = { id: Date.now().toString(), name: newPlaylistName, tracks: track ? [track] : [] };
-    const token = getToken();
 
-    if (token) {
+    if (isLoggedIn()) {
       try {
-        const res = await fetch('/api/playlists', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ name: newPlaylistName }),
-        });
-        if (res.ok) {
-          const dbData = await res.json();
-          const tracks = track ? [track] : [];
-          newPlaylist = { ...dbData, tracks };
-          if (track) {
-            await putPlaylistTracks(token, newPlaylist.id, tracks);
-          }
+        const dbData = await apiPostJson('/api/playlists', { name: newPlaylistName }, { auth: true });
+        const tracks = track ? [track] : [];
+        newPlaylist = { ...dbData, tracks };
+        if (track) {
+          await apiPutJson(`/api/playlists/${newPlaylist.id}`, { tracks }, { auth: true });
         }
       } catch (e) { console.error(e); }
     }
@@ -90,10 +71,9 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
 
     savePlaylists(newPlaylists);
 
-    const token = getToken();
-    if (token && updatedPlaylist) {
+    if (isLoggedIn() && updatedPlaylist) {
       try {
-        await putPlaylistTracks(token, playlistId, updatedPlaylist.tracks);
+        await apiPutJson(`/api/playlists/${playlistId}`, { tracks: updatedPlaylist.tracks }, { auth: true });
       } catch (e) { console.error(e); }
     }
 

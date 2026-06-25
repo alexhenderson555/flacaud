@@ -1,7 +1,7 @@
 /** Routes guests may browse without logging in. */
 
 const GUEST_EXACT = new Set([
-  '/', '/landing', '/account', '/search', '/recommendations', '/radio', '/sync',
+  '/', '/landing', '/account', '/search', '/recommendations', '/radio', '/genreverse', '/sync',
   '/terms', '/privacy', '/verify-email', '/forgot-password', '/reset-password',
 ]);
 
