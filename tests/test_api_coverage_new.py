@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.conftest import ops_headers
 from tidal_dl_ru.server.app import app
 
 client = TestClient(app)
@@ -39,10 +40,12 @@ def test_stream_api(mock_provider):
 
 
 def test_auth_status():
-    response = client.get("/api/auth/status")
-    assert response.status_code in [200, 401]
+    response = client.get("/api/auth/status", headers=ops_headers())
+    assert response.status_code == 200
+    assert "logged_in" in response.json()
 
 
 def test_auth_login():
-    response = client.get("/api/auth/tidal-login")
-    assert response.status_code in [200, 307]
+    response = client.get("/api/auth/tidal-login", headers=ops_headers())
+    assert response.status_code == 200
+    assert "url" in response.json()

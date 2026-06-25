@@ -30,7 +30,6 @@ from tidal_dl_ru.database.refresh_tokens import (
     refresh_cookie_secure,
     revoke_refresh_token,
 )
-from tidal_dl_ru.server.email_outbound import public_site_base, send_email_verification, send_password_reset_email
 from tidal_dl_ru.providers.tidal.auth import (
     AuthError,
     extract_code_from_url,
@@ -39,6 +38,12 @@ from tidal_dl_ru.providers.tidal.auth import (
     pkce_login_url,
     save_tokens,
 )
+from tidal_dl_ru.server.email_outbound import (
+    public_site_base,
+    send_email_verification,
+    send_password_reset_email,
+)
+from tidal_dl_ru.server.ops_auth import require_ops_access
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 log = logging.getLogger(__name__)
@@ -358,14 +363,18 @@ def logout(request: Request, response: Response, session: Session = Depends(get_
 
 
 @router.get("/status")
-def auth_status():
+def auth_status(request: Request):
+    # Exposes pool token metadata + triggers the Tidal OAuth flow — admin only.
+    # require_ops_access is a no-op when no ops key is set (dev/tests).
+    require_ops_access(request)
     t = load_tokens()
     if t and t.access_token:
         return {"logged_in": True, "user_id": t.user_id, "country": t.country_code}
     return {"logged_in": False}
 
 @router.get("/tidal-login")
-def auth_login_url():
+def auth_login_url(request: Request):
+    require_ops_access(request)
     url, verifier = pkce_login_url()
     return {"url": url, "verifier": verifier}
 
@@ -374,7 +383,8 @@ class AuthCallback(BaseModel):
     verifier: str
 
 @router.post("/callback")
-def auth_callback(req: AuthCallback):
+def auth_callback(req: AuthCallback, request: Request):
+    require_ops_access(request)
     try:
         code = extract_code_from_url(req.redirect_url)
         with httpx.Client() as c:

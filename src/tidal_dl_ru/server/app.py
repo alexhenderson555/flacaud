@@ -30,8 +30,8 @@ from fastapi.staticfiles import StaticFiles
 
 from tidal_dl_ru.database.database import check_db, create_db_and_tables
 from tidal_dl_ru.server.config_check import validate_production_config
-from tidal_dl_ru.server.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 from tidal_dl_ru.server.metrics import collect_metrics, record_health
+from tidal_dl_ru.server.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 from tidal_dl_ru.server.request_logging import RequestLoggingMiddleware
 from tidal_dl_ru.server.settings import settings
 
@@ -67,9 +67,9 @@ def _arq(app: FastAPI) -> ArqRedis:
 from tidal_dl_ru.server.routers.auth import router as auth_router
 from tidal_dl_ru.server.routers.jobs import router as jobs_router
 from tidal_dl_ru.server.routers.library import router as library_router
+from tidal_dl_ru.server.routers.match_rules import router as match_rules_router
 from tidal_dl_ru.server.routers.sets import router as sets_router
 from tidal_dl_ru.server.routers.share import router as share_router
-from tidal_dl_ru.server.routers.match_rules import router as match_rules_router
 from tidal_dl_ru.server.routers.subscription import router as subscription_router
 from tidal_dl_ru.server.routers.transfer import router as transfer_router
 

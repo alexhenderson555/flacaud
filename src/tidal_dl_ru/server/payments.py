@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 import httpx
@@ -172,8 +173,13 @@ def process_webhook(body: dict) -> bool:
 
     expected_price = PLAN_PRICE.get(plan)
     paid_value = (verified.get("amount") or {}).get("value")
-    if expected_price and paid_value and str(paid_value) != str(expected_price):
-        return False
+    if expected_price and paid_value:
+        # Numeric compare so "199" / "199.0" / "199.00" don't reject a valid pay.
+        try:
+            if Decimal(str(paid_value)) != Decimal(str(expected_price)):
+                return False
+        except (InvalidOperation, ValueError):
+            return False
 
     telegram_id_str = metadata.get("telegram_id")
     user_id_str = metadata.get("user_id")

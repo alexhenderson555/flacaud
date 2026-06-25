@@ -37,6 +37,7 @@ from sqlalchemy.orm import (
 )
 
 from tidal_dl_ru.config import POOL_DB_FILE, POOL_KEY_FILE, ensure_dirs
+from tidal_dl_ru.providers.tidal.auth import AuthError
 from tidal_dl_ru.providers.tidal.auth import refresh_token as refresh_tidal_token
 from tidal_dl_ru.providers.tidal.models import TokenSet
 
@@ -273,6 +274,12 @@ def acquire(
     http = http or httpx.Client(timeout=30.0)
     try:
         tokens = refresh_tidal_token(http, acc.refresh_token)
+    except AuthError:
+        # Refresh genuinely failed (revoked/expired token) — ban the dead account
+        # so it isn't handed out again. Transient/network errors raise other types
+        # and are left untouched. Re-raise so the caller can pick another account.
+        report_failure(acc.id, 401)
+        raise
     finally:
         if own_http:
             http.close()

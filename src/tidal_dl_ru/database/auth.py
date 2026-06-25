@@ -76,8 +76,14 @@ _PWRESET_SALT = "tidaldl-pwreset-v1"
 _EMAIL_VERIFY_SALT = "tidaldl-emailverify-v1"
 
 
+# Separate signing key from the JWT secret so leaking one doesn't compromise
+# the other. Falls back to the JWT secret when SIGNING_SECRET is unset (dev/tests)
+# to preserve existing behaviour.
+_SIGNING_SECRET = os.environ.get("TIDALDLRU_SIGNING_SECRET", "").strip() or SECRET_KEY
+
+
 def _timed_serializer(salt: str) -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(SECRET_KEY, salt=salt)
+    return URLSafeTimedSerializer(_SIGNING_SECRET, salt=salt)
 
 
 def _sign_uid_token(salt: str, user_id: int) -> str:

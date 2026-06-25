@@ -508,10 +508,10 @@ async def build_recommendations(
                 # Fallback to general generic if subgenre is perfectly unknown
                 logger.warning(f"No seeds found for genre '{genre}', falling back to general list")
                 seed_artists = _get_seeds_for_genre("Pop")
-            
+
             # Pick 2-3 random seed artists to generate infinite variety for the radio
             chosen_artists = random.sample(seed_artists, min(3, len(seed_artists)))
-            
+
             try:
                 for artist_name in chosen_artists:
                     # search for top tracks by this artist
@@ -520,7 +520,7 @@ async def build_recommendations(
                 random.shuffle(genre_tracks)
             except Exception as e:
                 logger.error(f"Failed to search for genre artists: {e}")
-                
+
             for t in genre_tracks[:6]:
                 if t.provider_id:
                     seed_tids.append(str(t.provider_id))
@@ -535,7 +535,7 @@ async def build_recommendations(
             await _collect_track_neighbourhood(
                 client, tid, tracks, seen, artist_counts, limit,
             )
-            
+
             # Affinity expansion only if using personal library seeds
             if not genre:
                 affinity_ids = (

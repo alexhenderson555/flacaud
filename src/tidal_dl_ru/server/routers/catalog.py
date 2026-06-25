@@ -20,10 +20,10 @@ from tidal_dl_ru.providers.tidal import pool as tidal_pool
 from tidal_dl_ru.providers.tidal.client import TidalClient, cover_url
 from tidal_dl_ru.providers.tidal.models import Artist as TidalArtist
 from tidal_dl_ru.providers.tidal.provider import _to_universal, to_universal_enriched
-from tidal_dl_ru.server.artist_bio_cache import bio_cache_get, bio_cache_set
-from tidal_dl_ru.server.gemini_text import gemini_generate_text
 from tidal_dl_ru.server.ai_playlist_cache import cache_get as ai_cache_get
 from tidal_dl_ru.server.ai_playlist_cache import cache_set as ai_cache_set
+from tidal_dl_ru.server.artist_bio_cache import bio_cache_get, bio_cache_set
+from tidal_dl_ru.server.gemini_text import gemini_generate_text
 from tidal_dl_ru.server.recommendations import (
     _get_genres_db,
     build_recommendations,

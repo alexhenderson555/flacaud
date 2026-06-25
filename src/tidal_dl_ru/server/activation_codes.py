@@ -10,11 +10,11 @@ from typing import Optional
 from sqlmodel import Field, Session, SQLModel, select
 
 from tidal_dl_ru.bot.users import Plan
+from tidal_dl_ru.database import database as db_mod
 from tidal_dl_ru.server.subscription_apply import (
     apply_paid_plan_for_telegram,
     apply_paid_plan_for_user_id,
 )
-from tidal_dl_ru.database import database as db_mod
 
 
 class ActivationCode(SQLModel, table=True):

@@ -124,7 +124,7 @@ export async function routeMediaToken(page) {
 export async function routeSearchTracks(page, handler) {
   await page.route('**/api/search**', async (route) => {
     const req = route.request();
-    let query = '';
+    let query;
     if (req.method() === 'POST') {
       try {
         query = req.postDataJSON()?.query || '';

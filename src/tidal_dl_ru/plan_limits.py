@@ -26,10 +26,10 @@ def cap_stream_quality(quality: str, plan: str | None) -> str:
     if q == "HI_RES_LOSSLESS":
         q = "HI_RES"
     max_q = max_stream_quality_for_plan(plan)
-    
+
     if q == "LOSSLESS" and max_q == "HI_RES":
         q = "HI_RES"
-        
+
     if q not in _UI_ORDER:
         return max_q
     if _UI_ORDER.index(q) < _UI_ORDER.index(max_q):

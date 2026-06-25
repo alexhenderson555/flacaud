@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { installApiStubs, installE2EAuth } from './helpers.js';
+import { installE2EAuth } from './helpers.js';
 
 const SET_URL = 'https://soundcloud.com/e2e/demo-set';
 

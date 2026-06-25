@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { installE2EAuth, installPlayerStubs, SEARCH_INPUT, startSearchPlayback } from './helpers.js';
+import { installE2EAuth, installPlayerStubs, startSearchPlayback } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',

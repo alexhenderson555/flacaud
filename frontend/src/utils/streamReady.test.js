@@ -11,7 +11,7 @@ describe('waitForLosslessStreamReady', () => {
   });
 
   it('returns true on 206', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       status: 206,
       body: { cancel: vi.fn() },
     });
@@ -19,7 +19,7 @@ describe('waitForLosslessStreamReady', () => {
   });
 
   it('retries 503 then succeeds', async () => {
-    global.fetch = vi
+    globalThis.fetch = vi
       .fn()
       .mockResolvedValueOnce({ status: 503 })
       .mockResolvedValueOnce({ status: 206, body: { cancel: vi.fn() } });

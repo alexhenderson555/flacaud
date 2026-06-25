@@ -12,8 +12,9 @@ from typing import Any, Callable, Optional
 import redis
 from pydantic import BaseModel, Field
 
-from tidal_dl_ru.server.transfer_logging import log_resolve_summary
+from tidal_dl_ru.providers.base import ProviderError
 from tidal_dl_ru.server.settings import settings
+from tidal_dl_ru.server.transfer_logging import log_resolve_summary
 
 logger = logging.getLogger(__name__)
 

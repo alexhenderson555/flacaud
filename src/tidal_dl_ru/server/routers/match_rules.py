@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.database import get_session
-from tidal_dl_ru.database.models import TransferMatchRule, User
+from tidal_dl_ru.database.models import User
 from tidal_dl_ru.server.match_rules_service import create_rule, delete_rule, list_rules
 
 router = APIRouter(prefix="/api/transfer/match-rules", tags=["transfer"])

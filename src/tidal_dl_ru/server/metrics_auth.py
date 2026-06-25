@@ -8,7 +8,6 @@ from fastapi import Request
 
 from tidal_dl_ru.server.ops_auth import require_ops_access
 
-
 _PRIVATE_NETS = (
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),

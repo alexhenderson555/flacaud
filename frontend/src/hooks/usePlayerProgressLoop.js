@@ -10,7 +10,6 @@ import {
   clearIdleAudioSlot,
   resumeMainPlaybackAfterHandoff,
   isAtTrackEnd,
-  shouldAdvanceToNextTrack,
 } from '../utils/playerTransportLogic';
 import { initAudioEngine as setupAudioEngine } from '../utils/audioEngine';
 

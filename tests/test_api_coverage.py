@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.conftest import ops_headers
 from tidal_dl_ru.server.app import app
 
 client = TestClient(app)
@@ -47,6 +48,6 @@ def test_image_proxy_rejects_non_http_scheme():
     assert response.json()["detail"] == "Invalid URL"
 
 def test_auth_status():
-    response = client.get("/api/auth/status")
+    response = client.get("/api/auth/status", headers=ops_headers())
     assert response.status_code == 200
     assert "logged_in" in response.json()

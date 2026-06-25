@@ -13,7 +13,7 @@ curl -s http://localhost:8001/healthz | jq
 export DEPLOY_HOST=your.server
 export DEPLOY_USER=root
 export DEPLOY_SSH_KEY=~/.ssh/id_ed25519
-python scripts/deploy.py
+python scripts/deploy_tidal.py
 ```
 
 Or on the server (preferred):

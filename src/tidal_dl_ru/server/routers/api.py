@@ -63,10 +63,11 @@ def get_app_logs(request: Request):
 @router.post("/api/webhooks/yookassa")
 async def yookassa_webhook(request: Request) -> dict:
     """YooKassa sends payment.succeeded notifications here."""
+    # request.client.host is the real client IP when uvicorn runs with
+    # --proxy-headers (Caddy trusted via --forwarded-allow-ips). A raw
+    # X-Forwarded-For is attacker-controlled, so we do not read it here;
+    # server-side _fetch_payment re-verification is the real defense anyway.
     client_ip = request.client.host if request.client else ""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
 
     allowed_subnets = [
         ipaddress.ip_network("185.71.76.0/27"),

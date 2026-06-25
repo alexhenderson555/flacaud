@@ -3,17 +3,13 @@
  */
 
 import { getAccessToken } from './tokenStorage';
+// Single ApiError class shared with apiFetchCore so `instanceof ApiError` holds
+// regardless of which wrapper threw (apiFetchCore has no dep on this module).
+import { ApiError } from './apiFetchCore';
+
+export { ApiError };
 
 const DEFAULT_TIMEOUT_MS = 25000;
-
-export class ApiError extends Error {
-  constructor(message, { status = 0, code = 'unknown' } = {}) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-  }
-}
 
 export function apiBase() {
   return window.__TAURI__ ? 'http://localhost:8000' : '';

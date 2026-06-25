@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
 from typing import Optional
 
 import redis
+from filelock import FileLock, Timeout
 
 from tidal_dl_ru.server.schemas import AnalysisProgress, JobStatus, TrackProgress
 from tidal_dl_ru.server.settings import settings
@@ -232,6 +234,8 @@ def mark_cancelled(job_id: str, reason: str = "Cancelled by user") -> bool:
 
 
 _registry_path = settings.jobs_dir / "downloaded_tracks.json"
+# Serializes the read-modify-write below across concurrent worker processes.
+_registry_lock = FileLock(str(settings.jobs_dir / "downloaded_tracks.json.lock"))
 
 def _load_registry() -> dict[str, str | dict]:
     if not _registry_path.exists():
@@ -327,8 +331,7 @@ def mark_downloaded(
     owner_id: int | None = None,
 ) -> None:
     _registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry = _load_registry()
-    registry[provider_id] = {
+    entry = {
         "path": relative_path,
         "title": title or "",
         "artist": artist or "",
@@ -338,8 +341,18 @@ def mark_downloaded(
         "at": time.time(),
     }
     try:
-        with open(_registry_path, "w", encoding="utf-8") as f:
-            json.dump(registry, f, ensure_ascii=False, indent=2)
+        # Lock the whole read-modify-write so concurrent workers don't clobber
+        # each other; write to a temp file + atomic replace so readers (which
+        # don't lock) never see a half-written file.
+        with _registry_lock.acquire(timeout=10):
+            registry = _load_registry()
+            registry[provider_id] = entry
+            tmp = _registry_path.with_name(_registry_path.name + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(registry, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, _registry_path)
+    except Timeout:
+        logger.warning("registry lock busy; skipped mark_downloaded for %s", provider_id)
     except Exception as e:
         logger.warning("Failed to save registry: %s", e)
 

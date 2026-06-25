@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'src-tauri']),
+  globalIgnores(['dist', 'dist-*', '**/dist-*/**', 'src-tauri']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -24,7 +24,13 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/refs': 'warn',
       'react-hooks/immutability': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-refresh/only-export-components': 'warn',
     },
+  },
+  {
+    files: ['**/*.{test,spec}.js'],
+    languageOptions: { globals: { ...globals.node } },
   },
   {
     // Playwright e2e specs/helpers and build config run in Node, not the browser.
