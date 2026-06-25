@@ -321,6 +321,17 @@ export function shouldNotifyDownloadTierFallback(streamTier, downloadTier) {
   return a !== b;
 }
 
+/** Skip noisy fallback toasts when 320k is expected or during radio bootstrap. */
+export function shouldAnnounceQualityFallback({
+  effective,
+  lower = null,
+  suppressed = false,
+} = {}) {
+  if (suppressed) return false;
+  if (effective === 'HIGH' || lower === 'HIGH') return false;
+  return true;
+}
+
 /** Map registry / API quality strings to UI tier ids. */
 export function normalizeRegistryQuality(q) {
   if (!q) return null;

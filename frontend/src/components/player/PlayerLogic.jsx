@@ -88,6 +88,7 @@ export default function PlayerLogic({ children }) {
   const fadeInPendingRef = useRef(false);
   const skipEndedRef = useRef(false);
   const skipAudioSrcSyncRef = useRef(null);
+  const suppressQualityToastsRef = useRef(false);
 
   const applyVolume = useCallback((next) => {
     setVolume((prev) => {
@@ -199,6 +200,7 @@ export default function PlayerLogic({ children }) {
     setIsLoading,
     setIsPlaying,
     setProgress,
+    suppressQualityToastsRef,
   });
 
   const setDefaultPlaybackQuality = useCallback((q) => {
@@ -324,6 +326,7 @@ export default function PlayerLogic({ children }) {
     deferPlayUntilReady,
     pauseSetEmbed,
     releaseSetEmbed,
+    suppressQualityToastsRef,
   });
 
   usePlayerPersistence({

@@ -12,6 +12,7 @@ import {
   resolvePlayerUiQuality,
   isPausedMidPlayback,
   qualityPreferenceFallbackToast,
+  shouldAnnounceQualityFallback,
 } from './qualityPrefs.js';
 
 describe('qualityPrefs', () => {
@@ -112,5 +113,12 @@ describe('qualityPrefs', () => {
       effective: 'HIGH',
     });
     expect(msg.trim().length).toBeGreaterThan(0);
+  });
+
+  it('shouldAnnounceQualityFallback skips 320k and radio suppression', () => {
+    expect(shouldAnnounceQualityFallback({ effective: 'HIGH' })).toBe(false);
+    expect(shouldAnnounceQualityFallback({ lower: 'HIGH' })).toBe(false);
+    expect(shouldAnnounceQualityFallback({ effective: 'LOSSLESS', suppressed: true })).toBe(false);
+    expect(shouldAnnounceQualityFallback({ effective: 'LOSSLESS' })).toBe(true);
   });
 });

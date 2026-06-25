@@ -281,7 +281,7 @@ export default function PlayerBar({
         ) : playing ? (
           <Pause size={size * 0.5} fill="currentColor" />
         ) : (
-          <Play size={size * 0.5} fill="currentColor" style={{ marginLeft: 2 }} />
+          <Play size={size * 0.46} fill="currentColor" />
         )}
       </button>
     );
@@ -694,9 +694,6 @@ export default function PlayerBar({
                   >
                     {displayTitle}
                   </PlayerMarqueeTitle>
-                </div>
-                <div className="player-track-sub">
-                  <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
                   {!setActive && currentTrack && (
                     <div className="player-track-badges">
                       {formatTrackYear(currentTrack) && (
@@ -718,6 +715,7 @@ export default function PlayerBar({
                     </div>
                   )}
                 </div>
+                <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
                 {!setActive && nextTrack && !isMobile && (
                   <div
                     data-testid="player-up-next"

@@ -9,6 +9,7 @@ export function usePlayerRadio({
   t,
   playQueue,
   startTrackRadioRef,
+  suppressQualityToastsRef,
 }) {
   const [radioLoadingTrackId, setRadioLoadingTrackId] = useState(null);
 
@@ -16,6 +17,7 @@ export function usePlayerRadio({
     const pid = String(track?.provider_id || '');
     if (!pid) return false;
     setRadioLoadingTrackId(pid);
+    if (suppressQualityToastsRef) suppressQualityToastsRef.current = true;
 
     const provider = track.provider || 'tidal';
 
@@ -92,8 +94,13 @@ export function usePlayerRadio({
       return false;
     } finally {
       setRadioLoadingTrackId((cur) => (cur === pid ? null : cur));
+      if (suppressQualityToastsRef) {
+        window.setTimeout(() => {
+          suppressQualityToastsRef.current = false;
+        }, 6000);
+      }
     }
-  }, [lang, playQueue, t]);
+  }, [lang, playQueue, t, suppressQualityToastsRef]);
 
   useEffect(() => {
     if (startTrackRadioRef) startTrackRadioRef.current = startTrackRadio;

@@ -25,6 +25,7 @@ export function usePlayerTransport(props) {
     t: props.t,
     playQueue: queue.playQueue,
     startTrackRadioRef,
+    suppressQualityToastsRef: props.suppressQualityToastsRef,
   });
 
   const progress = usePlayerProgressLoop({

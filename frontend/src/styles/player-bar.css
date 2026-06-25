@@ -34,14 +34,32 @@
 }
 
 .player-track-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
   margin-bottom: 1px;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
   line-height: 1.2;
 }
 
-.player-track-sub .player-track-artist {
-  font-size: 0.75rem;
+.player-track-title__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.player-track-artist {
+  font-size: 0.8125rem;
   line-height: 1.2;
+}
+
+.player-track-badges {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .player-up-next {
@@ -67,7 +85,17 @@
 }
 
 .player-transport-row {
-  gap: 14px;
+  gap: 12px;
+}
+
+.player-transport-btn {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.player-transport-btn svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .player-overlay-btn svg {
@@ -87,4 +115,14 @@
 .player-track-badges .meta-badge {
   font-size: 0.625rem;
   padding: 2px 6px;
+}
+
+.track-row--library .track-row__icon-btn.btn-secondary svg,
+.track-row--library .track-row__icon-btn.btn-primary svg {
+  width: 16px;
+  height: 16px;
+}
+
+.track-row--library .track-row__actions {
+  gap: 6px;
 }

@@ -104,7 +104,7 @@ export default function TrackRowActions({
           title={showPauseIcon(track) ? t('pause') : t('playPreview')}
           style={{ background: isTrackCurrent(track) ? 'var(--accent-glow)' : undefined }}
         >
-          {showPauseIcon(track) ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+          {showPauseIcon(track) ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
         </button>
       )}
       {showDownload && onDownload && (

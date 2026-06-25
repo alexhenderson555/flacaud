@@ -27,6 +27,7 @@ import {
   qualityPreferenceFallbackToast,
   streamQualityTidalFallbackToast,
   qualityTierBlockedToast,
+  shouldAnnounceQualityFallback,
 } from '../utils/qualityPrefs';
 import { readQualityProbeCache, writeQualityProbeCache } from '../utils/qualityProbeCache';
 import { waitForLosslessStreamReady } from '../utils/streamReady';
@@ -89,6 +90,7 @@ export function usePlaybackQuality({
   setIsLoading,
   setIsPlaying,
   setProgress,
+  suppressQualityToastsRef,
 }) {
   const [playbackQuality, setPlaybackQualityState] = useState(() =>
     clampQualityToPlan(getStoredPlaybackQuality(), effectivePlan),
@@ -199,7 +201,14 @@ export function usePlaybackQuality({
     if (!useAuto && effective !== wantedQ) {
       const planBlocked = !isQualityAllowedForPlan(wantedQ, effectivePlan);
       const trackKeyNow = trackKeyRef.current;
-      if (trackKeyNow && isProbeReadyForTrack(activeProbe, trackKeyNow)) {
+      if (
+        trackKeyNow
+        && isProbeReadyForTrack(activeProbe, trackKeyNow)
+        && shouldAnnounceQualityFallback({
+          effective,
+          suppressed: suppressQualityToastsRef?.current,
+        })
+      ) {
         showToast?.(qualityPreferenceFallbackToast(lang, {
           planBlocked,
           tidalCatalogOnly: isTidalCatalogOnlyLossless(activeProbe),
@@ -221,6 +230,7 @@ export function usePlaybackQuality({
     resolveWantedQuality,
     showToast,
     updateDeliveredMeta,
+    suppressQualityToastsRef,
   ]);
 
   const buildStreamUrl = useCallback(async (track, quality, bypass) => {
@@ -727,11 +737,17 @@ export function usePlaybackQuality({
     if (lower && currentTrack && qualityUnavailable) {
       const tidalOnly = probeMatchesTrack(probe) && isTidalCatalogOnlyLossless(probe)
         && (streamQuality === 'LOSSLESS' || streamQuality === 'HI_RES');
-      const toast = tidalOnly
-        ? streamQualityTidalFallbackToast(lang, { quality: lower })
-        : (lang === 'ru'
-          ? `Ошибка потока — пробуем ${lower === 'LOSSLESS' ? 'FLAC' : '320k'}`
-          : `Stream error — trying ${lower === 'LOSSLESS' ? 'Lossless' : '320k'}`);
+      const announce = shouldAnnounceQualityFallback({
+        lower,
+        suppressed: suppressQualityToastsRef?.current,
+      });
+      const toast = announce
+        ? (tidalOnly
+          ? streamQualityTidalFallbackToast(lang, { quality: lower })
+          : (lang === 'ru'
+            ? `Ошибка потока — пробуем ${lower === 'LOSSLESS' ? 'FLAC' : '320k'}`
+            : `Stream error — trying ${lower === 'LOSSLESS' ? 'Lossless' : '320k'}`))
+        : undefined;
       await applyQualityFallback(lower, { toast });
       return;
     }
