@@ -40,6 +40,14 @@ export function fixKeyboardLayout(query) {
   return query;
 }
 
+/** Cyrillic typed on RU keyboard but meant as English (дфяук → lazer). */
+function cyrillicTokenMeantEnglish(token) {
+  if (token.length < 3 || /[a-zA-Z]/.test(token)) return false;
+  const fixed = swapLayout(token, RU, EN, RU_SHIFT, EN_SHIFT);
+  if (fixed === token || !/^[a-zA-Z\-']+$/.test(fixed.replace(/-/g, ''))) return false;
+  return EN_VOWELS.test(fixed);
+}
+
 /** True when query looks like keyboard mash (wrong layout), not an intentional word. */
 function looksLikeWrongLayout(query) {
   const hasCyrillic = /[а-яА-ЯёЁ]/.test(query);
@@ -54,6 +62,7 @@ function looksLikeWrongLayout(query) {
   }
 
   if (hasCyrillic && !hasLatin) {
+    if (query.split(/\s+/).some(cyrillicTokenMeantEnglish)) return true;
     // Cyrillic typed on RU keyboard but meant EN: usually no Russian vowels
     if (RU_VOWELS.test(query)) return false;
     if (query.length < 4) return false;

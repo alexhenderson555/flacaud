@@ -7,7 +7,7 @@ import { cacheAudioTrack } from '../utils/cache';
 import PlaylistModal from '../components/PlaylistModal';
 import LibraryTrackRow from '../components/LibraryTrackRow';
 import VirtualTrackList from '../components/VirtualTrackList';
-import { suggestSearchCorrection, fixKeyboardLayout } from '../utils/searchQueryFix';
+import { suggestSearchCorrection } from '../utils/searchQueryFix';
 import { tracksForPlaylistApi } from '../utils/playlistApi';
 import { getAccessToken } from '../utils/tokenStorage';
 import { startDownloadJob } from '../utils/downloadJobs';
@@ -189,24 +189,9 @@ function Search() {
           if (data.tracks.length > 0) {
             setQuerySuggestion(null);
           } else {
-            setQuerySuggestion(suggestSearchCorrection(searchQuery));
-          }
-        }
-        if (!append && data.tracks.length === 0) {
-          const alt = fixKeyboardLayout(searchQuery);
-          if (alt !== searchQuery) {
-            const altData = await apiPostJson(
-              '/api/search',
-              { provider: 'tidal', query: alt, limit: PAGE_SIZE, offset: 0 },
-              { auth: true },
+            setQuerySuggestion(
+              data.suggested_query || suggestSearchCorrection(searchQuery) || null,
             );
-            if (altData?.tracks?.length) {
-              setRealResults(altData.tracks);
-              setHasMore(Boolean(altData.has_more));
-              setSearchOffset(altData.tracks.length);
-              setQuery(alt);
-              setQuerySuggestion(null);
-            }
           }
         }
       }

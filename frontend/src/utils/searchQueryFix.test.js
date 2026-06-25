@@ -18,6 +18,10 @@ describe('searchQueryFix', () => {
     expect(suggestSearchCorrection('Daft Punk')).toBeNull();
   });
 
+  it('suggests EN from Cyrillic keyboard mash (дфяук)', () => {
+    expect(suggestSearchCorrection('дфяук')).toBe('lazer');
+  });
+
   it('returns null when no layout fix needed', () => {
     expect(suggestSearchCorrection('Smooth Operator')).toBeNull();
   });
