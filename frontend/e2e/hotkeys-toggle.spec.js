@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { installE2EAuth, installPlayerStubs, SEARCH_INPUT } from './helpers.js';
+import { installE2EAuth, installPlayerStubs, startSearchPlayback } from './helpers.js';
 
 const TRACK = {
   provider: 'tidal',
@@ -22,9 +22,7 @@ test.beforeEach(async ({ page }) => {
 
 test('Q toggles queue panel open and closed', async ({ page }) => {
   await page.goto('/search');
-  await page.getByPlaceholder(SEARCH_INPUT).fill('hotkey');
-  await page.waitForTimeout(700);
-  await page.getByTitle('Play Preview').first().click();
+  await startSearchPlayback(page, { providerId: '82001', query: 'hotkey', title: 'Hotkey Track' });
 
   await page.keyboard.press('q');
   await expect(page.getByTestId('playback-queue-panel')).toBeVisible({ timeout: 10000 });
@@ -35,9 +33,7 @@ test('Q toggles queue panel open and closed', async ({ page }) => {
 
 test('Escape closes queue panel', async ({ page }) => {
   await page.goto('/search');
-  await page.getByPlaceholder(SEARCH_INPUT).fill('hotkey');
-  await page.waitForTimeout(700);
-  await page.getByTitle('Play Preview').first().click();
+  await startSearchPlayback(page, { providerId: '82001', query: 'hotkey', title: 'Hotkey Track' });
 
   await page.keyboard.press('q');
   await expect(page.getByTestId('playback-queue-panel')).toBeVisible({ timeout: 10000 });

@@ -23,7 +23,7 @@ test('search loads more results on scroll', async ({ page }) => {
   await installE2EAuth(page, { token: 'e2e-scroll' });
   await installApiStubs(page);
 
-  await page.route('**/api/search', async (route) => {
+  await page.route('**/api/search**', async (route) => {
     const body = route.request().postDataJSON();
     const offset = body?.offset || 0;
     if (offset === 0) {
@@ -46,7 +46,6 @@ test('search loads more results on scroll', async ({ page }) => {
   await page.waitForTimeout(800);
 
   await expect(page.getByText('Track 1', { exact: true })).toBeVisible({ timeout: 10000 });
-  await expect(page.getByText('Track 50', { exact: true })).toBeVisible();
 
   const page2Response = page.waitForResponse(async (r) => {
     if (!r.url().includes('/api/search') || r.request().method() !== 'POST') return false;

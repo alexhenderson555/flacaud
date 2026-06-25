@@ -6,6 +6,7 @@ test('/playlists page loads for authenticated users', async ({ page }) => {
   await installPlayerStubs(page);
 
   await page.goto('/playlists');
-  await expect(page).toHaveURL(/\/playlists/, { timeout: 15000 });
-  await expect(page.getByRole('heading', { name: /My Playlists|Мои Плейлисты/i })).toBeVisible();
+  await expect(page).toHaveURL(/\/library.*tab=playlists/, { timeout: 15000 });
+  await expect(page.getByRole('button', { name: /Playlists|Плейлисты/i })).toBeVisible();
+  await expect(page.getByText(/No playlists yet|Плейлистов пока нет/i)).toBeVisible();
 });

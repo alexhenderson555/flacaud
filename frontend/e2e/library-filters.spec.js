@@ -27,8 +27,8 @@ const LIBRARY = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await installE2EAuth(page);
-  await installApiStubs(page);
+  await installE2EAuth(page, { djEnabled: true });
+  await installApiStubs(page, { djEnabled: true });
   await page.route('**/api/library', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(LIBRARY) });
   });

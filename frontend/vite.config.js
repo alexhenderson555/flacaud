@@ -53,11 +53,19 @@ export default defineConfig({
     include: ['src/**/*.test.js'],
   },
   server: {
-    proxy: {
+    proxy: process.env.CI ? undefined : {
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-      }
-    }
-  }
+      },
+    },
+  },
+  preview: {
+    proxy: process.env.CI ? undefined : {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

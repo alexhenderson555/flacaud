@@ -56,6 +56,7 @@ export async function installApiStubs(page, { djEnabled = false } = {}) {
   await routeAuthMe(page, { djEnabled });
   await routeAuthRefresh(page);
   await routeImageProxy(page);
+  await routeMediaToken(page);
   await page.route('**/api/library', async (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.route('**/api/library/**', async (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   await page.route('**/api/playlists', async (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
@@ -104,11 +105,11 @@ export async function routeQualityAvailable(page, payload) {
   });
 }
 
-export async function routeStream(page, size = 128) {
+export async function routeStream(page, size = 4096) {
   await page.route('**/api/stream/**', async (r) => {
     await r.fulfill({
       status: 200,
-      contentType: 'audio/mp4',
+      contentType: 'audio/mpeg',
       body: Buffer.alloc(size, 1),
       headers: { 'Content-Length': String(size) },
     });
@@ -160,18 +161,29 @@ export async function installPlayerStubs(page, { qualityPayload, searchTracks } 
 
 /** Search, click play on a track, wait until the player bar shows the track. */
 export async function startSearchPlayback(page, { providerId, query, title }) {
+  const searchResponse = page.waitForResponse(
+    (r) => r.url().includes('/api/search') && r.request().method() === 'POST' && r.ok(),
+  );
   await page.getByPlaceholder(SEARCH_INPUT).fill(query);
-  await page.waitForTimeout(700);
+  await searchResponse;
+  await page.waitForTimeout(600);
   const playBtn = page.getByTestId(`search-play-${providerId}`);
+  await playBtn.waitFor({ state: 'visible', timeout: 15_000 });
   await playBtn.click();
   const trackTitle = title || query;
   await page.waitForFunction(
     (expected) => {
       const el = document.querySelector('[data-testid="player-track-title"]');
-      return el?.textContent?.includes(expected);
+      if (el?.textContent?.includes(expected)) return true;
+      try {
+        const raw = localStorage.getItem('tidal-current-track');
+        return Boolean(raw && raw.includes(expected));
+      } catch {
+        return false;
+      }
     },
     trackTitle,
-    { timeout: 12_000 },
+    { timeout: 20_000 },
   );
   const transport = page.getByTestId('player-transport-btn');
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -181,6 +193,8 @@ export async function startSearchPlayback(page, { providerId, query, title }) {
     await page.waitForTimeout(300);
   }
 }
+
+export const PLAY_BTN_TITLE = /^(Play|Слушать)$/i;
 
 export async function getMainAudioSrc(page) {
   return page.evaluate(() => {

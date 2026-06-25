@@ -163,9 +163,10 @@ test('sequential playback requests next stream url', async ({ page }) => {
 
   await page.goto('/search');
   await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
-  await page.waitForTimeout(800);
+  await page.waitForResponse((r) => r.url().includes('/api/search') && r.ok());
+  await page.waitForTimeout(600);
 
-  const playButtons = page.locator('button[title="Play Preview"]');
+  const playButtons = page.locator('[data-testid^="search-play-"]');
   await playButtons.nth(0).click();
   await page.waitForTimeout(1500);
   await playButtons.nth(1).click();

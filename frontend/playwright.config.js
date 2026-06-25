@@ -22,5 +22,8 @@ export default defineConfig({
     // limitation) — they leak to the real backend and 502. Block SW so every
     // /api request is interceptable by the specs' route mocks.
     serviceWorkers: 'block',
+    launchOptions: {
+      args: ['--autoplay-policy=no-user-gesture-required'],
+    },
   },
 });
