@@ -13,6 +13,7 @@ import {
   shuffleTrackList,
   REPEAT_ONE,
   REPEAT_ALL,
+  REPEAT_OFF,
 } from '../utils/playbackModes';
 import {
   resolveQueueIndex as resolveQueueIndexPure,
@@ -74,6 +75,7 @@ export function usePlayerQueue({
   getPreloadAudioEl,
   deferPlayUntilReady = false,
   queueOriginRef,
+  startTrackRadioRef,
   pauseSetEmbed,
   releaseSetEmbed,
 }) {
@@ -460,6 +462,15 @@ export function usePlayerQueue({
               return;
             }
           }
+          const cur = pl[safeIdx] || currentTrackRef.current;
+          if (
+            modes.repeat === REPEAT_OFF
+            && cur?.provider_id
+            && startTrackRadioRef?.current
+          ) {
+            const started = await startTrackRadioRef.current(cur, { advancePastSeed: true });
+            if (started) return;
+          }
           setIsPlaying(false);
           setIsLoading(false);
           pendingPlayRef.current = false;
@@ -567,7 +578,7 @@ export function usePlayerQueue({
     currentTrackRef, modesRef, shuffleEnabled, repeatMode, audioRef, getMainAudioEl, setIsPlaying,
     tryPreloadHandoff, crossfadingRef, crossfadeStartedForRef, queueOriginRef,
     appendVibeRadioTracks, prefetchVibeRadioIfNeeded, pendingPlayRef,
-    initAudioEngine, volume,
+    initAudioEngine, volume, startTrackRadioRef,
   ]);
 
   const playPrevious = useCallback(() => {
