@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from tidal_dl_ru.core.models import Quality, Track
+from tidal_dl_ru.server.outbound_url import OutboundUrlError, validate_public_http_url
 
 
 class SearchRequest(BaseModel):
-    query: str
-    provider: str = "tidal"
+    query: str = Field(..., min_length=1, max_length=512)
+    provider: str = Field(default="tidal", max_length=32)
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 
@@ -22,7 +23,7 @@ class SearchResponse(BaseModel):
 
 
 class JobCreate(BaseModel):
-    url: str
+    url: str = Field(..., min_length=8, max_length=2048)
     job_type: str = "download"  # "download" or "analyze_set"
     quality: Quality = Quality.LOSSLESS
     lyrics: bool = False
@@ -30,6 +31,14 @@ class JobCreate(BaseModel):
     dj_analyze: bool = False
     match_tidal: bool = False
     split: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def _validate_job_url(cls, value: str) -> str:
+        try:
+            return validate_public_http_url(value)
+        except OutboundUrlError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class TrackProgress(BaseModel):

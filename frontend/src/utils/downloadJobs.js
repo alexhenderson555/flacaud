@@ -1,6 +1,7 @@
 /** Track server download jobs shown in DownloadToast (bottom-right). */
 
 import { apiGetJson, apiPostJson } from './apiClient';
+import { getAccessToken } from './tokenStorage';
 import { prefetchAudioToCache } from './cache';
 
 const QUEUE_KEY = 'tidal-queue-jobs';
@@ -107,7 +108,7 @@ export async function startDownloadJob({
   optimisticId = null,
   prefetch = true,
 }) {
-  const token = localStorage.getItem('tidal-token') || '';
+  const token = getAccessToken() || '';
   const res = await fetch('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

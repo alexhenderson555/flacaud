@@ -1,3 +1,5 @@
+import { getAccessToken } from './tokenStorage';
+
 export const toggleLibraryTrack = async (track) => {
   let lib = [];
   const saved = localStorage.getItem('tidal-library');
@@ -8,7 +10,7 @@ export const toggleLibraryTrack = async (track) => {
   }
 
   const exists = lib.find(t => t.provider_id === track.provider_id);
-  const token = localStorage.getItem('tidal-token');
+  const token = getAccessToken();
 
   if (exists) {
     // Remove

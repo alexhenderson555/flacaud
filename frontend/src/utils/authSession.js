@@ -146,9 +146,5 @@ export async function verifyEmailToken(token) {
 
 export async function signOut() {
   await logoutSession();
-  try {
-    localStorage.removeItem('tidal-user');
-    localStorage.removeItem('tidal-effective-plan');
-  } catch { /* ignore */ }
-  clearMediaToken();
+  clearSession();
 }

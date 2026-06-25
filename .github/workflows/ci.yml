@@ -69,6 +69,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          npm audit --audit-level=high
           npm run lint
           npm run test
           npm run typecheck

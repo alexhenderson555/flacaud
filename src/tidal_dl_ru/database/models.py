@@ -59,7 +59,7 @@ class User(UserBase, table=True):
         return self.downloads_today < self.daily_limit
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(..., min_length=8, max_length=128)
     accept_terms: bool = False
 
 class UserRead(UserBase):

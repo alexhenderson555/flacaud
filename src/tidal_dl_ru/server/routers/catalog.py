@@ -312,9 +312,19 @@ async def search(req: SearchRequest) -> SearchResponse:
         )
 
 @router.post("/api/recognize", response_model=SearchResponse)
-async def recognize_endpoint(file: UploadFile = File(...)):
+async def recognize_endpoint(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    _ = current_user
+    if not file.content_type or not str(file.content_type).startswith("audio/"):
+        raise HTTPException(status_code=400, detail="Expected an audio file")
 
-    audio_bytes = await file.read()
+    max_bytes = 12 * 1024 * 1024
+    audio_bytes = await file.read(max_bytes + 1)
+    if len(audio_bytes) > max_bytes:
+        raise HTTPException(status_code=413, detail="Audio file too large (max 12 MB)")
+
     res = await recognize_audio(audio_bytes, file.content_type)
 
     if not res:

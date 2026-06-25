@@ -99,6 +99,35 @@ def test_reset_password_updates_hash_and_allows_login(client):
     assert ok.status_code == 200, ok.text
 
 
+def test_reset_password_rejects_reused_token(client):
+    headers, uname = register_and_login(
+        client,
+        username="reusepw",
+        email="reuse@test.local",
+        password="old-pass-123",
+    )
+    assert headers
+
+    from sqlmodel import Session, select
+
+    from tidal_dl_ru.database.database import engine
+    from tidal_dl_ru.database.models import User
+
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.username == uname)).one()
+        token = sign_password_reset_token(user.id)
+    first = client.post(
+        "/api/auth/reset-password",
+        json={"token": token, "password": "new-pass-456"},
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        "/api/auth/reset-password",
+        json={"token": token, "password": "new-pass-789"},
+    )
+    assert second.status_code == 400
+
+
 def test_reset_password_rejects_bad_token(client):
     res = client.post(
         "/api/auth/reset-password",

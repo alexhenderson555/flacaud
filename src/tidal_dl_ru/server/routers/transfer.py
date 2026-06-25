@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session
 
@@ -14,6 +15,7 @@ from tidal_dl_ru.plan_limits import cap_stream_quality
 from tidal_dl_ru.providers.base import ProviderError
 from tidal_dl_ru.server import jobs as job_state
 from tidal_dl_ru.server import transfer_tasks
+from tidal_dl_ru.server.outbound_url import OutboundUrlError, validate_public_http_url
 from tidal_dl_ru.server.transfer_logging import log_import_done
 from tidal_dl_ru.server.transfer_service import (
     create_playlist_from_tracks,
@@ -33,6 +35,7 @@ class TransferUrlRequest(BaseModel):
 
 class TransferPreviewStartResponse(BaseModel):
     task_id: str
+    access_token: str
 
 
 class TransferProgressView(BaseModel):
@@ -216,16 +219,25 @@ async def transfer_preview_start(
     body: TransferUrlRequest,
     current_user: Optional[User] = Depends(get_optional_user),
 ) -> TransferPreviewStartResponse:
+    try:
+        safe_url = validate_public_http_url(body.url.strip())
+    except OutboundUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     user_id = current_user.id if current_user else None
-    task_id = transfer_tasks.create_task(body.url.strip(), user_id=user_id)
+    task_id, access_token = transfer_tasks.create_task(safe_url, user_id=user_id)
     asyncio.create_task(transfer_tasks.run_preview_task(task_id))
-    return TransferPreviewStartResponse(task_id=task_id)
+    return TransferPreviewStartResponse(task_id=task_id, access_token=access_token)
 
 
 @router.get("/tasks/{task_id}", response_model=TransferTaskResponse)
-async def transfer_task_status(task_id: str) -> TransferTaskResponse:
+async def transfer_task_status(
+    task_id: str,
+    access_token: str = Query(..., min_length=8, max_length=128),
+) -> TransferTaskResponse:
     task = transfer_tasks.load_task(task_id)
-    if task is None:
+    if task is None or not task.access_token:
+        raise HTTPException(status_code=404, detail="Transfer task not found or expired.")
+    if not secrets.compare_digest(task.access_token, access_token):
         raise HTTPException(status_code=404, detail="Transfer task not found or expired.")
     preview = _preview_from_dict(task.preview, task.task_id) if task.preview else None
     return TransferTaskResponse(

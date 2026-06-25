@@ -132,7 +132,7 @@ function Search() {
     playerContextTogglePlay(track, playlistContext);
   };
 
-  const getAuthToken = () => getAccessToken() || localStorage.getItem('tidal-token') || '';
+  const getAuthToken = () => getAccessToken() || '';
 
   const saveTracksAsPlaylist = async (tracks, name) => {
     const token = getAuthToken();
@@ -186,7 +186,7 @@ function Search() {
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
         body: JSON.stringify({ provider: 'tidal', query: searchQuery, limit: PAGE_SIZE, offset })
       });
       if (!res.ok) {
@@ -211,7 +211,7 @@ function Search() {
           if (alt !== searchQuery) {
             const altRes = await fetch('/api/search', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
               body: JSON.stringify({ provider: 'tidal', query: alt, limit: PAGE_SIZE, offset: 0 })
             });
             const altData = altRes.ok ? await altRes.json() : null;
@@ -352,7 +352,7 @@ function Search() {
     try {
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
         body: JSON.stringify({
           url: url,
           quality: 'LOSSLESS',
@@ -410,7 +410,7 @@ function Search() {
     try {
       const res = await fetch('/api/ai-playlist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
         body: JSON.stringify({ query: aiQuery, imageBase64: aiImageBase64, limit: 10 })
       });
       const data = await res.json();
@@ -434,7 +434,7 @@ function Search() {
       // We send a request asking for more tracks, avoiding the ones we already have
       const res = await fetch('/api/ai-playlist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
         body: JSON.stringify({ 
           query: aiQuery + ` (Do NOT include these: ${existingTitles})`, 
           limit: 10 

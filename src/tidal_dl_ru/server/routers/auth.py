@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from tidal_dl_ru.database.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     MEDIA_TOKEN_TTL,
+    PASSWORD_RESET_TTL,
     create_access_token,
     get_current_user,
     get_password_hash,
@@ -28,6 +29,7 @@ from tidal_dl_ru.database.refresh_tokens import (
     consume_refresh_token,
     issue_refresh_token,
     refresh_cookie_secure,
+    revoke_all_refresh_sessions_for_user,
     revoke_refresh_token,
 )
 from tidal_dl_ru.providers.tidal.auth import (
@@ -38,11 +40,13 @@ from tidal_dl_ru.providers.tidal.auth import (
     pkce_login_url,
     save_tokens,
 )
+from tidal_dl_ru.server.account_delete import delete_user_account
 from tidal_dl_ru.server.email_outbound import (
     public_site_base,
     send_email_verification,
     send_password_reset_email,
 )
+from tidal_dl_ru.server.one_time_tokens import consume_token
 from tidal_dl_ru.server.ops_auth import require_ops_access
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -230,7 +234,7 @@ def forgot_password(
 @router.post("/reset-password")
 def reset_password(body: ResetPasswordRequest, session: Session = Depends(get_session)):
     uid = verify_password_reset_token(body.token)
-    if uid is None:
+    if uid is None or not consume_token("pwreset", body.token, PASSWORD_RESET_TTL):
         raise HTTPException(status_code=400, detail="Invalid or expired reset link")
 
     user = session.get(User, uid)
@@ -240,6 +244,7 @@ def reset_password(body: ResetPasswordRequest, session: Session = Depends(get_se
     user.hashed_password = get_password_hash(body.password)
     session.add(user)
     session.commit()
+    revoke_all_refresh_sessions_for_user(session, user.id)
     log.info(
         "password_reset_ok user_id=%s",
         user.id,
@@ -315,6 +320,44 @@ def update_preferences(
     session.commit()
     session.refresh(current_user)
     return _user_read(current_user)
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+@router.delete("/account")
+def delete_account(
+    body: DeleteAccountRequest,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if not current_user.hashed_password or not verify_password(
+        body.password, current_user.hashed_password
+    ):
+        raise HTTPException(status_code=400, detail="Incorrect password")
+    user_id = current_user.id
+    delete_user_account(session, current_user)
+    _clear_refresh_cookie(response)
+    log.info("account_deleted user_id=%s", user_id, extra={"event": "account_deleted"})
+    return {"ok": True, "message": "Account deleted"}
+
+
+@router.get("/export")
+def export_account_data(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """Self-service GDPR export — profile, library, playlists, saved sets."""
+    from tidal_dl_ru.database.models import Playlist, SavedSet, SavedTrack
+
+    tracks = session.exec(select(SavedTrack).where(SavedTrack.user_id == current_user.id)).all()
+    playlists = session.exec(select(Playlist).where(Playlist.user_id == current_user.id)).all()
+    sets = session.exec(select(SavedSet).where(SavedSet.user_id == current_user.id)).all()
+    return {
+        "user": _user_read(current_user),
+        "library": [t.model_dump() for t in tracks],
+        "playlists": [p.model_dump() for p in playlists],
+        "saved_sets": [s.model_dump() for s in sets],
+    }
 
 
 @router.get("/media-token")

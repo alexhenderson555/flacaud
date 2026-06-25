@@ -322,7 +322,7 @@ async def stream_track_ready(
 ):
     """Lightweight poll — merged cache exists. Kicks warm on miss (for clients that use this)."""
     if bypass_registry.lower() != "true":
-        registry = job_state.get_downloaded_registry()
+        registry = job_state.get_downloaded_registry_for_owner(current_user.id)
         reg_file = job_state.registry_file_for_quality(registry, track_id, quality)
         if reg_file is not None:
             return {"ready": True, "source": "registry"}
@@ -387,7 +387,7 @@ async def warm_stream_track(
 @router.get("/api/stream/{provider}/{track_id}")
 async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_media_user), quality: str = "HIGH", bypass_registry: str = "false"):
     if bypass_registry.lower() != "true":
-        registry = job_state.get_downloaded_registry()
+        registry = job_state.get_downloaded_registry_for_owner(current_user.id)
         reg_file = job_state.registry_file_for_quality(registry, track_id, quality)
         if reg_file is not None:
             media_type = "audio/flac" if reg_file.suffix.lower() == ".flac" else "audio/mp4"

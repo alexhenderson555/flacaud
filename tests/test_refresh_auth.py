@@ -4,10 +4,10 @@ import os
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import register_and_login
 from tidal_dl_ru.database.auth import sign_email_verify_token
 from tidal_dl_ru.database.refresh_tokens import REFRESH_COOKIE_NAME
 from tidal_dl_ru.server.app import app
-from tests.conftest import register_and_login
 
 
 def test_login_sets_refresh_cookie():

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, ListMusic } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getAccessToken } from '../utils/tokenStorage';
 
 async function putPlaylistTracks(token, playlistId, tracks) {
   return fetch(`/api/playlists/${playlistId}`, {
@@ -14,7 +15,7 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
   const [playlists, setPlaylists] = useState([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
-  const getToken = () => localStorage.getItem('tidal-token');
+  const getToken = () => getAccessToken();
 
   useEffect(() => {
     const fetchPlaylists = async () => {

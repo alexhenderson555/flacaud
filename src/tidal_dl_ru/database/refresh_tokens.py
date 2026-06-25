@@ -58,6 +58,22 @@ def revoke_refresh_token(session: Session, raw: str) -> None:
         session.commit()
 
 
+def revoke_all_refresh_sessions_for_user(session: Session, user_id: int) -> int:
+    """Revoke every active refresh session for *user_id* (password reset / account delete)."""
+    rows = session.exec(
+        select(RefreshSession).where(
+            RefreshSession.user_id == user_id,
+            RefreshSession.revoked == False,  # noqa: E712
+        )
+    ).all()
+    for row in rows:
+        row.revoked = True
+        session.add(row)
+    if rows:
+        session.commit()
+    return len(rows)
+
+
 def consume_refresh_token(session: Session, raw: str) -> int | None:
     """Validate refresh token, revoke it, return user_id for rotation."""
     if not raw:

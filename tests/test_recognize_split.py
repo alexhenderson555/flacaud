@@ -5,8 +5,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.conftest import register_and_login
 from tidal_dl_ru.core.split import SplitResult, split_audio_demucs
 from tidal_dl_ru.server.app import app
+
+
+def test_recognize_endpoint_requires_auth():
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/recognize",
+            files={"file": ("clip.mp3", b"fake-audio", "audio/mpeg")},
+        )
+        assert res.status_code == 401
 
 
 def test_recognize_endpoint(monkeypatch):
@@ -24,9 +34,11 @@ def test_recognize_endpoint(monkeypatch):
         lambda _name: mock_provider,
     )
     with TestClient(app) as client:
+        headers, _ = register_and_login(client)
         res = client.post(
             "/api/recognize",
             files={"file": ("clip.mp3", b"fake-audio", "audio/mpeg")},
+            headers=headers,
         )
         assert res.status_code == 200
 

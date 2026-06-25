@@ -355,9 +355,11 @@ class TestTransferApi:
         mock_create_task.side_effect = lambda coro: None
         r = client.post("/api/transfer/preview", json={"url": TIDAL_URL})
         assert r.status_code == 200
-        task_id = r.json()["task_id"]
+        body = r.json()
+        task_id = body["task_id"]
+        access_token = body["access_token"]
         _complete_preview_task(task_id)
-        r2 = client.get(f"/api/transfer/tasks/{task_id}")
+        r2 = client.get(f"/api/transfer/tasks/{task_id}?access_token={access_token}")
         assert r2.status_code == 200
         body = r2.json()
         assert body["status"] == "done"
@@ -382,6 +384,7 @@ class TestTransferApi:
         mock_create_task.side_effect = lambda coro: None
         start = client.post("/api/transfer/preview", json={"url": TIDAL_URL})
         task_id = start.json()["task_id"]
+        access_token = start.json()["access_token"]
         _complete_preview_task(task_id)
         r = client.post(
             "/api/transfer/import",
@@ -404,6 +407,7 @@ class TestTransferApi:
         mock_create_task.side_effect = lambda coro: None
         start = client.post("/api/transfer/preview", json={"url": TIDAL_URL})
         task_id = start.json()["task_id"]
+        access_token = start.json()["access_token"]
         _complete_preview_task(task_id)
         payload = {
             "task_id": task_id,

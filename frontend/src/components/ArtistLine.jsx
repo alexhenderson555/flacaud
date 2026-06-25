@@ -50,6 +50,7 @@ export default function ArtistLine({
             <button
               type="button"
               className="artist-line-link"
+              aria-label={lang === 'ru' ? `Артист: ${artistName}` : `Artist: ${artistName}`}
               style={{
                 color: 'inherit',
                 background: 'none',

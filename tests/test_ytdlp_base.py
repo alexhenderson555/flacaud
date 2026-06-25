@@ -6,7 +6,11 @@ import pytest
 import yt_dlp
 
 from tidal_dl_ru.providers.catalog_providers import YouTubeMusicProvider
-from tidal_dl_ru.providers.ytdlp_base import _is_unavailable_entry, _parse_creator_title, _resolve_entry_metadata
+from tidal_dl_ru.providers.ytdlp_base import (
+    _is_unavailable_entry,
+    _parse_creator_title,
+    _resolve_entry_metadata,
+)
 
 
 class TestYtDlpUnavailable:

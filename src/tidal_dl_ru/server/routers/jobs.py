@@ -153,7 +153,11 @@ def download_job_zip(job_id: str, current_user: User = Depends(get_media_user)):
     if not re.fullmatch(r"[0-9a-fA-F]{8,64}", job_id):
         raise HTTPException(status_code=404, detail="Job not found")
     s = job_state.load(job_id)
-    if s is not None and s.owner_id is not None and s.owner_id != current_user.id:
+    if s is None:
+        raise HTTPException(status_code=404, detail="Job not found or expired")
+    if s.owner_id is None:
+        raise HTTPException(status_code=403, detail="Job ownership unknown")
+    if s.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your job")
     job_dir = settings.jobs_dir / job_id
     if not job_dir.exists():

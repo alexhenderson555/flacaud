@@ -1,79 +1,27 @@
 /**
- * Fetch wrapper: timeout, clearer errors, optional auth header.
+ * Fetch wrapper: timeout, clearer errors, optional auth header, 401 refresh.
  */
 
 import { getAccessToken } from './tokenStorage';
-// Single ApiError class shared with apiFetchCore so `instanceof ApiError` holds
-// regardless of which wrapper threw (apiFetchCore has no dep on this module).
-import { ApiError } from './apiFetchCore';
+import {
+  ApiError,
+  apiFetch as coreApiFetch,
+  parseJsonSafe,
+  tryRefreshAccessToken,
+  logoutSession,
+} from './apiFetchCore';
 
-export { ApiError };
-
-const DEFAULT_TIMEOUT_MS = 25000;
+export { ApiError, tryRefreshAccessToken, logoutSession };
 
 export function apiBase() {
   return window.__TAURI__ ? 'http://localhost:8000' : '';
 }
 
-async function apiFetchOnce(path, options) {
-  const {
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    auth = false,
-    headers: extraHeaders = {},
-    ...rest
-  } = options;
-
-  const headers = new Headers(extraHeaders);
-  if (auth) {
-    const token = getAccessToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  if (rest.signal) {
-    rest.signal.addEventListener('abort', () => ctrl.abort(), { once: true });
-  }
-
-  try {
-    return await fetch(`${apiBase()}${path}`, { ...rest, headers, signal: ctrl.signal });
-  } catch (err) {
-    if (err?.name === 'AbortError') {
-      throw new ApiError('Request timed out — server is slow, try again', { code: 'timeout' });
-    }
-    const msg = err?.message && err.message !== 'Failed to fetch'
-      ? err.message
-      : 'Network error — server unreachable or connection queue is full';
-    throw new ApiError(msg, { code: 'network' });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export async function apiFetch(path, options = {}) {
-  const { retries = 0, ...rest } = options;
-  let lastErr;
-  const attempts = Math.max(0, retries) + 1;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await apiFetchOnce(path, rest);
-    } catch (err) {
-      lastErr = err;
-      const retryable = err instanceof ApiError && (err.code === 'network' || err.code === 'timeout');
-      if (!retryable || i === attempts - 1) throw err;
-      await new Promise((r) => setTimeout(r, 600 * (i + 1)));
-    }
-  }
-  throw lastErr;
+  return coreApiFetch(path, options);
 }
 
-export async function parseJsonSafe(res) {
-  try {
-    return await res.json();
-  } catch {
-    return {};
-  }
-}
+export { parseJsonSafe };
 
 export function codeFromBody(body) {
   if (!body || typeof body !== 'object') return undefined;
@@ -109,8 +57,7 @@ export function messageForApiError(err, lang = 'en') {
   return err.message;
 }
 
-export async function apiGetJson(path, options = {}) {
-  const res = await apiFetch(path, { ...options, method: 'GET' });
+async function jsonResponseOrThrow(res) {
   const body = await parseJsonSafe(res);
   if (!res.ok) {
     const message = detailFromBody(body)
@@ -121,6 +68,11 @@ export async function apiGetJson(path, options = {}) {
   }
   return body;
 }
+
+export async function apiGetJson(path, options = {}) {
+  const res = await apiFetch(path, { ...options, method: 'GET' });
+  return jsonResponseOrThrow(res);
+}
 export async function apiPostJson(path, body, options = {}) {
   const res = await apiFetch(path, {
     ...options,
@@ -128,7 +80,7 @@ export async function apiPostJson(path, body, options = {}) {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     body: JSON.stringify(body),
   });
-  return parseJsonSafe(res);
+  return jsonResponseOrThrow(res);
 }
 export async function apiPutJson(path, body, options = {}) {
   const res = await apiFetch(path, {
@@ -137,11 +89,11 @@ export async function apiPutJson(path, body, options = {}) {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     body: JSON.stringify(body),
   });
-  return parseJsonSafe(res);
+  return jsonResponseOrThrow(res);
 }
 export async function apiDeleteJson(path, options = {}) {
   const res = await apiFetch(path, { ...options, method: 'DELETE' });
-  return parseJsonSafe(res);
+  return jsonResponseOrThrow(res);
 }
 
 export async function apiPatchJson(path, body, options = {}) {
@@ -151,7 +103,7 @@ export async function apiPatchJson(path, body, options = {}) {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     body: JSON.stringify(body),
   });
-  return parseJsonSafe(res);
+  return jsonResponseOrThrow(res);
 }
 
 export async function apiDelete(path, options = {}) {

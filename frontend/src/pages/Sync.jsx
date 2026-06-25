@@ -66,7 +66,7 @@ export default function Sync() {
   const abortRef = useRef(null);
 
   const platform = getSyncPlatform(selectedPlatform);
-  const isLoggedIn = Boolean(getAccessToken() || localStorage.getItem('tidal-token'));
+  const isLoggedIn = Boolean(getAccessToken());
 
   useEffect(() => {
     const detected = detectPlatformFromUrl(url);

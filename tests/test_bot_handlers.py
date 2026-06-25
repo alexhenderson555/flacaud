@@ -1,6 +1,6 @@
 """Telegram bot handler helpers."""
 
-from tidal_dl_ru.bot.handlers import HELP_TEXT, _SET_URL_RE, _TIDAL_URL_RE, _job_zip_url
+from tidal_dl_ru.bot.handlers import _SET_URL_RE, _TIDAL_URL_RE, HELP_TEXT, _job_zip_url
 
 
 def test_tidal_url_regex_matches_tidal():

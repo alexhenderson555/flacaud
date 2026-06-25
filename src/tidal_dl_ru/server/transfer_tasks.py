@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 import time
 import uuid
 from typing import Any, Callable, Optional
@@ -37,6 +38,7 @@ class TransferTask(BaseModel):
     task_id: str
     url: str
     user_id: Optional[int] = None
+    access_token: Optional[str] = None
     status: str = "running"  # running | done | failed
     progress: TransferProgress = Field(default_factory=TransferProgress)
     error: Optional[str] = None
@@ -71,20 +73,22 @@ def _percent(phase: str, done: int, total: int) -> int:
     return 5
 
 
-def create_task(url: str, user_id: Optional[int] = None) -> str:
+def create_task(url: str, user_id: Optional[int] = None) -> tuple[str, str]:
     task_id = uuid.uuid4().hex[:16]
+    access_token = secrets.token_urlsafe(24)
     now = time.time()
     task = TransferTask(
         task_id=task_id,
         url=url.strip(),
         user_id=user_id,
+        access_token=access_token,
         status="running",
         progress=TransferProgress(phase="queued", label="Starting…"),
         created_at=now,
         updated_at=now,
     )
     _save(task)
-    return task_id
+    return task_id, access_token
 
 
 def load_task(task_id: str) -> Optional[TransferTask]:

@@ -29,12 +29,18 @@ RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/api/jobs": (60, 12),
     "/api/tracks/meta": (60, 40),
     "/api/image-proxy": (60, 300),
+    "/api/auth/refresh": (3600, 60),
+    "/api/payments/create": (3600, 20),
+    "/api/webhooks/yookassa": (3600, 120),
     "/api/client-errors": (3600, 60),
+    "/api/auth/account": (3600, 5),
+    "/api/auth/export": (3600, 10),
+    "/api/transfer/preview": (3600, 15),
 }
 
 
 def _rate_limit_rule(path: str, method: str) -> tuple[int, int] | None:
-    if path in RATE_LIMITS and method in ("GET", "POST"):
+    if path in RATE_LIMITS and method in ("GET", "POST", "DELETE", "PATCH"):
         return RATE_LIMITS[path]
     if method == "POST" and path.endswith("/warm") and "/api/stream/" in path:
         return (60, 40)
@@ -43,6 +49,8 @@ def _rate_limit_rule(path: str, method: str) -> tuple[int, int] | None:
     # Quality probes require auth; keep a modest per-IP cap as defense in depth.
     if method == "GET" and "/api/quality/" in path and path.endswith("/available"):
         return (60, 60)
+    if method == "GET" and "/api/stream/" in path:
+        return (60, 120)
     return None
 
 

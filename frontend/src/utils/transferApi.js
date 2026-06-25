@@ -9,16 +9,20 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function pollTransferTask(taskId, { lang = 'en', onProgress, signal } = {}) {
+export async function pollTransferTask(taskId, accessToken, { lang = 'en', onProgress, signal } = {}) {
   const started = Date.now();
+  const tokenParam = encodeURIComponent(accessToken);
   while (Date.now() - started < TRANSFER_POLL_MAX_MS) {
     if (signal?.aborted) {
       throw new ApiError('Cancelled', { code: 'aborted' });
     }
-    const res = await apiFetch(`/api/transfer/tasks/${encodeURIComponent(taskId)}`, {
-      lang,
-      timeoutMs: 20_000,
-    });
+    const res = await apiFetch(
+      `/api/transfer/tasks/${encodeURIComponent(taskId)}?access_token=${tokenParam}`,
+      {
+        lang,
+        timeoutMs: 20_000,
+      },
+    );
     const task = await parseJsonSafe(res);
     if (!res.ok) {
       throw new ApiError(task?.detail || `HTTP ${res.status}`, { status: res.status });
@@ -42,11 +46,12 @@ export async function previewTransfer(url, lang = 'en', { onProgress, signal } =
     { lang, timeoutMs: 30_000, retries: 1 },
   );
   const taskId = start?.task_id;
-  if (!taskId) {
+  const accessToken = start?.access_token;
+  if (!taskId || !accessToken) {
     throw new ApiError('Preview did not start', { code: 'failed' });
   }
   onProgress?.({ phase: 'queued', done: 0, total: 0, matched: 0, percent: 2, label: '' });
-  return pollTransferTask(taskId, { lang, onProgress, signal });
+  return pollTransferTask(taskId, accessToken, { lang, onProgress, signal });
 }
 
 export async function importTransfer(

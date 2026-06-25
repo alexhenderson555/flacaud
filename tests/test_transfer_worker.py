@@ -19,7 +19,7 @@ def _fake_transfer_redis(monkeypatch):
 
 
 def test_run_preview_task_stores_match_metadata():
-    task_id = transfer_tasks.create_task("https://open.spotify.com/playlist/x", user_id=42)
+    task_id, _access = transfer_tasks.create_task("https://open.spotify.com/playlist/x", user_id=42)
     sample = TransferResolveResult(
         source_kind="playlist",
         source_title="Demo",

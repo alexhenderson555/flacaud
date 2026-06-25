@@ -3,6 +3,7 @@ import { showToast } from '../utils/toast';
 import { motion } from 'framer-motion';
 import { X, Check, Zap, Star, Crown, CreditCard, ArrowRight } from 'lucide-react';
 import { PLAN_CATALOG } from '../constants/plans';
+import { getAccessToken } from '../utils/tokenStorage';
 
 const ICONS = {
   free: <Zap size={24} color="#a1a1aa" />,
@@ -28,7 +29,7 @@ export default function UpgradeModal({ onClose, lang, onPlanUpdated }) {
     if (!code) return;
     setRedeeming(true);
     try {
-      const token = localStorage.getItem('tidal-token');
+      const token = getAccessToken();
       const res = await fetch('/api/activation/redeem', {
         method: 'POST',
         headers: {
@@ -178,7 +179,7 @@ export default function UpgradeModal({ onClose, lang, onPlanUpdated }) {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}`,
+                        Authorization: `Bearer ${getAccessToken() || ''}`,
                       },
                       body: JSON.stringify({ plan: selectedPlan }),
                     });

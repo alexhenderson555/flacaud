@@ -3,6 +3,7 @@ import { showToast } from '../utils/toast';
 import { Disc, Download, Loader2, Music, Mic2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { enqueueDownloadJob } from '../utils/downloadJobs';
+import { getAccessToken } from '../utils/tokenStorage';
 
 export default function StemSplitter() {
   const [url, setUrl] = useState('');
@@ -17,7 +18,7 @@ export default function StemSplitter() {
       setError(null);
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken() || ''}` },
         body: JSON.stringify({ url, job_type: 'download', quality: 'LOSSLESS', split: true })
       });
       if (!res.ok) throw new Error('Failed to start stem splitting');
@@ -45,7 +46,7 @@ export default function StemSplitter() {
           return;
         }
         try {
-          const res = await fetch(`/api/jobs/${jobId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('tidal-token') || ''}` } });
+          const res = await fetch(`/api/jobs/${jobId}`, { headers: { Authorization: `Bearer ${getAccessToken() || ''}` } });
           if (res.ok) {
             const data = await res.json();
             setStatus(data.status);
