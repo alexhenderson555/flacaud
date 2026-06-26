@@ -117,7 +117,10 @@ def expand_probe_available(
         for src in ("HI_RES", "LOSSLESS", "HIGH"):
             aq = actual_out.get(src)
             if aq and actual_supports_ui_tier(aq, ui_q):
-                actual_out[ui_q] = aq
+                # Requesting a lower UI tier yields that tier's codec (HIGH = AAC
+                # 320k), never the higher source quality — cap so actual["HIGH"]
+                # can't claim hi-res/lossless and mis-drive the player badge.
+                actual_out[ui_q] = aq if actual_tier_rank(aq) <= ui_tier_rank(ui_q) else ui_q
                 break
     return expanded, actual_out
 

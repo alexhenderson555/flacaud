@@ -58,12 +58,17 @@ function normalizeProbeResult(data, trackKey, catalogQuality) {
     ? data.max_quality
     : raw[raw.length - 1] || 'HIGH';
   const { available: merged, max } = mergeProbeWithCatalogHint(raw, probeMax, catalogQuality);
-  const probeData = { ...data, _trackKey: trackKey };
+  // HIGH is 320k AAC and can never resolve to a lossless codec. A probe that
+  // backfilled actual["HIGH"] from a higher tier makes the picker snap back to
+  // Lossless right after you pick 320k — cap it to the tier the request yields.
+  const actual = { ...(data.actual || {}) };
+  if (actual.HIGH && /LOSSLESS|HI_RES/i.test(String(actual.HIGH))) actual.HIGH = 'HIGH';
+  const probeData = { ...data, actual, _trackKey: trackKey };
   return {
     available: merged,
     downloadable: sanitizeQualitiesForPlayer(data.downloadable?.length ? data.downloadable : merged),
     max,
-    actual: data.actual || {},
+    actual,
     probeData,
   };
 }
