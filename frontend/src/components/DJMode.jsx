@@ -6,17 +6,26 @@ import { analyzeTrackFeatures, getCachedTrackFeatures } from '../utils/trackFeat
 export default function DJMode({ currentTrack, audioRef, onClose }) {
   const [playbackRate, setPlaybackRate] = useState(audioRef.current?.playbackRate || 1);
   const [preservePitch, setPreservePitch] = useState(audioRef.current?.preservesPitch ?? true);
-  const [mockBpm, setMockBpm] = useState(120);
-  const [mockKey, setMockKey] = useState('Cm');
+  const [mockBpm, setMockBpm] = useState(null);
+  const [mockKey, setMockKey] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 768,
+  );
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     if (!currentTrack) return;
 
     const cached = getCachedTrackFeatures(currentTrack);
     if (cached) {
-      setMockBpm(cached.bpm);
-      setMockKey(cached.musicalKey);
+      if (Number.isFinite(cached.bpm)) setMockBpm(cached.bpm);
+      if (cached.musicalKey) setMockKey(cached.musicalKey);
       return;
     }
 
@@ -28,8 +37,10 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
     analyzeTrackFeatures(currentTrack, streamUrl)
       .then(({ bpm, musicalKey }) => {
         if (cancelled) return;
-        setMockBpm(bpm);
-        setMockKey(musicalKey);
+        // Analysis can fail to detect tempo (undecodable stream / no clear beat);
+        // keep the value null so the UI shows "—" instead of "NaN".
+        setMockBpm(Number.isFinite(bpm) ? bpm : null);
+        setMockKey(musicalKey || null);
       })
       .finally(() => {
         if (!cancelled) setAnalyzing(false);
@@ -73,6 +84,7 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
   };
 
   const getShiftedKey = (baseKey, rate, preserve) => {
+    if (!baseKey || typeof baseKey !== 'string') return baseKey;
     if (preserve || rate === 1) return baseKey;
     const semitones = Math.round(Math.log2(rate) * 12);
     if (semitones === 0) return baseKey;
@@ -87,8 +99,8 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
     return notes[newIdx] + (isMinor ? 'm' : '');
   };
 
-  const effectiveBpm = Math.round(mockBpm * playbackRate);
-  const effectiveKey = getShiftedKey(mockKey, playbackRate, preservePitch);
+  const effectiveBpm = Number.isFinite(mockBpm) ? Math.round(mockBpm * playbackRate) : null;
+  const effectiveKey = mockKey ? getShiftedKey(mockKey, playbackRate, preservePitch) : null;
 
   return (
     <motion.div
@@ -100,14 +112,19 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
         position: 'fixed',
         top: 0,
         right: 0,
-        bottom: '90px',
-        width: '400px',
+        // Full-screen sheet on mobile; right-side panel on desktop. The fixed
+        // 400px / bottom:90px panel left the expanded player and its drag handle
+        // showing through, so on a phone it read as a floating mid-screen band.
+        bottom: isMobile ? 0 : '90px',
+        left: isMobile ? 0 : 'auto',
+        width: isMobile ? 'auto' : '400px',
         background: 'rgba(5, 5, 8, 0.98)',
-        borderLeft: '1px solid var(--border-subtle)',
+        borderLeft: isMobile ? 'none' : '1px solid var(--border-subtle)',
         zIndex: 100,
         display: 'flex',
         flexDirection: 'column',
-        padding: '32px'
+        padding: isMobile ? '20px' : '32px',
+        overflowY: 'auto',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '40px' }}>
@@ -127,15 +144,15 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
       <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
         <div className="glass-panel" style={{ flex: 1, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(37, 117, 252, 0.1)', border: '1px solid var(--accent-solid)' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>BPM</span>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : effectiveBpm}</span>
-          {playbackRate !== 1 && !analyzing && <span style={{ fontSize: '0.8rem', color: 'var(--accent-solid)' }}>Original: {mockBpm}</span>}
+          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : (effectiveBpm ?? '—')}</span>
+          {playbackRate !== 1 && !analyzing && Number.isFinite(mockBpm) && <span style={{ fontSize: '0.8rem', color: 'var(--accent-solid)' }}>Original: {mockBpm}</span>}
         </div>
 
         <div className="glass-panel" style={{ flex: 1, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Key</span>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : effectiveKey}</span>
+          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : (effectiveKey ?? '—')}</span>
           <span style={{ fontSize: '0.8rem', color: !preservePitch && playbackRate !== 1 ? 'var(--warning)' : 'var(--text-muted)' }}>
-            {!preservePitch && playbackRate !== 1 ? `Original: ${mockKey}` : 'Locked'}
+            {!preservePitch && playbackRate !== 1 && mockKey ? `Original: ${mockKey}` : 'Locked'}
           </span>
         </div>
       </div>
