@@ -190,8 +190,12 @@ export function usePlaybackQuality({
       || (isPlayingRef.current && mainEl && !mainEl.paused);
 
     if (!force && useAuto && activelyPlaying && effective !== streamQualityRef.current) {
-      const keepActual = actualMap?.[streamQualityRef.current] || actualMap?.[effective];
-      if (keepActual) updateDeliveredMeta(keepActual, activeProbe);
+      // Auto won't switch the stream mid-track, so the badge must reflect what's
+      // ACTUALLY playing (the current stream tier) — not the un-played auto-max.
+      // Falling back to actualMap[effective] made a manual 320k pick visibly snap
+      // back to Lossless a frame later.
+      const keepActual = actualMap?.[streamQualityRef.current];
+      updateDeliveredMeta(keepActual || streamQualityRef.current, activeProbe);
       return;
     }
 
