@@ -85,7 +85,10 @@ export function computeBarLevels(data, viewportWidth) {
   const levels = new Uint8Array(barCount);
 
   for (let i = 0; i < barCount; i += 1) {
-    const specIndex = mirroredSpectrumIndex(i, barCount);
+    // Center bars map to bass/low-mids (the loudest, ever-present energy) and
+    // fade out to the highs at both edges. This keeps the middle of the screen —
+    // the most visible area — always populated instead of dead (treble is quiet).
+    const specIndex = (specSlots - 1) - mirroredSpectrumIndex(i, barCount);
     const peak = sampleBandPeak(data, specIndex, specSlots);
     levels[i] = Math.round(barDisplayValue(peak, specIndex, specSlots));
   }

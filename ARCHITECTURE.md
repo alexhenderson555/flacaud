@@ -66,3 +66,94 @@
 5. **client**: (Опционально для production) Nginx-контейнер, отдающий статические файлы собранного React-приложения.
 
 Такая микросервисная архитектура позволяет горизонтально масштабировать отдельные узлы. Например, при высокой нагрузке на обработку аудио можно легко запустить дополнительные экземпляры `worker` контейнеров на серверах с мощными GPU.
+
+---
+
+## 🎧 Плеер и стриминг (Frontend + API)
+
+### Слой воспроизведения
+
+- **`PlayerLogic.jsx`** — подключает хуки без UI: auth, quality, transport, persistence → Zustand `usePlayerStore`.
+- **`GlobalAudio.jsx`** — два физических `<audio>` (main + preload) для gapless; watchdog `shouldStartPlayback` устраняет «второй клик».
+- **`usePlayerTransport`** → `usePlayerQueue`, `usePlayerProgressLoop`, `usePlayerRadio`.
+
+### Качество звука
+
+1. **Probe:** `GET /api/quality/{provider}/{id}/available` — анализ codecs в DASH manifest.
+2. **Stream:** `GET /api/stream/...?quality=&mt=` — tier ограничивается планом (`cap_stream_quality`).
+3. **`usePlaybackQuality`** — `changeQuality` всегда форсирует reload (`streamRetryNonce`); в **auto**-режиме смена tier откладывается только при активном play.
+4. UI в стабильном состоянии показывает **фактически доставленный** tier (`resolvePlayerUiQuality`).
+
+### Режимы отдачи (backend)
+
+| `X-Stream-Mode` | Описание |
+|-----------------|----------|
+| `redirect` | Range на CDN Tidal |
+| `dash_stream` | DASH → remux на диск → byte-range (полный файл до первого ответа) |
+| `file` | Локальный кэш / downloaded registry |
+
+Подробнее: [docs/FEATURES.md](./docs/FEATURES.md) §2.
+
+---
+
+## 🖼 Медиа и портреты артистов
+
+### Image proxy
+
+Фронтенд не ходит на внешние CDN напрямую (CORS/VPN). Все обложки и портреты — через **`GET /api/image-proxy?url=`**.
+
+**SSRF-защита** (`routers/media.py`):
+
+- Только `http`/`https`
+- DNS → отклонение private / loopback / link-local
+- Allowlist суффиксов: Tidal CDN, Wikimedia/Wikipedia, Deezer (`dzcdn.net`), Apple (`mzstatic.com`)
+
+### Цепочка портретов (`artist_image.py`)
+
+Без платных API и без ключей:
+
+1. Wikipedia / Wikimedia (ru/en по имени)
+2. Deezer Search API
+3. iTunes Search API (upscale artwork)
+4. Fallback — picture из Tidal catalog
+
+In-memory кэш 7 дней (`artist_image_cache.py`, `TIDALDLRU_ARTIST_IMAGE_CACHE_TTL`). Ответ каталога: `picture_url`, `picture_source`.
+
+---
+
+## 📻 Рекомендации и Genre Radio
+
+Модуль **`server/recommendations.py`**:
+
+- Персональные треки — сигналы библиотеки + Tidal stubs, TTL-кэш.
+- **Genreverse** — бесконечное radio по genre/mood.
+
+**Обогащение обложек:** radio/similar stubs часто шарят один UUID cover → `_finalize_track_covers` делает batch `get_track` для уникальных art URL. Фронт: `enrichTracksFromApi` в `Genreverse.jsx`.
+
+---
+
+## 🎤 Караоке и lyrics
+
+- Lyrics API + time-synced overlay; hotkey **K**.
+- Smooth scroll к активной строке; fullscreen на karaoke root (`100dvh`).
+- Artist bio (Gemini) — только для авторизованных пользователей.
+
+---
+
+## 📦 Деплой и edge
+
+- **Caddy** отдаёт `frontend/dist` (`/assets/*` immutable), проксирует `/api/*` на uvicorn; gzip выключен для stream (Range/206).
+- Деплой: `scripts/deploy_tidal.py` — режимы **tar** (сборка на VPS) или **registry** (Docker Hub). См. [docs/DEPLOY.md](./docs/DEPLOY.md).
+- Tidal egress из RU — через отдельный VPS (Marzban/Xray); не в коде приложения.
+
+---
+
+## 🧪 Тестирование
+
+| Слой | Инструмент | Объём (2026-06) |
+|------|------------|-----------------|
+| API | pytest | 372 passed |
+| UI logic | vitest | 282 passed |
+| E2E + a11y | Playwright + axe | 52 pass, 8 known failures |
+
+Ключевые области: `test_artist_image.py`, `test_recommendations.py`, `qualityPrefs.test.js`, OpenAPI contract tests.

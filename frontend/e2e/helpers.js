@@ -32,20 +32,45 @@ export async function routeImageProxy(page) {
   });
 }
 
+const DEFAULT_QUALITY_PAYLOAD = {
+  available: ['LOW', 'HIGH', 'LOSSLESS'],
+  max_quality: 'LOSSLESS',
+  probe_complete: true,
+  actual: { LOW: 'LOW', HIGH: 'HIGH', LOSSLESS: 'LOSSLESS' },
+};
+
+/** Wait until auth boot finishes and the app shell is interactive. */
+export async function waitForAppReady(page) {
+  await page.waitForFunction(
+    () => !document.querySelector('.app-container--loading'),
+    { timeout: 30_000 },
+  );
+}
+
 /** Shared Playwright setup for authenticated app shell. */
-export async function installE2EAuth(page, { token = 'e2e-token', library = null, lang = 'en', djEnabled = false } = {}) {
-  await routeAuthMe(page, { djEnabled });
+export async function installE2EAuth(page, { token = 'e2e-token', library = null, lang = 'en', djEnabled = false, plan = 'pro' } = {}) {
+  await routeAuthMe(page, { djEnabled, plan });
   await routeAuthRefresh(page, { token });
   await page.addInitScript(
-    ({ token: t, library: lib, lang: lng }) => {
+    ({ token: t, library: lib, lang: lng, plan: effectivePlan }) => {
       window.__E2E_DISABLE_AUTOSAVE__ = true;
       sessionStorage.setItem('tidal-token', t);
       localStorage.setItem('tidal-token', t);
       localStorage.setItem('tidal-lang', lng);
-      localStorage.removeItem('tidal-current-track');
-      localStorage.removeItem('tidal-current-playlist');
-      localStorage.removeItem('tidal-current-index');
+      localStorage.setItem('tidal-effective-plan', effectivePlan);
+      if (!sessionStorage.getItem('e2e-player-storage-init')) {
+        sessionStorage.setItem('e2e-player-storage-init', '1');
+        localStorage.removeItem('tidal-current-track');
+        localStorage.removeItem('tidal-current-playlist');
+        localStorage.removeItem('tidal-current-index');
+      }
       sessionStorage.removeItem('tidal_search_realResults');
+      sessionStorage.removeItem('tidal_search_query');
+      try {
+        Object.keys(sessionStorage).forEach((key) => {
+          if (key.startsWith('tidal-quality-probe-')) sessionStorage.removeItem(key);
+        });
+      } catch { /* ignore */ }
       if (lib) localStorage.setItem('tidal-library', JSON.stringify(lib));
       // Headless CI blocks real media decode; stub play() so player state advances.
       const proto = HTMLMediaElement.prototype;
@@ -58,12 +83,12 @@ export async function installE2EAuth(page, { token = 'e2e-token', library = null
         return Promise.resolve();
       };
     },
-    { token, library, lang },
+    { token, library, lang, plan },
   );
 }
 
-export async function installApiStubs(page, { djEnabled = false } = {}) {
-  await routeAuthMe(page, { djEnabled });
+export async function installApiStubs(page, { djEnabled = false, plan = 'pro' } = {}) {
+  await routeAuthMe(page, { djEnabled, plan });
   await routeAuthRefresh(page);
   await routeImageProxy(page);
   await routeMediaToken(page);
@@ -81,10 +106,14 @@ export async function installApiStubs(page, { djEnabled = false } = {}) {
         contentType: 'application/json',
         body: JSON.stringify({
           tracks: ids.map((id) => ({
+            provider: 'tidal',
             provider_id: id,
+            title: `Meta ${id}`,
             duration_s: 200,
             cover_url: 'https://via.placeholder.com/64',
             artists: ['Artist'],
+            release_date: '2020-01-01',
+            year: 2020,
           })),
         }),
       });
@@ -92,25 +121,51 @@ export async function installApiStubs(page, { djEnabled = false } = {}) {
     }
     await r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
-  await page.route('**/api/track/**', async (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  await page.route('**/api/track/**', async (r) => {
+    const parts = r.request().url().split('/');
+    const trackId = parts[parts.length - 1]?.split('?')[0] || '0';
+    await r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        provider: 'tidal',
+        provider_id: trackId,
+        title: `Track ${trackId}`,
+        artists: ['Artist'],
+        cover_url: 'https://via.placeholder.com/64',
+        duration_s: 200,
+        release_date: '2020-01-01',
+        year: 2020,
+      }),
+    });
+  });
 }
 
 /** Register quality routes for probe + per-tier lookups. */
 export async function routeQualityAvailable(page, payload) {
+  const body = { ...DEFAULT_QUALITY_PAYLOAD, ...payload };
   await page.route('**/api/quality/**', async (r) => {
     const url = r.request().url();
     if (url.includes('/available')) {
       await r.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       return;
     }
+    const tier = decodeURIComponent(r.request().url().split('/').pop()?.split('?')[0] || '');
+    const actualTier = body?.actual?.[tier] || body?.actual?.LOSSLESS || body?.actual?.HI_RES || tier || 'LOSSLESS';
+    const hiRes = String(actualTier).toUpperCase().includes('HI_RES')
+      || (tier === 'LOSSLESS' && body?.max_quality === 'HI_RES');
     await r.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ quality: payload?.actual?.LOSSLESS || payload?.actual?.HI_RES || 'LOSSLESS' }),
+      body: JSON.stringify({
+        quality: actualTier,
+        sample_rate: hiRes ? 96000 : 44100,
+        bit_depth: hiRes ? 24 : 16,
+      }),
     });
   });
 }
@@ -158,43 +213,56 @@ export async function routeSearchTracks(page, handler) {
 export async function installPlayerStubs(page, { qualityPayload, searchTracks } = {}) {
   await installApiStubs(page);
   await routeMediaToken(page);
-  await routeQualityAvailable(page, qualityPayload ?? {
-    available: ['LOW', 'HIGH', 'LOSSLESS'],
-    max_quality: 'LOSSLESS',
-    actual: { LOW: 'LOW', HIGH: 'HIGH', LOSSLESS: 'LOSSLESS' },
-  });
+  await routeQualityAvailable(page, qualityPayload);
   await routeStream(page);
   if (searchTracks) {
     await routeSearchTracks(page, searchTracks);
   }
 }
 
-/** Search, click play on a track, wait until the player bar shows the track. */
+/** Search, click play on a track, wait until playback is active. */
 export async function startSearchPlayback(page, { providerId, query, title }) {
+  await waitForAppReady(page);
+  const playTestId = `search-play-${providerId}`;
+  const trackTitle = title || query;
+
   const searchResponse = page.waitForResponse(
     (r) => r.url().includes('/api/search') && r.request().method() === 'POST' && r.ok(),
   );
   await page.getByPlaceholder(SEARCH_INPUT).fill(query);
   await searchResponse;
   await page.waitForTimeout(600);
-  const playBtn = page.getByTestId(`search-play-${providerId}`);
+
+  const playBtn = page.getByTestId(playTestId);
   await playBtn.waitFor({ state: 'visible', timeout: 15_000 });
+
+  const qualityProbe = page.waitForResponse(
+    (r) => r.url().includes('/api/quality/') && r.url().includes('/available') && r.ok(),
+    { timeout: 25_000 },
+  ).catch(() => null);
+
   await playBtn.click();
-  const trackTitle = title || query;
+
   await page.waitForFunction(
-    (expected) => {
-      const el = document.querySelector('[data-testid="player-track-title"]');
-      if (el?.textContent?.includes(expected)) return true;
+    ({ testId, expected }) => {
+      const btn = document.querySelector(`[data-testid="${testId}"]`);
+      if (btn?.getAttribute('data-play-state') === 'pause') return true;
+      const titleEl = document.querySelector('[data-testid="player-track-title"]');
+      if (titleEl?.textContent?.includes(expected)) return true;
       try {
         const raw = localStorage.getItem('tidal-current-track');
-        return Boolean(raw && raw.includes(expected));
-      } catch {
-        return false;
-      }
+        if (raw && raw.includes(expected)) return true;
+      } catch { /* ignore */ }
+      const transport = document.querySelector('[data-testid="player-transport-btn"]');
+      return transport?.getAttribute('aria-label')?.toLowerCase().includes('pause')
+        || transport?.getAttribute('aria-label')?.toLowerCase().includes('пауз');
     },
-    trackTitle,
-    { timeout: 20_000 },
+    { testId: playTestId, expected: trackTitle },
+    { timeout: 25_000 },
   );
+
+  await qualityProbe;
+
   const transport = page.getByTestId('player-transport-btn');
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const state = await playBtn.getAttribute('data-play-state');
@@ -244,6 +312,30 @@ export async function seedTrackFeatures(page, featuresByProviderId) {
     });
     localStorage.setItem(key, JSON.stringify(existing));
   }, featuresByProviderId);
+}
+
+/** Stub YouTube / SoundCloud embed APIs (no external scripts in CI). */
+export async function stubSetEmbedApis(page) {
+  await page.addInitScript(() => {
+    window.SC = {
+      Widget: () => ({
+        bind(ev, cb) {
+          const ready = window.SC?.Widget?.Events?.READY;
+          if (ev === ready) queueMicrotask(cb);
+        },
+        play() {},
+        pause() {},
+        seekTo() {},
+      }),
+    };
+    window.SC.Widget.Events = { READY: 'ready', PLAY: 'play', PAUSE: 'pause' };
+    window.YT = {
+      Player(_id, opts) {
+        queueMicrotask(() => opts?.events?.onReady?.());
+      },
+      PlayerState: { PLAYING: 1, PAUSED: 2 },
+    };
+  });
 }
 
 export const SEARCH_INPUT = /search by title|поиск по названию/i;

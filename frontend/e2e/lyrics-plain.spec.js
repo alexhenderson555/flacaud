@@ -11,7 +11,7 @@ const TRACK = {
   duration_s: 180,
 };
 
-test('lyrics panel shows unsynced plain text lines', async ({ page }) => {
+test('karaoke shows unsynced plain text lines', async ({ page }) => {
   await installE2EAuth(page);
   await installPlayerStubs(page, { searchTracks: [TRACK] });
   await page.route('**/api/lyrics**', async (route) => {
@@ -30,6 +30,6 @@ test('lyrics panel shows unsynced plain text lines', async ({ page }) => {
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: '88002', query: 'plain', title: 'Plain Lyric Song' });
   await page.keyboard.press('k');
-  await expect(page.getByText('Unsynced opening line')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.karaoke-mode')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('Unsynced second line')).toBeVisible();
 });

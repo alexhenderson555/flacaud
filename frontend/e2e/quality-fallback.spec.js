@@ -10,11 +10,11 @@ const TRACK_NO_MAX = {
   duration_s: 180,
 };
 
-test('MAX button disabled when track has no hi-res', async ({ page }) => {
+test('Lossless tier available when track max is CD quality only', async ({ page }) => {
   await installE2EAuth(page);
   await page.addInitScript(() => {
-    localStorage.setItem('tidal-playback-quality', 'HI_RES');
-    sessionStorage.setItem('tidal-playback-quality', 'HI_RES');
+    localStorage.setItem('tidal-playback-quality', 'LOSSLESS');
+    sessionStorage.setItem('tidal-playback-quality', 'LOSSLESS');
   });
   await installPlayerStubs(page, {
     searchTracks: [TRACK_NO_MAX],
@@ -27,6 +27,7 @@ test('MAX button disabled when track has no hi-res', async ({ page }) => {
 
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: '93001', query: 'no max', title: 'No Max Track' });
-  await expect(page.getByTestId('quality-HI_RES')).toHaveAttribute('data-available', 'false', { timeout: 15000 });
-  await expect(page.getByTestId('quality-LOSSLESS')).toHaveAttribute('data-available', 'true');
+  await expect(page.getByTestId('quality-LOSSLESS')).toHaveAttribute('data-available', 'true', { timeout: 15_000 });
+  await expect(page.getByTestId('quality-HIGH')).toHaveAttribute('data-available', 'true');
+  await expect(page.getByTestId('quality-LOSSLESS')).toHaveClass(/is-active/);
 });

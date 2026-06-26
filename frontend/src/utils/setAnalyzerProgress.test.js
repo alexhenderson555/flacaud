@@ -91,7 +91,7 @@ describe('formatAnalyzerSegments', () => {
 
 describe('analyzer constants', () => {
   it('documents poll interval and scan step', () => {
-    expect(ANALYZER_POLL_MS).toBe(2000);
+    expect(ANALYZER_POLL_MS).toBe(1000);
     expect(ANALYZER_SCAN_INTERVAL_SEC).toBe(30);
   });
 });

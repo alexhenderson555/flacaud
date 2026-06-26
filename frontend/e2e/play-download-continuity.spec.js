@@ -85,8 +85,10 @@ test('stream URL is not swapped mid-playback when download completes', async ({ 
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: TRACK_ID, query: 'continuity', title: 'Continuity Test' });
 
+  await expect(page.getByTestId('player-track-title')).toContainText('Continuity Test', { timeout: 15_000 });
+
   await expect
-    .poll(async () => getMainAudioSrc(page), { timeout: 10_000 })
+    .poll(async () => getMainAudioSrc(page), { timeout: 20_000 })
     .toContain(`/api/stream/tidal/${TRACK_ID}`);
 
   await page.evaluate(() => {

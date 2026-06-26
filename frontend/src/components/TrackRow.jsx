@@ -72,6 +72,7 @@ function TrackRow({
       <div className="track-row__cover-wrap">
         {track.cover_url && !coverFailed ? (
           <img
+            key={`${track.provider_id}-${track.cover_url}`}
             src={coverImgSrc(track.cover_url)}
             alt=""
             className="track-row__cover"

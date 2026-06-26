@@ -78,19 +78,28 @@ describe('qualityPrefs', () => {
     })).toBe('LOSSLESS');
   });
 
-  it('resolvePlayerUiQuality prefers requested tier while switching', () => {
-    expect(resolvePlayerUiQuality({
-      deliveredStream: { tier: 'HIGH' },
-      streamQuality: 'LOSSLESS',
-      playbackQuality: 'LOSSLESS',
-      qualitiesReady: true,
-    })).toBe('LOSSLESS');
+  it('resolvePlayerUiQuality prefers requested tier while loading', () => {
     expect(resolvePlayerUiQuality({
       deliveredStream: { tier: 'LOSSLESS' },
       streamQuality: 'HIGH',
       playbackQuality: 'HIGH',
       qualitiesReady: true,
       isLoading: true,
+    })).toBe('HIGH');
+  });
+
+  it('resolvePlayerUiQuality follows delivered stream when stable', () => {
+    expect(resolvePlayerUiQuality({
+      deliveredStream: { tier: 'LOSSLESS' },
+      streamQuality: 'HIGH',
+      playbackQuality: 'HIGH',
+      qualitiesReady: true,
+    })).toBe('LOSSLESS');
+    expect(resolvePlayerUiQuality({
+      deliveredStream: { tier: 'HIGH' },
+      streamQuality: 'LOSSLESS',
+      playbackQuality: 'LOSSLESS',
+      qualitiesReady: true,
     })).toBe('HIGH');
   });
 

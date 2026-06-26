@@ -106,7 +106,8 @@ const FEATURES = [
   ['Downloads', 'Server-side jobs via POST /api/jobs → ARQ worker → signed file tokens; service-worker cache; progress toasts; history on Account.'],
   ['Library & playlists', 'Like/unlike and playlist CRUD synced to /api/library and /api/playlists; guest mode in localStorage auto-merged on login.'],
   ['Search & Shazam', 'Debounced full-text search with alternate keyboard-layout fallback; microphone audio-fingerprint recognition via /api/recognize.'],
-  ['Recommendations & Radio', 'Personalized tracks (/api/recommendations) and endless "vibe" radio at /genreverse seeded by genre/mood/library.'],
+  ['Recommendations & Radio', 'Personalized tracks (/api/recommendations) and endless "vibe" radio at /genreverse; backend enriches duplicate radio cover UUIDs via batch get_track.'],
+  ['Artist portraits', 'Free chain: Wikipedia → Deezer → iTunes → Tidal picture; in-memory cache (TIDALDLRU_ARTIST_IMAGE_CACHE_TTL); picture_source on catalog artist; proxied via /api/image-proxy.'],
   ['Sync / transfer', 'Import library and playlists from Spotify / YouTube: preview then import via /api/transfer/*.'],
   ['Set Analyzer', 'Upload a DJ mix → async analyze job → BPM / key / energy timeline and tracklist recognition.'],
   ['Stem Splitter', 'Demucs-based separation of a track into vocals / drums / bass / other, delivered as downloadable stems.'],
@@ -130,7 +131,7 @@ const ENDPOINTS = [
   ['POST', '/api/payments/create', 'Create a YooKassa payment, return confirmation URL'],
   ['POST', '/api/webhooks/yookassa', 'Payment webhook (re-verified server-side against YooKassa API)'],
   ['POST', '/api/transfer/preview · /import', 'External playlist import (Spotify/YouTube)'],
-  ['GET', '/api/image-proxy', 'SSRF-hardened cover-art proxy (Tidal CDN allowlist)'],
+  ['GET', '/api/image-proxy', 'SSRF-hardened image proxy (Tidal, Wikimedia, Deezer dzcdn, Apple mzstatic)'],
 ];
 
 const ENVVARS = [
@@ -146,6 +147,7 @@ const ENVVARS = [
   ['TIDALDLRU_PKCE_CLIENT_ID / _SECRET', 'Tidal OAuth (PKCE) credentials'],
   ['TIDALDLRU_FORWARDED_ALLOW_IPS', 'Trusted proxy IPs for forwarded headers'],
   ['GEMINI_API_KEY · SPOTIPY_* · RESEND_API_KEY', 'AI playlists · Spotify import · transactional email'],
+  ['TIDALDLRU_ARTIST_IMAGE_CACHE_TTL · TIDALDLRU_WIKI_USER_AGENT', 'Artist portrait cache (default 7d) · Wikipedia User-Agent'],
 ];
 
 const diagrams = {
@@ -235,6 +237,9 @@ const knownIssues = {
     'Stream concurrency crash: streaming.py polled task.done() when task was None (another request owned the merge) → AttributeError. Guarded both sites.',
     'Zip path traversal: /api/jobs/{job_id}/zip used job_id directly as a path segment; now rejects non-hex ids.',
     'Artist names: normalizeArtists did artists.map(String) → "[object Object]" for object-shaped artists; now extracts name/title and drops empties.',
+    'Quality UI mismatch: re-clicking the same tier did not reload stream; changeQuality now bumps streamRetryNonce; UI shows delivered tier when stable.',
+    'Genre radio duplicate covers: Tidal radio stubs shared one cover UUID; recommendations.py batch-enriches per-track art; Genreverse frontend enrich + img keys.',
+    'Artist portraits: Wikipedia/Deezer/iTunes/Tidal chain (no API keys), 7d cache, image-proxy allowlist extended; Google CSE removed.',
     'Search alt-layout fallback called .json() on non-OK responses; now guarded.',
     'Secret hygiene: Xray REALITY configs (private keys) untracked from git + ignored (see note below).',
   ],
@@ -353,7 +358,7 @@ ${archDiagram()}
 </tbody></table>
 <p><b>Request routing:</b> <code>/assets/*</code> → immutable static; <code>/api/stream/*</code> → proxied with gzip off (Range/206 must pass through); <code>/api/*</code> → gzip + proxy to api; everything else → SPA <code>index.html</code>. The dist is built during deploy and served by Caddy from <code>frontend/dist</code>.</p>
 <p><b>Geo-block egress:</b> Tidal blocks RU IPs. Circumvention is at the network layer, not in app code (the Tidal httpx client has no proxy argument). A separate VPS runs Marzban over Xray-core with a VLESS-REALITY inbound; the FlacAud host routes Tidal-bound traffic through it. Live Xray config and routing live on the servers, not in the repo.</p>
-<p><b>Deploy:</b> CI (ruff+pytest / lint+build+e2e) then CD via SSH: <code>git reset --hard</code>, build dist, <code>docker compose build</code> + <code>up -d</code>, restart caddy/api/bot, health-check <code>/healthz</code>. A manual <code>scripts/deploy_tidal.py</code> mirrors this from a dev machine.</p>
+<p><b>Deploy:</b> CI (ruff+pytest 372+ / vitest 282+ / e2e) then CD via SSH: <code>app.tar.gz</code> or Docker registry, <code>docker compose build</code> + <code>up -d</code>, restart caddy/api/bot, health-check <code>/healthz</code>. Manual <code>scripts/deploy_tidal.py</code> — see <code>docs/DEPLOY.md</code>.</p>
 
 <h2>5 · Data models</h2>
 <h3>User (<span class="mono">database/models.py</span>)</h3>
@@ -390,7 +395,7 @@ ${diagramBlock('6.6 Player track switch (frontend)', 'the play-initiation path h
   <li><b>Refresh tokens:</b> random, stored hashed, rotated on each use, revoked on logout; HttpOnly <code>SameSite=Lax</code> cookie scoped to /api/auth.</li>
   <li><b>Media/file tokens:</b> itsdangerous <code>URLSafeTimedSerializer</code> (<code>TIDALDLRU_SIGNING_SECRET</code>), short TTL; gate /api/stream and file downloads via <code>?mt=</code>.</li>
   <li><b>Rate limits:</b> Redis sliding-window per IP per path (login, register, forgot-password, search, jobs, AI playlist), with an in-memory fallback.</li>
-  <li><b>SSRF:</b> image proxy resolves DNS, blocks private/loopback/link-local, allowlists Tidal CDNs.</li>
+  <li><b>SSRF:</b> image proxy resolves DNS, blocks private/loopback/link-local, allowlists Tidal CDNs + Wikimedia + Deezer + Apple CDNs for portraits.</li>
   <li><b>Payment webhook:</b> no provider HMAC; defended by mandatory server-side re-fetch of the payment from YooKassa + amount cross-check (body treated as untrusted hint).</li>
   <li><b>Pool secrets:</b> Tidal refresh tokens encrypted at rest with a Fernet key; ops endpoints behind an ops API key.</li>
 </ul>

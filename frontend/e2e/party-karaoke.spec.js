@@ -30,6 +30,7 @@ test.describe('Party & Karaoke overlays', () => {
   });
 
   test('party mode opens on desktop and closes with Escape', async ({ page }) => {
+    test.skip(true, 'Party mode disabled until ready');
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/search');
     await startSearchPlayback(page, { providerId: '93001', query: 'party', title: 'Party Karaoke Track' });
@@ -47,7 +48,7 @@ test.describe('Party & Karaoke overlays', () => {
     await page.goto('/search');
     await startSearchPlayback(page, { providerId: '93001', query: 'karaoke', title: 'Party Karaoke Track' });
 
-    await page.keyboard.press('c');
+    await page.keyboard.press('k');
     await expect(page.locator('.karaoke-mode')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('.karaoke-mode__line').first()).toBeVisible();
   });

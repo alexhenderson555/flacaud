@@ -1,6 +1,6 @@
 /** Set Analyzer job polling and progress mapping (mirrors backend set_analyzer.py). */
 
-export const ANALYZER_POLL_MS = 2000;
+export const ANALYZER_POLL_MS = 1000;
 /** ~1 h at 2 s — matches worker job_timeout for long mixes */
 export const ANALYZER_MAX_ATTEMPTS = 1800;
 export const ANALYZER_SCAN_INTERVAL_SEC = 30;

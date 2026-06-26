@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { getAudioAnalyser, initAudioEngine } from '../utils/audioEngine';
+import { getAudioAnalyser, initAudioEngine, resumeAudioContext } from '../utils/audioEngine';
 import {
   computeBarLevels,
   smoothBarLevels,
 } from '../utils/visualizerBands';
+import {
+  visualizerPeakLevel,
+  visualizerShouldAnimate,
+} from '../utils/visualizerRuntime';
 
 const FRAME_MS = 1000 / 30;
 const GRAD_BUCKETS = 36;
 const MAX_DPR = 2;
+const IDLE_ATTACK = 0.2;
+const IDLE_DECAY = 0.28;
+const IDLE_CUTOFF = 0.5;
 
 function readAccentColors() {
   const accent = getComputedStyle(document.documentElement)
@@ -25,7 +32,7 @@ function resizeVisualizerCanvas(canvas) {
   canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
 }
 
-export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = false }) {
+export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   const canvasRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -80,6 +87,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = 
       const el = resolveAudioEl();
       if (!el) return false;
       initAudioEngine({ current: el });
+      resumeAudioContext();
       const analyser = getAudioAnalyser({ current: el });
       if (!analyser) return false;
       analyserRef.current = analyser;
@@ -99,6 +107,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = 
       if (playEl !== el) {
         playEl?.removeEventListener('play', onPlay);
         analyserRef.current = null;
+        smoothLevelsRef.current = null;
         playEl = el;
         playEl.addEventListener('play', onPlay);
       }
@@ -107,6 +116,14 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = 
       }
     };
     waitForAudio();
+
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      resumeAudioContext();
+      bindAnalyser();
+      lastFrame = 0;
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
 
@@ -128,32 +145,10 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = 
       return cache[bucket];
     };
 
-    const draw = (time = 0) => {
-      if (cancelled) return;
-      const el = resolveAudioEl();
-      const audioActive = el && !el.paused && !el.ended;
-      if (document.visibilityState === 'hidden' || (!isPlaying && !audioActive)) return;
-
-      if (time - lastFrame < FRAME_MS) {
-        reqRef.current = requestAnimationFrame(draw);
-        return;
-      }
-      lastFrame = time;
-
-      if (!analyserRef.current && !bindAnalyser()) {
-        reqRef.current = requestAnimationFrame(draw);
-        return;
-      }
-
+    const paintBars = (smoothed) => {
       const { accent } = colorsRef.current;
       const width = canvas.width;
       const height = canvas.height;
-      ctx.clearRect(0, 0, width, height);
-
-      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-      const targetLevels = computeBarLevels(dataArrayRef.current, window.innerWidth);
-      const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels);
-      smoothLevelsRef.current = smoothed;
       const barCount = smoothed.length;
       const barWidth = width / barCount;
       const gap = Math.min(4, Math.max(1, barWidth * 0.12));
@@ -169,19 +164,68 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl, isPlaying = 
         ctx.fillRect(x, height - barHeight, Math.max(1, barWidth - gap), barHeight);
         x += barWidth;
       }
+    };
 
+    const decayBars = () => {
+      const width = canvas.width;
+      const height = canvas.height;
+      const prev = smoothLevelsRef.current;
+      if (!prev?.length) {
+        ctx.clearRect(0, 0, width, height);
+        return;
+      }
+      const zeros = new Uint8Array(prev.length);
+      const decayed = smoothBarLevels(prev, zeros, IDLE_ATTACK, IDLE_DECAY);
+      smoothLevelsRef.current = decayed;
+      ctx.clearRect(0, 0, width, height);
+      if (visualizerPeakLevel(decayed) > IDLE_CUTOFF) {
+        paintBars(decayed);
+      } else {
+        smoothLevelsRef.current = null;
+      }
+    };
+
+    const draw = (time = 0) => {
+      if (cancelled) return;
       reqRef.current = requestAnimationFrame(draw);
+
+      const el = resolveAudioEl();
+      const shouldAnimate = visualizerShouldAnimate({
+        visibilityState: document.visibilityState,
+        audioEl: el,
+      });
+
+      if (!shouldAnimate) {
+        decayBars();
+        return;
+      }
+
+      if (time - lastFrame < FRAME_MS) return;
+      lastFrame = time;
+
+      if (!analyserRef.current && !bindAnalyser()) return;
+
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+
+      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+      const targetLevels = computeBarLevels(dataArrayRef.current, window.innerWidth);
+      const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels);
+      smoothLevelsRef.current = smoothed;
+      paintBars(smoothed);
     };
 
     reqRef.current = requestAnimationFrame(draw);
 
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibility);
       if (waitRaf) cancelAnimationFrame(waitRaf);
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       playEl?.removeEventListener('play', onPlay);
     };
-  }, [audioRef, getMainAudioEl, isPlaying, resolveAudioEl]);
+  }, [audioRef, getMainAudioEl, resolveAudioEl]);
 
   return (
     <canvas

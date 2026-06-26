@@ -20,7 +20,7 @@ test('Genreverse starts station from recommendations', async ({ page }) => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        electronic: { id: 'electronic', name: 'Electronic', color: '#000', image: '/genres/genre_electronic_1781783267241.png' },
+        electronic: { id: 'electronic', name: 'Electronic', color: '#000', image: '/genres/genre_electronic_1781783267241.png', subgenres: [] },
       }),
     });
   });
@@ -38,12 +38,13 @@ test('Genreverse starts station from recommendations', async ({ page }) => {
   });
 
   await page.goto('/genreverse');
-  await page.locator('.radio-page').getByText('Electronic', { exact: true }).first().click();
-  const startBtn = page.getByRole('button', { name: /Start Radio|Запустить радио/i });
+  await page.waitForResponse((r) => r.url().includes('/api/genres') && r.ok());
+  await page.getByTestId('genre-card-electronic').click();
+  const startBtn = page.getByTestId('genreverse-play-mix-btn');
   await expect(startBtn).toBeVisible({ timeout: 10_000 });
   const recPromise = page.waitForResponse((r) => r.url().includes('/api/recommendations') && r.status() === 200);
   await startBtn.click();
   await recPromise;
-  await expect(page.getByRole('heading', { name: /Up Next on Your Station|Дальше на вашей станции/i })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('heading', { name: /Electronic Radio|Up Next on Your Station|Дальше на вашей станции/i })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('main').getByText('Radio Track')).toBeVisible();
 });

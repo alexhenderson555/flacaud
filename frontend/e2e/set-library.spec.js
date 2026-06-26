@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { installE2EAuth } from './helpers.js';
+import { installE2EAuth, stubSetEmbedApis } from './helpers.js';
 
 const SET_URL = 'https://soundcloud.com/e2e/demo-set';
 
@@ -17,6 +17,7 @@ const DEMO_SET_API_ROW = {
 test.describe('Set Library', () => {
   test.beforeEach(async ({ page }) => {
     await installE2EAuth(page, { token: 'e2e-sets' });
+    await stubSetEmbedApis(page);
     await page.route('**/api/sets**', async (route) => {
       const method = route.request().method();
       if (method === 'GET') {
@@ -36,6 +37,9 @@ test.describe('Set Library', () => {
         return;
       }
       await route.continue();
+    });
+    await page.route('**/api/sets/cached-audio**', async (route) => {
+      await route.fulfill({ status: 404, body: '' });
     });
     await page.addInitScript((row) => {
       window.__E2E_DISABLE_AUTOSAVE__ = true;
@@ -93,7 +97,7 @@ test.describe('Set Library', () => {
     await page.getByTestId('set-library-listen').click();
     await expect(page).toHaveURL(/\/sets$/);
     await expect(page.getByTestId('set-library-embed-anchor')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId('set-embed-player')).toBeAttached({ timeout: 15000 });
+    await expect(page.getByTestId('set-embed-player')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('player-bar')).toHaveAttribute('data-set-mode', 'true');
   });
 });

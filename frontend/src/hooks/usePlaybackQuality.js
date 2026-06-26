@@ -189,7 +189,7 @@ export function usePlaybackQuality({
     const activelyPlaying = isActivelyPlayingAudio(isPlayingRef.current, mainEl)
       || (isPlayingRef.current && mainEl && !mainEl.paused);
 
-    if (!force && activelyPlaying && effective !== streamQualityRef.current) {
+    if (!force && useAuto && activelyPlaying && effective !== streamQualityRef.current) {
       const keepActual = actualMap?.[streamQualityRef.current] || actualMap?.[effective];
       if (keepActual) updateDeliveredMeta(keepActual, activeProbe);
       return;
@@ -468,6 +468,7 @@ export function usePlaybackQuality({
         mainEl,
         currentTrack?.provider_id,
         trackDur,
+        { activeStreamUrl: elSrc || currentAudioSrc || '' },
       );
 
       if (pausedMidTrack && elSrc) {
@@ -626,7 +627,9 @@ export function usePlaybackQuality({
       elSrc.includes(`quality=${newQ}&`)
       || elSrc.includes(`quality=${newQ}`)
     );
-    if (newQ === playbackQuality && newQ === streamQualityRef.current && streamMatches) return;
+    if (newQ === playbackQuality && newQ === streamQualityRef.current && streamMatches) {
+      return;
+    }
 
     if (!isQualityAllowedForPlan(newQ, effectivePlan)) {
       showToast?.(lang === 'ru' ? 'Это качество доступно на платном тарифе' : 'This quality requires a paid plan');
@@ -648,8 +651,8 @@ export function usePlaybackQuality({
     pendingSeekRef.current = time;
     pendingPlayAfterSeekRef.current = isPlaying;
     lastStreamErrorKeyRef.current = '';
-    streamRetryNonceRef.current = 0;
-    setStreamRetryNonce(0);
+    streamRetryNonceRef.current += 1;
+    setStreamRetryNonce((n) => n + 1);
     loadedSrcKeyRef.current = '';
     setPlaybackQuality(newQ);
     applyStreamQuality(newQ, availableQualities, qualityActualRef.current, {

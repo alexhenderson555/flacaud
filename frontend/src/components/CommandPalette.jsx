@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, Music, Heart, User, Download, Radio, Sparkles,
+  Search, Heart, User, Download, Radio, Sparkles,
   ListMusic, Mic2, Sliders, Disc, ListOrdered, Play, Pause, Wand2, Scissors, History,
   Shuffle, Repeat, Repeat1, FileText, Shield, Library,
 } from 'lucide-react';
@@ -30,7 +30,6 @@ function buildCommands({
   navigate,
   onClose,
   onToggleQueue,
-  onToggleLyrics,
   onToggleEq,
   onToggleDj,
   onToggleKaraoke,
@@ -84,10 +83,9 @@ function buildCommands({
   const panels = [
     ...modes,
     { id: 'toggle-queue', title: withHotkey(t('Toggle Queue', 'Очередь'), PLAYER_HOTKEYS.queue), keywords: 'q up next', icon: ListOrdered, action: wrap(onToggleQueue) },
-    { id: 'toggle-lyrics', title: withHotkey(t('Toggle Lyrics', 'Текст песни'), PLAYER_HOTKEYS.lyrics), keywords: 'k lyrics text sing', icon: Music, action: wrap(onToggleLyrics) },
+    { id: 'toggle-karaoke', title: withHotkey(t('Toggle Karaoke', 'Караоке'), PLAYER_HOTKEYS.karaoke), keywords: 'k karaoke fullscreen lyrics', icon: Mic2, action: wrap(onToggleKaraoke) },
     { id: 'toggle-eq', title: withHotkey(t('Toggle Equalizer', 'Эквалайзер'), PLAYER_HOTKEYS.eq), keywords: 'e audio', icon: Sliders, action: wrap(onToggleEq) },
     { id: 'toggle-dj', title: withHotkey(t('Toggle DJ Tools', 'DJ-панель'), PLAYER_HOTKEYS.dj), keywords: 'd bpm key', icon: Disc, action: wrap(onToggleDj) },
-    { id: 'toggle-karaoke', title: withHotkey(t('Toggle Karaoke', 'Караоке'), PLAYER_HOTKEYS.karaoke), keywords: 'c karaoke fullscreen', icon: Mic2, action: wrap(onToggleKaraoke) },
   ];
 
   const nav = NAV.map((n) => ({
@@ -109,7 +107,6 @@ export default function CommandPalette({
   isPlaying = false,
   onTogglePlay,
   onToggleQueue,
-  onToggleLyrics,
   onToggleEq,
   onToggleDj,
   onToggleKaraoke,
@@ -127,7 +124,7 @@ export default function CommandPalette({
 
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 80);
+      setTimeout(() => inputRef.current?.focus(), 0);
       const saved = localStorage.getItem('tidal-library');
       if (saved) {
         try { setLibrary(JSON.parse(saved)); } catch { /* ignore */ }
@@ -145,7 +142,6 @@ export default function CommandPalette({
       navigate,
       onClose,
       onToggleQueue,
-      onToggleLyrics,
       onToggleEq,
       onToggleDj,
       onToggleKaraoke,
@@ -159,7 +155,7 @@ export default function CommandPalette({
       onCycleRepeat,
     }),
     [
-      lang, navigate, onClose, onToggleQueue, onToggleLyrics, onToggleEq,
+      lang, navigate, onClose, onToggleQueue, onToggleEq,
       onToggleDj, onToggleKaraoke, onPlayTrack, currentTrack, isPlaying, onTogglePlay,
       shuffleEnabled, repeatMode, onToggleShuffle, onCycleRepeat,
     ],

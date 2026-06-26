@@ -22,6 +22,9 @@ TIDALDLRU_LYRICS_CACHE=/var/lib/tidal-dl-ru/lyrics-cache
 # optional: recommendation / AI playlist in-memory cache TTL (seconds)
 TIDALDLRU_REC_CACHE_TTL=300
 TIDALDLRU_AI_PLAYLIST_CACHE_TTL=600
+# Artist portraits (Wikipedia → Deezer → iTunes → Tidal, no API keys)
+# TIDALDLRU_ARTIST_IMAGE_CACHE_TTL=604800
+# TIDALDLRU_WIKI_USER_AGENT=FlacAud/1.0 (https://flacaud.ru; artist portraits)
 ```
 
 **Password reset email** (pick one):
@@ -62,7 +65,18 @@ CF SSL mode: **Full** (not Flexible). `auto_https disable_redirects` on origin a
 
 **“Not secure” on DNS-only:** you deployed `Caddyfile.cloudflare` (self-signed origin). Redeploy with default (`CLOUDFLARE_PROXY` unset) so Caddy requests Let's Encrypt. Open **https://** not http.
 
-**Covers without VPN:** frontend loads art via `/api/image-proxy` (same origin); server fetches `*.tidal.com` / `*.tidalcdn.com`.
+**Covers & artist portraits without VPN:** frontend loads all remote art via **`/api/image-proxy`** (same origin). Server allowlist:
+
+| Host suffix | Source |
+|-------------|--------|
+| `*.tidal.com`, `*.tidalcdn.com` | Tidal catalog |
+| `*.wikimedia.org`, `*.wikipedia.org` | Wikipedia portraits |
+| `*.dzcdn.net` | Deezer |
+| `*.mzstatic.com` | Apple iTunes |
+
+API field **`picture_source`**: `wikimedia` | `deezer` | `itunes` | `tidal` | `none`. See [docs/FEATURES.md](../docs/FEATURES.md) §3.
+
+**Genre radio duplicate covers:** backend enriches per-track covers in `recommendations.py`; after deploy verify Genreverse shows distinct art per row.
 
 ## DNS (before first deploy to flacaud.ru)
 

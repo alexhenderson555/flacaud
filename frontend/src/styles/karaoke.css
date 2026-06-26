@@ -1,0 +1,16 @@
+/* Karaoke overlay — dynamic viewport + smooth lyric scroll */
+
+.karaoke-mode {
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+}
+
+html.karaoke-mode-open .karaoke-mode {
+  width: 100vw;
+  max-width: 100vw;
+}
+
+.karaoke-mode__lyrics {
+  scroll-behavior: smooth;
+}

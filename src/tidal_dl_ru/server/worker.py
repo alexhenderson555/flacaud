@@ -97,7 +97,7 @@ def _download_sync(
     except ProviderError as e:
         job_state.update_track(job_id, idx, status="skipped", error=str(e))
         return None
-    except Exception as e:  # noqa: BLE001 — surface unknown provider errors
+    except (OSError, httpx.HTTPError, ValueError, RuntimeError) as e:
         job_state.update_track(
             job_id, idx, status="failed", error=f"{type(e).__name__}: {e}"
         )
@@ -198,7 +198,7 @@ async def download_url(
                         res = await asyncio.to_thread(tidal_p.search, query, 1)
                         if res:
                             matched.append(res[0])
-                    except Exception:
+                    except (ProviderError, httpx.HTTPError, ValueError):
                         pass
                 tracks = matched
             if not tracks:
@@ -222,8 +222,8 @@ async def download_url(
             try:
                 path = await asyncio.to_thread(provider.download, track, base, q)
                 if not path:
-                    raise Exception("Failed to download track for splitting")
-            except Exception as e:
+                    raise RuntimeError("Failed to download track for splitting")
+            except (ProviderError, OSError, httpx.HTTPError, ValueError, RuntimeError) as e:
                 job_state.update_track(job_id, 0, status="failed", error=str(e))
                 job_state.update_track(job_id, 1, status="failed", error=str(e))
                 job_state.mark_failed(job_id, str(e))
@@ -242,7 +242,7 @@ async def download_url(
 
                 job_state.update_track(job_id, 0, status="done", bytes_written=v_path.stat().st_size, bytes_total=v_path.stat().st_size, file_token=v_token)
                 job_state.update_track(job_id, 1, status="done", bytes_written=i_path.stat().st_size, bytes_total=i_path.stat().st_size, file_token=i_token)
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 job_state.update_track(job_id, 0, status="failed", error=str(e))
                 job_state.update_track(job_id, 1, status="failed", error=str(e))
                 job_state.mark_failed(job_id, str(e))

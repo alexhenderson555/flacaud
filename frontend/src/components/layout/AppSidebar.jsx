@@ -1,4 +1,4 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, ListMusic, User, Repeat, Radio, Flame, Disc, Library, Menu, X, Heart,
@@ -20,6 +20,14 @@ const MOBILE_MORE_LINKS = [
 
 export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen }) {
   const closeMenu = () => setIsMobileMenuOpen(false);
+
+  // Playlists live at /library?tab=playlists (the Playlists route redirects there),
+  // so highlight by tab rather than letting both items match the /library pathname.
+  const location = useLocation();
+  const onLibrary = location.pathname === '/library';
+  const libraryTab = new URLSearchParams(location.search).get('tab');
+  const libraryActive = onLibrary && libraryTab !== 'playlists';
+  const playlistsActive = (onLibrary && libraryTab === 'playlists') || location.pathname === '/playlists';
 
   return (
     <>
@@ -52,11 +60,11 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
           </NavLink>
 
           <div className="sidebar-section-label hide-on-mobile">{t('myMusic')}</div>
-          <NavLink to="/library" className={navClass()}>
+          <NavLink to="/library" className={() => `nav-item${libraryActive ? ' active' : ''}`}>
             <Heart size={20} />
             <span>{t('library')}</span>
           </NavLink>
-          <NavLink to="/playlists" className={navClass('', 'hide-on-mobile')}>
+          <NavLink to="/library?tab=playlists" className={() => `nav-item hide-on-mobile${playlistsActive ? ' active' : ''}`}>
             <ListMusic size={20} />
             <span>{t('playlists')}</span>
           </NavLink>

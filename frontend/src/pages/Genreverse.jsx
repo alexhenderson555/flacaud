@@ -6,6 +6,7 @@ import LibraryTrackRow from '../components/LibraryTrackRow';
 import PlaylistModal from '../components/PlaylistModal';
 import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
 import { apiGetJson, messageForApiError } from '../utils/apiClient';
+import { enrichTracksFromApi } from '../utils/libraryApi';
 import {
   fetchVibeRadioBatch,
   mergeVibeRadioTracks,
@@ -125,9 +126,10 @@ export default function Genreverse() {
 
       if (incoming.length > 0) {
         const withGenre = incoming.map(t => ({...t, __queue_genre: genreName}));
+        const enriched = await enrichTracksFromApi(withGenre, lang, { persistLibrary: false });
         const normalized = refresh
-          ? tagVibeRadioTracks(withGenre)
-          : mergeVibeRadioTracks(stationTracks, withGenre);
+          ? tagVibeRadioTracks(enriched)
+          : mergeVibeRadioTracks(stationTracks, enriched);
           
         normalized.forEach(tr => { if (!tr.__queue_genre) tr.__queue_genre = genreName; });
         
@@ -188,6 +190,7 @@ export default function Genreverse() {
                 whileHover={{ scale: 1.03, y: -5 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => { setActiveGenre(g); setError(null); }}
+                data-testid={`genre-card-${g.id}`}
                 style={{
                   position: 'relative',
                   aspectRatio: '1 / 1',
@@ -282,6 +285,7 @@ export default function Genreverse() {
                   {activeGenre.name}
                 </h2>
                 <motion.button
+                  data-testid="genreverse-play-mix-btn"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => generateVibe(activeGenre.name)}
@@ -316,7 +320,7 @@ export default function Genreverse() {
               width: '100%',
               marginTop: '10px'
             }}>
-              {activeGenre.subgenres.map((subItem, i) => {
+              {(activeGenre.subgenres || []).map((subItem, i) => {
                 const sub = typeof subItem === 'string' ? subItem : subItem.name;
                 const subImage = typeof subItem === 'object' ? subItem.image : null;
                 return (

@@ -207,11 +207,18 @@ export function hasAdequatePlaybackBuffer(audioEl, trackDurationSec, { minAheadS
 }
 
 /** Keep paused stream when it still belongs to the requested track. */
-export function shouldPreservePausedStream(audioEl, trackId, trackDurationSec = 0) {
+export function shouldPreservePausedStream(
+  audioEl,
+  trackId,
+  trackDurationSec = 0,
+  { activeStreamUrl = '' } = {},
+) {
   if (!audioEl || trackId == null || trackId === '') return false;
   const src = audioEl.currentSrc || audioEl.src || '';
   if (!src || !isPausedMidPlayback(audioEl)) return false;
-  if (!urlTargetsTrack(src, trackId)) return false;
+  const trackMatch = urlTargetsTrack(src, trackId)
+    || (src.startsWith('blob:') && activeStreamUrl && sameStreamResource(src, activeStreamUrl));
+  if (!trackMatch) return false;
   if (audioEl.ended || isAtTrackEnd(audioEl, trackDurationSec)) return false;
   return true;
 }

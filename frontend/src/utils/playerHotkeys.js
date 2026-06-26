@@ -11,8 +11,7 @@ export const PLAYER_HOTKEYS = {
   volumeUp: '↑',
   volumeDown: '↓',
   like: 'L',
-  lyrics: 'K',
-  karaoke: 'C',
+  karaoke: 'K',
   queue: 'Q',
   eq: 'E',
   dj: 'D',
@@ -43,7 +42,6 @@ const HINT_ROWS = {
     [
       [`${PLAYER_HOTKEYS.like}`, 'like'],
       [`${PLAYER_HOTKEYS.trackRadio}`, 'track radio'],
-      [`${PLAYER_HOTKEYS.lyrics}`, 'lyrics'],
       [`${PLAYER_HOTKEYS.karaoke}`, 'karaoke'],
       [`${PLAYER_HOTKEYS.queue}`, 'queue'],
       [`${PLAYER_HOTKEYS.eq}`, 'EQ'],
@@ -68,7 +66,6 @@ const HINT_ROWS = {
     [
       [`${PLAYER_HOTKEYS.like}`, 'лайк'],
       [`${PLAYER_HOTKEYS.trackRadio}`, 'радио по треку'],
-      [`${PLAYER_HOTKEYS.lyrics}`, 'текст'],
       [`${PLAYER_HOTKEYS.karaoke}`, 'караоке'],
       [`${PLAYER_HOTKEYS.queue}`, 'очередь'],
       [`${PLAYER_HOTKEYS.eq}`, 'EQ'],

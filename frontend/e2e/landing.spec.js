@@ -20,6 +20,31 @@ test('landing premium sections and CTAs', async ({ page }) => {
   await expect(page.locator('.landing__lang-btn')).toBeVisible();
 });
 
+test('cinema easter egg toggles with physical V key (any layout)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.landing')).not.toHaveClass(/landing--cinema/);
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      code: 'KeyV',
+      key: 'М',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+  });
+  await expect(page.locator('.landing')).toHaveClass(/landing--cinema/);
+  await expect(page.locator('.landing__cinema-hint')).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.landing')).not.toHaveClass(/landing--cinema/);
+});
+
+test('landing easter egg whisper is present', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.landing__egg')).toBeAttached();
+});
+
 test('FAQ Telegram contact link', async ({ page }) => {
   await page.goto('/landing#faq');
   const tg = page.getByRole('link', { name: /Message on Telegram|Написать в Telegram|Написать в ТГ/i });

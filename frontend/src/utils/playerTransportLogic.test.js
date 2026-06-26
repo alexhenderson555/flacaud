@@ -328,6 +328,20 @@ describe('shouldPreservePausedStream', () => {
     };
     expect(shouldPreservePausedStream(thin, '111', 200)).toBe(true);
   });
+
+  it('preserves blob cache URLs when active stream matches', () => {
+    const blob = 'blob:http://localhost/abc-123';
+    const el = {
+      paused: true,
+      currentTime: 42,
+      ended: false,
+      duration: 200,
+      currentSrc: blob,
+      src: blob,
+    };
+    expect(shouldPreservePausedStream(el, '111', 200, { activeStreamUrl: blob })).toBe(true);
+    expect(shouldPreservePausedStream(el, '111', 200, { activeStreamUrl: 'blob:http://localhost/other' })).toBe(false);
+  });
 });
 
 describe('hasAdequatePlaybackBuffer', () => {

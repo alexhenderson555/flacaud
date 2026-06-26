@@ -127,3 +127,41 @@
   pointer-events: none;
   user-select: none;
 }
+
+/* Whisper hint — same physical key on any layout */
+.landing__egg {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 3;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.11);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.85;
+  transition: color 0.4s ease, opacity 0.4s ease;
+}
+
+.landing__egg-glyph {
+  font-size: 0.58rem;
+  opacity: 0.9;
+}
+
+.landing__egg-key {
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.landing:hover .landing__egg {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.landing--cinema .landing__egg {
+  opacity: 0;
+}

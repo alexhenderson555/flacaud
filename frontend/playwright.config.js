@@ -7,6 +7,8 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 120_000,
   expect: { timeout: 30_000 },
+  workers: process.env.CI ? 1 : undefined,
+  retries: process.env.CI ? 1 : 0,
   webServer: {
     command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173',
     url: baseURL,

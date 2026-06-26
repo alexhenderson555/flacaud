@@ -119,9 +119,10 @@ export default function PlayerLogic({ children }) {
     if (currentTrackRef.current?.provider_id || pendingPlayRef.current) return;
     try {
       const savedTrack = localStorage.getItem('tidal-current-track');
+      if (!savedTrack) return;
       const savedPlaylist = localStorage.getItem('tidal-current-playlist');
       const savedIndex = localStorage.getItem('tidal-current-index');
-      setCurrentTrack(savedTrack ? normalizeTrack(JSON.parse(savedTrack)) : null);
+      setCurrentTrack(normalizeTrack(JSON.parse(savedTrack)));
       setPlaylist(savedPlaylist
         ? JSON.parse(savedPlaylist).map((tr) => normalizeTrack(tr)).filter(Boolean)
         : []);
@@ -319,6 +320,7 @@ export default function PlayerLogic({ children }) {
     shuffleEnabled: playbackModes.shuffleEnabled,
     repeatMode: playbackModes.repeatMode,
     setCurrentAudioSrc,
+    currentAudioSrc,
     setPreloadAudioSrc,
     swapAudioSlots,
     getMainAudioEl,
@@ -531,9 +533,11 @@ export default function PlayerLogic({ children }) {
   usePlayerHotkeys({
     enabled: mediaEnabled,
     currentTrack,
+    playlist,
     isPlaying,
     audioRef,
     getMainAudioEl,
+    togglePlay: transport.togglePlay,
     playNext: transport.playNext,
     playPrevious: transport.playPrevious,
     toggleOverlay: overlays.toggleOverlay,

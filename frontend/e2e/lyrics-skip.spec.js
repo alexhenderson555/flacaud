@@ -24,7 +24,7 @@ const TRACK_B = {
   title: 'Track B',
 };
 
-test('lyrics fetch survives quick skip when second track has lyrics', async ({ page }) => {
+test('karaoke fetch survives quick skip when second track has lyrics', async ({ page }) => {
   await installE2EAuth(page);
   await installApiStubs(page);
   await routeMediaToken(page);
@@ -56,5 +56,6 @@ test('lyrics fetch survives quick skip when second track has lyrics', async ({ p
   await startSearchPlayback(page, { providerId: '88002', query: 'track b', title: 'Track B' });
   await expect(page.getByTestId('player-track-title')).toContainText('Track B', { timeout: 15_000 });
   await page.keyboard.press('k');
+  await expect(page.locator('.karaoke-mode')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Second track lyric')).toBeVisible({ timeout: 15_000 });
 });

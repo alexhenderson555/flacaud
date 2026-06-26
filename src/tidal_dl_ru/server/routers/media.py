@@ -125,9 +125,19 @@ async def image_proxy(url: str):
         ):
             raise HTTPException(status_code=400, detail="Blocked address")
 
-    allowed_suffixes = (".tidal.com", ".tidalcdn.com")
+    allowed_suffixes = (
+        ".tidal.com",
+        ".tidalcdn.com",
+        ".wikimedia.org",
+        ".wikipedia.org",
+        ".dzcdn.net",
+        ".mzstatic.com",
+    )
     host = (parsed.hostname or "").lower()
-    if not (host.endswith(allowed_suffixes) or host in ("tidal.com",)):
+    if not (
+        host.endswith(allowed_suffixes)
+        or host in ("tidal.com",)
+    ):
         raise HTTPException(status_code=400, detail="Host not allowed")
 
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, max_redirects=5) as client:

@@ -9,18 +9,26 @@ curl -s http://localhost:8001/healthz | jq
 
 ## Deploy (from dev machine)
 
+Full playbook: **[docs/DEPLOY.md](../docs/DEPLOY.md)**.
+
 ```bash
-export DEPLOY_HOST=your.server
-export DEPLOY_USER=root
-export DEPLOY_SSH_KEY=~/.ssh/id_ed25519
+export TIDAL_SSH_PASSWORD='...'   # or DEPLOY_SSH_KEY
+# DEPLOY_MODE=tar|registry  (auto: registry if DOCKERHUB_* set)
 python scripts/deploy_tidal.py
 ```
 
-Or on the server (preferred):
+**Tar mode (default):** `app.tar.gz` → SCP → extract → `docker compose build` on server. Ships **local working tree**, not only `git` HEAD.
+
+**Registry mode:** push `flacaud-api/worker/bot` to Docker Hub, pull on server.
+
+Or on the server (git-based, if repo is current):
 
 ```bash
 cd /opt/tidal-dl-ru && git pull && docker compose build && docker compose up -d
+docker compose restart caddy api bot
 ```
+
+Post-deploy: `curl -s https://flacaud.ru/healthz | jq` · hard refresh browser (**Ctrl+Shift+R**).
 
 ## TLS (Caddy)
 
@@ -147,3 +155,18 @@ docker compose ps
 docker compose logs worker --tail 100
 docker compose exec redis redis-cli ping
 ```
+
+## Incident: quality shows 320k but sounds lossless (or vice versa)
+
+Usually stale stream without reload. Fixed in frontend (`streamRetryNonce` on `changeQuality`). After deploy: hard refresh. If persists, check `GET /api/quality/.../available` vs stream logs (`quality=`, `X-Stream-Mode`).
+
+## Incident: artist portraits missing
+
+1. `curl -s 'https://flacaud.ru/api/artist/tidal/ARTIST_ID' -H "Authorization: Bearer …" | jq .picture_source`
+2. API logs for Wikipedia/Deezer timeouts.
+3. Confirm image URL loads via `/api/image-proxy?url=…` (host must be on allowlist).
+4. Cache TTL 7d — restart api clears in-memory cache for retest.
+
+## Incident: Genreverse — same cover on every track
+
+Ensure `recommendations.py` deploy includes `_finalize_track_covers`. Hard refresh; check network tab for distinct `cover_url` per track.

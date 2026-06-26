@@ -96,8 +96,7 @@ def _timing_looks_suspicious(lines: list[dict], duration: Optional[int]) -> bool
     except Exception:
         return False
     # Wrong-track hits often have timings far shorter/longer than the real track.
-    # Keep a safer margin while still rejecting clearly mismatched tracks.
-    if end_t < (duration * 0.62) or end_t > (duration * 1.45):
+    if end_t < (duration * 0.72) or end_t > (duration * 1.35):
         return True
     # Very sparse timed lines for long tracks are often wrong-track matches too.
     if duration >= 150 and len(lines) <= 4 and end_t < (duration * 0.82):
@@ -209,26 +208,60 @@ def _save_disk_cache(key: str, lrc: Optional[str]) -> None:
         logger.debug("lyrics disk cache write failed: %s", exc)
 
 
-def _lrclib_synced(client: httpx.Client, path: str, params: dict | None = None) -> Optional[str]:
+def _lrclib_duration_delta(item: dict, duration: Optional[int]) -> Optional[int]:
+    if not duration or duration <= 0:
+        return None
+    raw = item.get("duration")
+    if raw is None:
+        return None
+    try:
+        return abs(int(raw) - int(duration))
+    except (TypeError, ValueError):
+        return None
+
+
+def _lrclib_max_duration_delta(duration: int) -> int:
+    return max(12, int(duration * 0.08))
+
+
+def _lrclib_pick_best_synced(data: object, duration: Optional[int] = None) -> Optional[str]:
+    items: list[dict] = []
+    if isinstance(data, list):
+        items = [x for x in data if isinstance(x, dict)]
+    elif isinstance(data, dict):
+        items = [data]
+
+    candidates: list[tuple[int, str]] = []
+    for item in items:
+        synced = item.get("syncedLyrics")
+        if not synced or not str(synced).strip():
+            continue
+        delta = _lrclib_duration_delta(item, duration)
+        rank = delta if delta is not None else 10_000
+        candidates.append((rank, str(synced)))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda pair: pair[0])
+    best_rank, best_lrc = candidates[0]
+    if duration and duration > 0 and best_rank > _lrclib_max_duration_delta(duration):
+        return None
+    return best_lrc
+
+
+def _lrclib_synced(client: httpx.Client, path: str, params: dict | None = None, *, duration: Optional[int] = None) -> Optional[str]:
     try:
         r = client.get(f"{_LRCLIB_BASE}/{path}", params=params, timeout=_LRCLIB_TIMEOUT_S)
         if r.status_code != 200:
             return None
-        data = r.json()
-        if isinstance(data, list):
-            for item in data:
-                synced = item.get("syncedLyrics")
-                if synced:
-                    return synced
-            return None
-        synced = data.get("syncedLyrics")
-        return synced or None
+        return _lrclib_pick_best_synced(r.json(), duration)
     except Exception as exc:
         logger.debug("LRCLIB lookup failed (%s): %s", path, exc)
         return None
 
 
-def _lrclib_search(client: httpx.Client, artist: str, title: str) -> Optional[str]:
+def _lrclib_search(client: httpx.Client, artist: str, title: str, duration: Optional[int] = None) -> Optional[str]:
     try:
         r = client.get(
             f"{_LRCLIB_BASE}/search",
@@ -237,14 +270,7 @@ def _lrclib_search(client: httpx.Client, artist: str, title: str) -> Optional[st
         )
         if r.status_code != 200:
             return None
-        items = r.json()
-        if not isinstance(items, list):
-            return None
-        for item in items:
-            synced = item.get("syncedLyrics")
-            if synced:
-                return synced
-        return None
+        return _lrclib_pick_best_synced(r.json(), duration)
     except Exception as exc:
         logger.debug("LRCLIB search failed: %s", exc)
         return None
@@ -456,7 +482,7 @@ def _lrclib_lookup(
         if not isrc:
             return None
         with httpx.Client() as client:
-            return _lrclib_synced(client, f"get/isrc/{isrc.strip()}")
+            return _lrclib_synced(client, f"get/isrc/{isrc.strip()}", duration=duration)
 
     def _meta_hit() -> Optional[str]:
         if not (artist and title):
@@ -467,13 +493,13 @@ def _lrclib_lookup(
         if duration:
             params["duration"] = int(duration)
         with httpx.Client() as client:
-            return _lrclib_synced(client, "get", params)
+            return _lrclib_synced(client, "get", params, duration=duration)
 
     def _search_hit() -> Optional[str]:
         if not (artist and title):
             return None
         with httpx.Client() as client:
-            return _lrclib_search(client, artist, title)
+            return _lrclib_search(client, artist, title, duration)
 
     jobs = []
     pool = ThreadPoolExecutor(max_workers=3)

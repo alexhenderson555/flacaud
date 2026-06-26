@@ -2,7 +2,7 @@ import { apiFetch, apiPostJson, parseJsonSafe, ApiError } from './apiClient';
 
 /** yt-dlp + Tidal matching can take a while on large playlists */
 const TRANSFER_TIMEOUT_MS = 180_000;
-const TRANSFER_POLL_MS = 500;
+const TRANSFER_POLL_MS = 300;
 const TRANSFER_POLL_MAX_MS = 10 * 60 * 1000;
 
 function sleep(ms) {

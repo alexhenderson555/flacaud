@@ -1,91 +1,137 @@
-/* Compact player bar — shorter height, smaller type, tighter spacing */
+/* Player bar — bottom chrome height matches sidebar Account block (line above Account → viewport bottom). */
 
 :root {
-  --layout-player-height: 72px;
-  --layout-page-pad-bottom: 100px;
+  --layout-sidebar-pad-bottom: 24px;
+  --layout-sidebar-footer-pad-top: 16px;
+  --layout-player-height: 84px;
+  --layout-page-pad-bottom: calc(var(--layout-player-height) + 36px);
+}
+
+@media (width >= 769px) {
+  :root {
+    --layout-sidebar-pad-bottom: 24px;
+    --layout-sidebar-footer-pad-top: 8px;
+    --layout-player-height: 72px;
+    --layout-page-pad-bottom: calc(var(--layout-player-height) + 36px);
+  }
+
+  .sidebar {
+    padding-bottom: var(--layout-sidebar-pad-bottom);
+  }
+
+  .sidebar-footer {
+    padding-top: var(--layout-sidebar-footer-pad-top);
+  }
+
+  .sidebar-footer .nav-item-account {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    min-height: calc(
+      var(--layout-player-height) -
+      var(--layout-sidebar-pad-bottom) -
+      var(--layout-sidebar-footer-pad-top)
+    );
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .player-center {
+    gap: 4px;
+  }
+
+  .player-track-badges .player-quality-picker {
+    border-left: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .player-bar {
+    grid-template-columns: minmax(320px, 1.55fr) minmax(240px, 0.95fr) max-content;
+  }
+
+  .hotkey-hint {
+    bottom: calc(var(--layout-player-height) + 8px);
+    z-index: 90;
+  }
 }
 
 @media (width <= 768px) {
   :root {
-    --layout-player-height: 74px;
-    --layout-page-pad-bottom: 88px;
+    --layout-player-height: 88px;
+    --layout-page-pad-bottom: 100px;
   }
 }
 
-.player-bar {
-  gap: 0 16px;
-  padding: 0 16px;
-}
-
 .player-left {
-  gap: 12px;
-}
-
-.player-cover-thumb {
-  width: 48px !important;
-  min-width: 48px !important;
-  height: 48px !important;
-}
-
-.player-bar--mobile:not(.player-bar--expanded) .player-cover-thumb {
-  width: 48px !important;
-  min-width: 48px !important;
-  height: 48px !important;
+  gap: 14px;
 }
 
 .player-track-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  display: block;
   width: 100%;
-  margin-bottom: 1px;
-  font-size: 0.8125rem;
+  min-width: 0;
+  max-width: 100%;
+  margin-bottom: 2px;
+  font-size: 0.95rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .player-track-title__text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-track-title__text--marquee {
+  text-overflow: clip;
+}
+
+.player-track-title__text--marquee .player-track-title__marquee-inner {
+  display: inline-block;
+  padding-right: 2.5em;
+  animation: player-title-marquee 16s linear infinite;
+}
+
+.player-track-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.player-track-sub .player-track-artist {
   flex: 1 1 auto;
   min-width: 0;
+  margin-bottom: 0;
 }
 
 .player-track-artist {
-  font-size: 0.8125rem;
-  line-height: 1.2;
+  font-size: 0.85rem;
+  line-height: 1.25;
 }
 
 .player-track-badges {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+}
+
+.player-track-badges .meta-badge {
+  font-size: 0.7rem;
+  padding: 2px 7px;
 }
 
 .player-up-next {
-  display: none;
-}
-
-@media (width >= 1480px) {
-  .player-up-next {
-    display: block;
-    margin-top: 1px;
-    font-size: 0.6875rem;
-  }
-}
-
-.player-seek-row {
-  gap: 12px;
-  font-size: 0.8rem;
-}
-
-.player-time {
-  font-size: 0.75rem;
-  min-width: 2.25rem;
-}
-
-.player-transport-row {
-  gap: 12px;
+  margin-top: 2px;
+  font-size: 0.78rem;
 }
 
 .player-transport-btn {
@@ -96,33 +142,4 @@
 .player-transport-btn svg {
   display: block;
   flex-shrink: 0;
-}
-
-.player-overlay-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-.player-right__cluster {
-  gap: 10px;
-}
-
-.player-quality-slot {
-  padding-left: 16px;
-  margin-left: 0;
-}
-
-.player-track-badges .meta-badge {
-  font-size: 0.625rem;
-  padding: 2px 6px;
-}
-
-.track-row--library .track-row__icon-btn.btn-secondary svg,
-.track-row--library .track-row__icon-btn.btn-primary svg {
-  width: 16px;
-  height: 16px;
-}
-
-.track-row--library .track-row__actions {
-  gap: 6px;
 }

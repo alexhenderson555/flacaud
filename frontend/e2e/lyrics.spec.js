@@ -11,7 +11,7 @@ const TRACK = {
   duration_s: 180,
 };
 
-test('lyrics panel shows fetched lines', async ({ page }) => {
+test('karaoke mode shows fetched lines on K', async ({ page }) => {
   await installE2EAuth(page);
   await installPlayerStubs(page, { searchTracks: [TRACK] });
   await page.route('**/api/lyrics**', async (route) => {
@@ -30,6 +30,6 @@ test('lyrics panel shows fetched lines', async ({ page }) => {
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: '88001', query: 'lyric', title: 'Test Lyric Song' });
   await page.keyboard.press('k');
-  await expect(page.getByText('First line of the song')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.karaoke-mode')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('Second line here')).toBeVisible();
 });

@@ -6,7 +6,6 @@ import DJMode from '../DJMode';
 const PartyMode = lazy(() => import('../party/PartyMode'));
 import PlaybackQueue from '../PlaybackQueue';
 import Equalizer from '../Equalizer';
-import LyricsView from '../LyricsView';
 import PlaylistModal from '../PlaylistModal';
 import { dispatchLibraryReloadRequest } from '../../utils/libraryPatch';
 
@@ -16,7 +15,6 @@ export default function PlayerOverlays({
   isDJOpen,
   isQueueOpen,
   isEQOpen,
-  isLyricsOpen,
   isPlaylistModalOpenPlayer,
   currentTrack,
   audioRef,
@@ -36,7 +34,6 @@ export default function PlayerOverlays({
   setIsDJOpen,
   setIsQueueOpen,
   setIsEQOpen,
-  setIsLyricsOpen,
   setIsPlaylistModalOpenPlayer,
   lang = 'en',
 }) {
@@ -89,10 +86,6 @@ export default function PlayerOverlays({
 
       {isEQOpen && (
         <Equalizer audioCtx={window.audioCtx} audioRef={audioRef} onClose={() => setIsEQOpen(false)} />
-      )}
-
-      {isLyricsOpen && currentTrack && (
-        <LyricsView currentTrack={currentTrack} audioRef={audioRef} onClose={() => setIsLyricsOpen(false)} />
       )}
 
       {isPlaylistModalOpenPlayer && (

@@ -176,7 +176,6 @@
 
 .hotkey-hint {
   position: fixed;
-  bottom: 94px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;

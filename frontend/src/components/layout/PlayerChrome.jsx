@@ -171,14 +171,12 @@ function PlayerChrome({ playbackEnabled = true }) {
         isDJOpen={overlays.isDJOpen}
         isQueueOpen={overlays.isQueueOpen}
         isEQOpen={overlays.isEQOpen}
-        isLyricsOpen={overlays.isLyricsOpen}
         isPlaylistModalOpenPlayer={overlays.isPlaylistModalOpenPlayer}
         closeKaraoke={overlays.closeKaraoke}
         closeParty={overlays.closeParty}
         setIsDJOpen={overlays.setIsDJOpen}
         setIsQueueOpen={overlays.setIsQueueOpen}
         setIsEQOpen={overlays.setIsEQOpen}
-        setIsLyricsOpen={overlays.setIsLyricsOpen}
         setIsPlaylistModalOpenPlayer={overlays.setIsPlaylistModalOpenPlayer}
         currentTrack={currentTrack}
         audioRef={audioRef}
@@ -219,7 +217,6 @@ function PlayerChrome({ playbackEnabled = true }) {
           }
         }}
         onToggleQueue={() => overlays.toggleOverlay('queue')}
-        onToggleLyrics={() => overlays.toggleOverlay('lyrics')}
         onToggleEq={() => overlays.toggleOverlay('eq')}
         onToggleDj={() => overlays.toggleOverlay('dj')}
         onToggleKaraoke={() => overlays.toggleOverlay('karaoke')}

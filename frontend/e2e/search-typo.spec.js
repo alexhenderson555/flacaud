@@ -28,34 +28,24 @@ test('search does not show layout typo hint for valid latin query with results',
   await expect(page.getByText(/Did you mean/i)).toHaveCount(0);
 });
 
-test('search auto-corrects layout typo when alternate query has results', async ({ page }) => {
+test('search shows did-you-mean hint when API suggests alternate query', async ({ page }) => {
   await installE2EAuth(page);
   await installApiStubs(page);
 
-  let callCount = 0;
   await page.route('**/api/search', async (route) => {
-    callCount += 1;
-    const body = callCount === 1
-      ? { tracks: [], has_more: false }
-      : {
-          tracks: [{
-            provider: 'tidal',
-            provider_id: '9002',
-            title: 'Привет',
-            artists: ['Test'],
-            cover_url: 'https://via.placeholder.com/64',
-          }],
-          has_more: false,
-        };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        tracks: [],
+        has_more: false,
+        suggested_query: 'привет',
+      }),
     });
   });
 
   await page.goto('/search');
   await page.getByPlaceholder(SEARCH_INPUT).fill('ghbdtn');
-  await expect(page.getByPlaceholder(SEARCH_INPUT)).toHaveValue('привет', { timeout: 15000 });
-  await expect(page.getByText('Привет')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/Did you mean/i)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('привет')).toBeVisible();
 });

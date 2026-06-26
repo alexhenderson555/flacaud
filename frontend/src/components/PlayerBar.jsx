@@ -2,7 +2,6 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import MetaBadge from './MetaBadge';
 import { formatTrackYear, normalizeArtists } from '../utils/trackNormalize';
 import {
-  streamBadgeLabel,
   qualityButtonLabel,
   isQualityAllowedForPlan,
   isPlaybackQualityAvailable,
@@ -204,7 +203,7 @@ export default function PlayerBar({
       : t('selectTrack'));
   const titleTooltip = (setActive && embedTitle) || currentTrack ? displayTitle : undefined;
   const artistTooltip = (setActive && embedTitle) || currentTrack ? displayArtistTooltip : undefined;
-  const transportPlaySize = isMobile ? 34 : 42;
+  const transportPlaySize = isMobile ? 36 : 44;
   const transportSkipSize = isMobile ? 18 : 22;
   const transportMinorSize = isMobile ? 16 : 20;
 
@@ -565,6 +564,7 @@ export default function PlayerBar({
       {transportBtn(transportPlaySize)}
       <button
         type="button"
+        data-testid="player-next-btn"
         aria-label={t('playerNext')}
         disabled={setActive || !(playlist.length > 0 && currentTrack)}
         onClick={playNext}
@@ -689,7 +689,7 @@ export default function PlayerBar({
             )}
 
             <div className="player-left">
-              {coverThumb(isMobile ? 48 : 48)}
+              {coverThumb(isMobile ? 72 : 48)}
               <div className="player-track-meta">
                 <div className="player-track-title">
                   <PlayerMarqueeTitle
@@ -699,28 +699,18 @@ export default function PlayerBar({
                   >
                     {displayTitle}
                   </PlayerMarqueeTitle>
+                </div>
+                <div className="player-track-sub">
+                  <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
                   {!setActive && currentTrack && (
                     <div className="player-track-badges">
                       {formatTrackYear(currentTrack) && (
                         <MetaBadge variant="muted">{formatTrackYear(currentTrack)}</MetaBadge>
                       )}
-                      {playbackQuality && qualitiesReady && (
-                        <MetaBadge
-                          className={isMobile && !mobileExpanded ? 'hide-on-mobile' : undefined}
-                          variant="solid"
-                          title={
-                            uiQualityId !== playbackQuality
-                              ? `${streamBadgeLabel({ tier: playbackQuality }, playbackQuality)} → ${streamBadgeLabel(deliveredStream, uiQualityId)}`
-                              : streamBadgeLabel(deliveredStream, uiQualityId)
-                          }
-                        >
-                          {streamBadgeLabel(deliveredStream, uiQualityId)}
-                        </MetaBadge>
-                      )}
+                      {!isMobile && qualitiesReady && qualityPicker}
                     </div>
                   )}
                 </div>
-                <div className="player-track-artist" title={artistTooltip}>{artistLine}</div>
                 {!setActive && nextTrack && !isMobile && (
                   <div
                     data-testid="player-up-next"
@@ -739,7 +729,9 @@ export default function PlayerBar({
               {isMobile && mobileExpanded && mobileExpandedActions}
             </div>
 
-            {!setActive && <div className="player-quality-slot">{qualityPicker}</div>}
+            {isMobile && !setActive && (
+              <div className="player-quality-slot">{qualityPicker}</div>
+            )}
 
             <div className="player-right">
               {!setActive && (

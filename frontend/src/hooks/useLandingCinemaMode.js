@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isLandingCinemaToggleKey, isTypingTarget } from '../utils/landingCinemaKeys';
 
-/** Easter egg: Shift+V toggles landing cinema (video only). Escape exits. */
+/** Easter egg: Shift+V (physical V key) toggles landing cinema — video only. Escape exits. */
 export function useLandingCinemaMode() {
   const [cinema, setCinema] = useState(false);
 
@@ -10,15 +11,15 @@ export function useLandingCinemaMode() {
 
   useEffect(() => {
     const onKey = (e) => {
-      const tag = e.target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (isTypingTarget(e.target)) return;
 
-      if (e.key === 'Escape' && cinema) {
+      if (e.code === 'Escape' && cinema) {
+        e.preventDefault();
         setCinema(false);
         return;
       }
 
-      if (e.key === 'V' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (isLandingCinemaToggleKey(e)) {
         e.preventDefault();
         toggle();
       }

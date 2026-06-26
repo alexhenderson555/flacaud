@@ -102,7 +102,7 @@ export function useTrackFeaturesForList(tracks, options = {}) {
     const runWorker = async () => {
       while (mountedRef.current) {
         if (shouldDeferBackgroundMedia()) {
-          await sleep(800);
+          await sleep(200);
           continue;
         }
 

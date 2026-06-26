@@ -35,11 +35,17 @@ test('add to library from player updates library page immediately', async ({ pag
 
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: '777001', query: 'e2e', title: 'E2E Library Track' });
+  await expect(page.getByTestId('player-track-title')).toContainText('E2E Library Track', { timeout: 15_000 });
+
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/library') && r.request().method() === 'POST' && r.ok(),
+      { timeout: 20_000 },
+    ),
+    page.getByTestId('player-like-btn').click(),
+  ]);
 
   await page.goto('/library');
-  await expect(page.getByText(/library is empty|ваша медиатека/i)).toBeVisible({ timeout: 10000 });
-
-  await page.getByTestId('player-like-btn').click();
   await expect(page.getByRole('main').getByText('E2E Library Track')).toBeVisible({ timeout: 10000 });
 });
 
@@ -118,26 +124,8 @@ test('sequential playback requests next stream url', async ({ page }) => {
   const streamLog = [];
 
   await installE2EAuth(page);
+  await installPlayerStubs(page, { searchTracks: tracks });
 
-  await page.addInitScript(() => {
-    localStorage.setItem('tidal-token', 'e2e-play-token');
-  });
-
-  await page.route('**/api/library', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/playlists', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await page.route('**/api/downloads', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  await page.route('**/api/auth/media-token', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'mtok' }) });
-  });
-  await page.route('**/api/quality/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ quality: 'LOW' }) });
-  });
   await page.route('**/api/stream/**', async (route) => {
     streamLog.push(route.request().url());
     await route.fulfill({
@@ -149,29 +137,12 @@ test('sequential playback requests next stream url', async ({ page }) => {
   });
 
   await page.goto('/search');
-  await page.evaluate((list) => {
-    window.__testPlay = (track, playlist) => {
-      window.dispatchEvent(new CustomEvent('test-play', { detail: { track, playlist: playlist || [track] } }));
-    };
-    window.__testTracks = list;
-  }, tracks);
+  await startSearchPlayback(page, { providerId: '9001', query: 'e2e', title: 'Track One' });
 
-  // Inject tracks via App context is hard — use library page play buttons with mocked data instead
-  await page.route('**/api/search', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tracks }) });
-  });
+  await page.waitForResponse((r) => r.url().includes('/api/stream/') && r.url().includes('9001') && r.ok(), { timeout: 20_000 });
+  await page.getByTestId('player-next-btn').click();
+  await page.waitForResponse((r) => r.url().includes('/api/stream/') && r.url().includes('9002') && r.ok(), { timeout: 20_000 });
 
-  await page.goto('/search');
-  await page.getByPlaceholder(SEARCH_INPUT).fill('e2e');
-  await page.waitForResponse((r) => r.url().includes('/api/search') && r.ok());
-  await page.waitForTimeout(600);
-
-  const playButtons = page.locator('[data-testid^="search-play-"]');
-  await playButtons.nth(0).click();
-  await page.waitForTimeout(1500);
-  await playButtons.nth(1).click();
-  await page.waitForTimeout(1500);
-
-  expect(streamLog.some(u => u.includes('/9001'))).toBeTruthy();
-  expect(streamLog.some(u => u.includes('/9002'))).toBeTruthy();
+  expect(streamLog.some((u) => u.includes('/9001'))).toBeTruthy();
+  expect(streamLog.some((u) => u.includes('/9002'))).toBeTruthy();
 });

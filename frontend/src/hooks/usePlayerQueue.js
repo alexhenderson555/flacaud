@@ -70,6 +70,7 @@ export function usePlayerQueue({
   shuffleEnabled = false,
   repeatMode = 'off',
   setCurrentAudioSrc,
+  currentAudioSrc = '',
   setPreloadAudioSrc,
   swapAudioSlots,
   getMainAudioEl,
@@ -249,7 +250,9 @@ export function usePlayerQueue({
       const merged = mergePlaybackTracks(currentTrackRef.current, track);
       if (currentTrackRef) currentTrackRef.current = merged;
       const dur = Number(merged?.duration_s ?? merged?.duration ?? 0);
-      const preserving = main?.paused && shouldPreservePausedStream(main, trackId, dur);
+      const preserving = main?.paused && shouldPreservePausedStream(main, trackId, dur, {
+        activeStreamUrl: currentAudioSrc || main?.currentSrc || main?.src || '',
+      });
 
       if (main && !main.paused) {
         setCurrentTrack(merged);
@@ -306,6 +309,7 @@ export function usePlayerQueue({
     beginPlayback, playQueue, audioRef, getMainAudioEl, currentTrackRef, initAudioEngine,
     deferPlayUntilReady, setIsLoading, setIsPlaying, pendingPlayRef, pauseSetEmbed, releaseSetEmbed,
     queueOriginRef, playlistRef, setPlaylist, setCurrentTrackIndex, setCurrentTrack,
+    currentAudioSrc,
   ]);
 
   const handleReorderQueue = useCallback((newPlaylist) => {

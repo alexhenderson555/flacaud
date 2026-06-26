@@ -11,7 +11,7 @@ const TRACK = {
   duration_s: 120,
 };
 
-test('first lyric line is highlighted during intro', async ({ page }) => {
+test('first karaoke line is highlighted during intro', async ({ page }) => {
   await installE2EAuth(page);
   await installPlayerStubs(page, { searchTracks: [TRACK] });
   await page.route('**/api/lyrics**', async (route) => {
@@ -31,8 +31,9 @@ test('first lyric line is highlighted during intro', async ({ page }) => {
   await startSearchPlayback(page, { providerId: '92001', query: 'lyric', title: 'Lyric Line Test' });
   await page.keyboard.press('k');
 
+  await expect(page.locator('.karaoke-mode')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('Opening line before sync')).toBeVisible({ timeout: 15000 });
-  const active = page.getByTestId('lyric-line-active');
+  const active = page.locator('.karaoke-mode__line--active');
   await expect(active).toBeVisible({ timeout: 5000 });
   await expect(active).toContainText('Opening line before sync');
 });

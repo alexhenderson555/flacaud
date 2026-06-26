@@ -89,24 +89,26 @@ describe('bandEqualizerGain', () => {
 });
 
 describe('computeBarLevels', () => {
-  it('mirrors bass energy to both viewport edges', () => {
+  it('puts bass energy in the center and stays symmetric', () => {
     const data = new Uint8Array(256);
     data.fill(12);
     data[2] = 240;
     data[3] = 220;
     const levels = computeBarLevels(data, 1400);
-    expect(levels[0]).toBeGreaterThan(30);
-    expect(levels[levels.length - 1]).toBeGreaterThan(30);
+    const center = levels[Math.floor(levels.length / 2)];
+    expect(center).toBeGreaterThan(30);
+    expect(center).toBeGreaterThan(levels[0]); // center (bass) louder than the treble edge
     expect(Math.abs(levels[0] - levels[levels.length - 1])).toBeLessThan(8);
   });
 
-  it('keeps motion in the center for mid-range energy', () => {
+  it('renders mid-range energy in the inner bars, not just the center', () => {
     const data = new Uint8Array(256);
     data.fill(15);
     for (let i = 20; i < 60; i += 1) data[i] = 180;
     const levels = computeBarLevels(data, 1200);
-    const center = levels[Math.floor(levels.length / 2)];
-    expect(center).toBeGreaterThan(20);
+    const peak = Math.max(...levels);
+    expect(peak).toBeGreaterThan(60);
+    expect(peak).toBeGreaterThan(levels[0]);
   });
 
   it('does not pin every low bar to max when bass dominates', () => {

@@ -349,10 +349,16 @@ class TestTransferService:
         assert say_what_row["match_method"] == "saved_library"
 
 
+def _close_preview_coro(coro):
+    """Discard mocked preview task without 'coroutine never awaited' warnings."""
+    coro.close()
+    return None
+
+
 class TestTransferApi:
     @patch("tidal_dl_ru.server.routers.transfer.asyncio.create_task")
     def test_preview(self, mock_create_task, client):
-        mock_create_task.side_effect = lambda coro: None
+        mock_create_task.side_effect = _close_preview_coro
         r = client.post("/api/transfer/preview", json={"url": TIDAL_URL})
         assert r.status_code == 200
         body = r.json()
@@ -381,7 +387,7 @@ class TestTransferApi:
 
     @patch("tidal_dl_ru.server.routers.transfer.asyncio.create_task")
     def test_import_with_task_id(self, mock_create_task, client, auth_headers):
-        mock_create_task.side_effect = lambda coro: None
+        mock_create_task.side_effect = _close_preview_coro
         start = client.post("/api/transfer/preview", json={"url": TIDAL_URL})
         task_id = start.json()["task_id"]
         access_token = start.json()["access_token"]
@@ -404,7 +410,7 @@ class TestTransferApi:
 
     @patch("tidal_dl_ru.server.routers.transfer.asyncio.create_task")
     def test_import_idempotent_by_task_id(self, mock_create_task, client, auth_headers):
-        mock_create_task.side_effect = lambda coro: None
+        mock_create_task.side_effect = _close_preview_coro
         start = client.post("/api/transfer/preview", json={"url": TIDAL_URL})
         task_id = start.json()["task_id"]
         access_token = start.json()["access_token"]

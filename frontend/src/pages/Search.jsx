@@ -222,7 +222,7 @@ function Search() {
         setSearchOffset(0);
         setQuerySuggestion(null);
       }
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(handler);
   }, [query, performSearch]);
@@ -291,7 +291,7 @@ function Search() {
           console.error('Backend fetch failed:', err);
           showToast('Backend not running');
         } finally {
-          setTimeout(() => setIsSearching(false), 800);
+          setIsSearching(false);
           stream.getTracks().forEach(track => track.stop());
         }
       };

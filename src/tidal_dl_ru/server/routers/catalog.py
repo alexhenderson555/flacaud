@@ -23,6 +23,7 @@ from tidal_dl_ru.providers.tidal.provider import _to_universal, to_universal_enr
 from tidal_dl_ru.server.ai_playlist_cache import cache_get as ai_cache_get
 from tidal_dl_ru.server.ai_playlist_cache import cache_set as ai_cache_set
 from tidal_dl_ru.server.artist_bio_cache import bio_cache_get, bio_cache_set
+from tidal_dl_ru.server.artist_image import resolve_artist_picture_url
 from tidal_dl_ru.server.gemini_text import gemini_generate_text
 from tidal_dl_ru.server.recommendations import (
     _get_genres_db,
@@ -384,8 +385,16 @@ async def get_artist_api(artist_id: str):
         tracks_univ = await asyncio.gather(*(_enrich_track_meta(t) for t in top_tracks))
 
         artist_dict = artist.model_dump()
-        if artist.picture:
-            artist_dict["picture_url"] = cover_url(artist.picture, size=640)
+        picture_url, picture_source = await asyncio.to_thread(
+            resolve_artist_picture_url,
+            artist.name or "",
+            artist_id=artist_id,
+            tidal_picture_id=artist.picture,
+            tidal_cover_url_fn=cover_url,
+        )
+        if picture_url:
+            artist_dict["picture_url"] = picture_url
+        artist_dict["picture_source"] = picture_source
 
         albums_list = []
         for a in albums:

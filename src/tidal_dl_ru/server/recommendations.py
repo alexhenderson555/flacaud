@@ -91,26 +91,89 @@ def _interleave_round_robin(*lists: list) -> list:
     return merged
 
 
+def _tracks_needing_cover_enrich(tracks: list[Track]) -> list[str]:
+    """Ids that need get_track — missing art or duplicate stub cover across different albums."""
+    need: set[str] = set()
+    by_cover: dict[str, list[Track]] = defaultdict(list)
+
+    for t in tracks:
+        pid = str(t.provider_id)
+        if not t.cover_url or not t.album_id:
+            need.add(pid)
+            continue
+        by_cover[t.cover_url].append(t)
+
+    for group in by_cover.values():
+        if len(group) < 2:
+            continue
+        keys = {
+            (str(t.album_id) if t.album_id else "", _primary_artist_id(t) or "")
+            for t in group
+        }
+        if len(keys) > 1:
+            for t in group:
+                need.add(str(t.provider_id))
+    return list(need)
+
+
+def _merge_full_track_meta(base: Track, full: Track) -> Track:
+    patch: dict = {}
+    if full.cover_url:
+        patch["cover_url"] = full.cover_url
+    if full.album_id:
+        patch["album_id"] = full.album_id
+    if full.album:
+        patch["album"] = full.album
+    if full.duration_s and not (base.duration_s or 0):
+        patch["duration_s"] = full.duration_s
+    if full.artist_ids and not base.artist_ids:
+        patch["artist_ids"] = full.artist_ids
+        patch["artists"] = full.artists
+    if full.release_date and not base.release_date:
+        patch["release_date"] = full.release_date
+    if full.year and not base.year:
+        patch["year"] = full.year
+    return base.model_copy(update=patch) if patch else base
+
+
+async def _finalize_track_covers(client: TidalClient | None, tracks: list[Track]) -> list[Track]:
+    """Resolve per-track album art — radio/similar list items often share a stub cover UUID."""
+    if not client or not tracks:
+        return tracks
+    need = _tracks_needing_cover_enrich(tracks)
+    if not need:
+        return tracks
+
+    sem = asyncio.Semaphore(8)
+
+    async def _fetch(pid: str) -> tuple[str, Track | None]:
+        async with sem:
+            try:
+                raw = await asyncio.to_thread(client.get_track, pid)
+                return pid, _to_universal(raw)
+            except Exception as e:
+                logger.debug("cover finalize %s failed: %s", pid, e)
+                return pid, None
+
+    pairs = await asyncio.gather(*(_fetch(pid) for pid in need))
+    full_by_id = {pid: uni for pid, uni in pairs if uni}
+
+    out: list[Track] = []
+    for t in tracks:
+        full = full_by_id.get(str(t.provider_id))
+        out.append(_merge_full_track_meta(t, full) if full else t)
+    return out
+
+
 def _enrich_tidal_uni(client: TidalClient | None, uni: Track) -> Track:
     if not client:
         return uni
-    if uni.cover_url and (uni.duration_s or 0) > 0:
+    if uni.cover_url and (uni.duration_s or 0) > 0 and uni.album_id:
         return uni
     try:
         raw = client.get_track(uni.provider_id)
         full = _to_universal(raw)
-        patch: dict = {}
-        if not uni.cover_url and full.cover_url:
-            patch["cover_url"] = full.cover_url
-        if not (uni.duration_s or 0) and (full.duration_s or 0):
-            patch["duration_s"] = full.duration_s
-        if not uni.album and full.album:
-            patch["album"] = full.album
-            patch["album_id"] = full.album_id
-        if not uni.artist_ids and full.artist_ids:
-            patch["artist_ids"] = full.artist_ids
-            patch["artists"] = full.artists
-        return uni.model_copy(update=patch) if patch else uni
+        return _merge_full_track_meta(uni, full)
     except Exception:
         return uni
 
@@ -384,6 +447,9 @@ async def build_track_radio_fast(
             seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
         except Exception:
             seed_uni = None
+        tracks = await _finalize_track_covers(client, tracks)
+        if seed_uni is not None:
+            seed_uni = _enrich_tidal_uni(client, seed_uni)
     finally:
         http.close()
 
@@ -453,6 +519,9 @@ async def build_track_radio(
             seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
         except Exception:
             seed_uni = None
+        tracks = await _finalize_track_covers(client, tracks)
+        if seed_uni is not None:
+            seed_uni = _enrich_tidal_uni(client, seed_uni)
     finally:
         http.close()
 
@@ -591,6 +660,8 @@ async def build_recommendations(
                 await _collect_track_neighbourhood(
                     client, sid, tracks, seen, artist_counts, limit,
                 )
+
+        tracks = await _finalize_track_covers(client, tracks)
     finally:
         http.close()
 

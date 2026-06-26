@@ -44,7 +44,7 @@ test('player next button switches to following track', async ({ page }) => {
 
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: '72001', query: 'queue next', title: 'First In Queue' });
-  const nextBtn = page.getByRole('button', { name: /next track|следующий трек/i });
+  const nextBtn = page.getByTestId('player-next-btn');
   await nextBtn.click();
 
   // After pressing Next, queue panel should show second track as Now Playing.

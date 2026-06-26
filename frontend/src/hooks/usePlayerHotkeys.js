@@ -9,8 +9,11 @@ const SEEK_STEP = 5;
 export function usePlayerHotkeys({
   enabled = true,
   currentTrack,
+  playlist = [],
   isPlaying,
   audioRef,
+  getMainAudioEl,
+  togglePlay,
   playNext,
   playPrevious,
   toggleOverlay,
@@ -24,6 +27,9 @@ export function usePlayerHotkeys({
 }) {
   useEffect(() => {
     if (!enabled) return undefined;
+
+    const resolveAudio = () => getMainAudioEl?.() ?? audioRef.current;
+
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
         if (e.key === 'Escape') document.activeElement?.blur?.();
@@ -35,17 +41,17 @@ export function usePlayerHotkeys({
         case 'Space':
           e.preventDefault();
           if (currentTrack) {
-            if (isPlaying) audioRef.current?.pause();
-            else audioRef.current?.play();
+            togglePlay?.(currentTrack, playlist?.length ? playlist : null);
           }
           break;
         case 'ArrowRight':
           if (e.shiftKey) {
             e.preventDefault();
-            if (audioRef.current && currentTrack) {
-              audioRef.current.currentTime = Math.min(
-                audioRef.current.duration || Infinity,
-                audioRef.current.currentTime + SEEK_STEP,
+            const el = resolveAudio();
+            if (el && currentTrack) {
+              el.currentTime = Math.min(
+                el.duration || Infinity,
+                el.currentTime + SEEK_STEP,
               );
             }
           } else {
@@ -56,8 +62,9 @@ export function usePlayerHotkeys({
         case 'ArrowLeft':
           if (e.shiftKey) {
             e.preventDefault();
-            if (audioRef.current) {
-              audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - SEEK_STEP);
+            const el = resolveAudio();
+            if (el) {
+              el.currentTime = Math.max(0, el.currentTime - SEEK_STEP);
             }
           } else {
             e.preventDefault();
@@ -74,17 +81,21 @@ export function usePlayerHotkeys({
           break;
         case 'BracketRight':
           e.preventDefault();
-          if (audioRef.current && currentTrack) {
-            audioRef.current.currentTime = Math.min(
-              audioRef.current.duration || Infinity,
-              audioRef.current.currentTime + SEEK_STEP,
+          if (resolveAudio() && currentTrack) {
+            const el = resolveAudio();
+            el.currentTime = Math.min(
+              el.duration || Infinity,
+              el.currentTime + SEEK_STEP,
             );
           }
           break;
         case 'BracketLeft':
           e.preventDefault();
-          if (audioRef.current) {
-            audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - SEEK_STEP);
+          {
+            const el = resolveAudio();
+            if (el) {
+              el.currentTime = Math.max(0, el.currentTime - SEEK_STEP);
+            }
           }
           break;
         case 'Escape':
@@ -112,12 +123,6 @@ export function usePlayerHotkeys({
             e.preventDefault();
             setIsCommandPaletteOpen((prev) => !prev);
           } else {
-            e.preventDefault();
-            toggleOverlay('lyrics');
-          }
-          break;
-        case 'KeyC':
-          if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             toggleOverlay('karaoke');
           }
@@ -184,9 +189,11 @@ export function usePlayerHotkeys({
   }, [
     enabled,
     currentTrack,
+    playlist,
     isPlaying,
     playNext,
     playPrevious,
+    togglePlay,
     toggleOverlay,
     closeAllPanels,
     setVolume,
@@ -196,5 +203,6 @@ export function usePlayerHotkeys({
     toggleLike,
     startTrackRadio,
     audioRef,
+    getMainAudioEl,
   ]);
 }

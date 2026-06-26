@@ -22,7 +22,7 @@ test('queue panel lists now playing and up next sections', async ({ page }) => {
 
   await page.goto('/search');
   await startSearchPlayback(page, { providerId: '71001', query: 'queue', title: 'Queue One' });
-  await page.getByRole('button', { name: 'Queue' }).click();
+  await page.getByTestId('player-queue-btn').click();
   const panel = page.getByTestId('playback-queue-panel');
   await expect(panel).toBeVisible({ timeout: 10000 });
   await expect(panel.getByText('Now Playing')).toBeVisible();

@@ -7,6 +7,8 @@ from tidal_dl_ru.providers.tidal.models import Artist as TidalArtist
 from tidal_dl_ru.providers.tidal.models import Track as TidalTrack
 from tidal_dl_ru.server.recommendations import (
     _append_unique,
+    _finalize_track_covers,
+    _tracks_needing_cover_enrich,
     _track_ok,
     build_recommendations,
     build_track_radio,
@@ -66,6 +68,78 @@ def test_append_unique_skips_same_artist_cap():
     items = [_tidal_track(i, f"T{i}", artist_id=42) for i in range(1, 8)]
     _append_unique(tracks, seen, counts, items, limit=20)
     assert len(tracks) == 3
+
+
+def test_tracks_needing_cover_enrich_flags_duplicate_stub_across_albums():
+    shared = "https://resources.tidal.com/stub/640"
+    a = Track(
+        provider="tidal",
+        provider_id="1",
+        title="A",
+        artists=["One"],
+        artist_ids=["10"],
+        album_id="100",
+        cover_url=shared,
+        duration_s=200,
+    )
+    b = Track(
+        provider="tidal",
+        provider_id="2",
+        title="B",
+        artists=["Two"],
+        artist_ids=["20"],
+        album_id="200",
+        cover_url=shared,
+        duration_s=200,
+    )
+    assert set(_tracks_needing_cover_enrich([a, b])) == {"1", "2"}
+
+
+def test_tracks_needing_cover_enrich_allows_same_album_art():
+    shared = "https://resources.tidal.com/album/640"
+    tracks = [
+        Track(
+            provider="tidal",
+            provider_id=str(i),
+            title=f"T{i}",
+            artists=["Band"],
+            artist_ids=["5"],
+            album_id="99",
+            cover_url=shared,
+            duration_s=200,
+        )
+        for i in range(1, 4)
+    ]
+    assert _tracks_needing_cover_enrich(tracks) == []
+
+
+@pytest.mark.asyncio
+async def test_finalize_track_covers_refetches_duplicates(monkeypatch):
+    shared = "https://resources.tidal.com/stub/640"
+
+    class FakeClient:
+        def get_track(self, track_id):
+            tid = int(track_id)
+            tr = _tidal_track(tid, f"Full {tid}", artist_id=tid * 10)
+            tr.album.cover = f"{tid:08x}-aaaa-bbbb-cccc-dddddddddddd"
+            return tr
+
+    stub_a = Track(
+        provider="tidal",
+        provider_id="1",
+        title="A",
+        artists=["One"],
+        artist_ids=["10"],
+        album_id="100",
+        cover_url=shared,
+        duration_s=200,
+    )
+    stub_b = stub_a.model_copy(update={"provider_id": "2", "title": "B", "artist_ids": ["20"], "album_id": "200"})
+
+    out = await _finalize_track_covers(FakeClient(), [stub_a, stub_b])
+    covers = {t.cover_url for t in out}
+    assert len(covers) == 2
+    assert all("resources.tidal.com" in (c or "") for c in covers)
 
 
 @pytest.mark.asyncio

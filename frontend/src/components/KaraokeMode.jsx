@@ -14,6 +14,7 @@ export default function KaraokeMode({
   queueOpen = false,
 }) {
   const containerRef = useRef(null);
+  const rootRef = useRef(null);
   const [lyrics, setLyrics] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const activeIndex = useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progress });
@@ -61,10 +62,7 @@ export default function KaraokeMode({
     const lineTop = activeEl.offsetTop;
     const lineH = activeEl.offsetHeight;
     const viewH = container.clientHeight;
-    // Intro lines: anchor in the upper third instead of vertical center (avoids huge top gap).
-    const targetTop = activeIndex < 3
-      ? Math.max(0, lineTop - viewH * 0.2)
-      : lineTop - (viewH - lineH) / 2;
+    const targetTop = lineTop - (viewH - lineH) / 2;
     container.scrollTo({
       top: Math.max(0, targetTop),
       behavior: 'smooth',
@@ -74,8 +72,9 @@ export default function KaraokeMode({
   useEffect(() => {
     let enteredFullscreen = false;
     document.documentElement.classList.add('karaoke-mode-open');
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
+    const el = rootRef.current || document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) {
+      void el.requestFullscreen({ navigationUI: 'hide' }).then(() => {
         enteredFullscreen = true;
       }).catch(() => {});
     }
@@ -91,6 +90,7 @@ export default function KaraokeMode({
 
   return (
     <motion.div
+      ref={rootRef}
       className={`karaoke-mode${queueOpen ? ' karaoke-mode--queue-open' : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

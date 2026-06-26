@@ -50,9 +50,14 @@ export default function Landing() {
 
       {cinema && (
         <p className="landing__cinema-hint" aria-live="polite">
-          {lang === 'ru' ? 'Shift+V или Esc — выйти' : 'Shift+V or Esc to exit'}
+          {lang === 'ru' ? 'Esc — обратно в реальность' : 'Esc — back to reality'}
         </p>
       )}
+
+      <p className="landing__egg" aria-hidden="true">
+        <span className="landing__egg-glyph">⇧</span>
+        <span className="landing__egg-key">V</span>
+      </p>
 
       <LandingHeader t={t} onToggleLang={toggleLang} />
 

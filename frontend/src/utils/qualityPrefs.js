@@ -288,7 +288,6 @@ export function resolvePlayerUiQuality({
   const deliveredUi = delivered ? uiQualityButtonId(delivered) : null;
 
   if (isLoading) return requestedUi;
-  if (deliveredUi && requestedUi !== deliveredUi) return requestedUi;
   if (qualitiesReady && delivered) return deliveredUi;
   return requestedUi;
 }

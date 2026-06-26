@@ -1,6 +1,6 @@
 # Security audit (FlacAud / tidal-dl-ru)
 
-Last reviewed: 2026-06-17. Living checklist for production hardening.
+Last reviewed: **2026-06-17**. Living checklist for production hardening.
 
 ## Score snapshot (post-hardening pass)
 
@@ -45,7 +45,7 @@ Overall ~**7.8/10** (was ~6.2). Remaining gaps: set-analyzer SSRF blocklist, bro
 | Area | Status | Notes |
 |------|--------|-------|
 | Set analyzer URL fetch | Review | Block private IP ranges on user-supplied URLs |
-| Cover proxy | OK | Known CDN paths |
+| Cover / portrait proxy | OK | `/api/image-proxy`: DNS public-IP check; allowlist Tidal CDN, Wikimedia/Wikipedia, Deezer (`dzcdn.net`), Apple (`mzstatic.com`). Artist fetch chain has no user-controlled URLs. |
 
 ## Secrets
 
@@ -83,3 +83,6 @@ Overall ~**7.8/10** (was ~6.2). Remaining gaps: set-analyzer SSRF blocklist, bro
 - Recognize auth + upload limits; transfer task capability tokens.
 - Removed duplicate unprotected Tidal OAuth routes from `api.py`.
 - GDPR delete/export endpoints; frontend token hygiene + sign-out cache clear.
+- **Artist portraits:** removed Google CSE; outbound only to Wikipedia/Deezer/iTunes/Tidal with name matching; results cached 7d.
+- **Image proxy:** expanded allowlist for portrait CDNs; SSRF blocks resolved private addresses.
+- **Playback quality:** frontend reload on re-select same tier (prevents UI/stream mismatch).
