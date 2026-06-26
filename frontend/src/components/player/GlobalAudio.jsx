@@ -132,13 +132,11 @@ export default function GlobalAudio({
 
     let stopped = false;
     let timerId = null;
-    let rafId = 0;
     const deadline = Date.now() + 8000;
 
     const stop = () => {
       stopped = true;
       if (timerId) clearTimeout(timerId);
-      if (rafId) cancelAnimationFrame(rafId);
     };
 
     const schedule = () => {
@@ -146,7 +144,11 @@ export default function GlobalAudio({
         stop();
         return;
       }
-      timerId = setTimeout(() => { rafId = requestAnimationFrame(tick); }, 160);
+      // Plain timer, NOT requestAnimationFrame: rAF is frozen in a hidden/
+      // background tab, so an auto-advanced next track would never start until
+      // the tab is refocused. Timers still fire (throttled to ~1s) while hidden,
+      // so playback begins promptly even in the background.
+      timerId = setTimeout(tick, 160);
     };
 
     function tick() {
@@ -174,7 +176,7 @@ export default function GlobalAudio({
       schedule();
     }
 
-    rafId = requestAnimationFrame(tick);
+    timerId = setTimeout(tick, 0);
     return stop;
   }, [
     currentAudioSrc,
