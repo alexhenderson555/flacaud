@@ -3,6 +3,7 @@ import MetaBadge from './MetaBadge';
 import { formatTrackYear, normalizeArtists } from '../utils/trackNormalize';
 import {
   qualityButtonLabel,
+  losslessQualityLabel,
   isQualityAllowedForPlan,
   isPlaybackQualityAvailable,
   isTidalCatalogOnlyLossless,
@@ -367,7 +368,7 @@ export default function PlayerBar({
                   : (maxTrackQuality === q.id ? `${q.label} (max)` : q.label)
             }
           >
-            {qualityButtonLabel(q.id, lang)}
+            {q.id === 'LOSSLESS' ? losslessQualityLabel(probeData) : qualityButtonLabel(q.id, lang)}
           </button>
         );
       })}

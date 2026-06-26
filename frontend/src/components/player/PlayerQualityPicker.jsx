@@ -1,4 +1,4 @@
-import { qualityButtonLabel, qualityUnavailableTooltip, isQualityAllowedForPlan, isPlaybackQualityAvailable, isTidalCatalogOnlyLossless } from '../../utils/qualityPrefs';
+import { qualityButtonLabel, losslessQualityLabel, qualityUnavailableTooltip, isQualityAllowedForPlan, isPlaybackQualityAvailable, isTidalCatalogOnlyLossless } from '../../utils/qualityPrefs';
 
 const QUALITY_OPTIONS = [
   { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
@@ -69,7 +69,7 @@ export default function PlayerQualityPicker({
                   : (maxTrackQuality === q.id ? `${q.label} (max)` : q.label)
             }
           >
-            {qualityButtonLabel(q.id, lang)}
+            {q.id === 'LOSSLESS' ? losslessQualityLabel(probeData) : qualityButtonLabel(q.id, lang)}
           </button>
         );
       })}

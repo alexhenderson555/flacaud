@@ -264,6 +264,18 @@ export function formatSampleRateLabel(hz) {
   return `${khz % 1 === 0 ? khz : khz.toFixed(1)} kHz`;
 }
 
+/** Picker label for the lossless tier: the probe's real bit-depth/sample-rate
+ *  ("24/96", "16/44.1") so the exact quality is visible, else generic "Lossless". */
+export function losslessQualityLabel(probeData) {
+  const l = probeData?.lossless || {};
+  const sr = Number(l.sample_rate ?? l.sampleRate) || 0;
+  const bd = Number(l.bit_depth ?? l.bitDepth) || 0;
+  const freq = formatSampleRateLabel(sr);
+  if (!freq) return 'Lossless';
+  const khz = freq.replace(' kHz', '');
+  return bd ? `${bd}/${khz}` : `${khz} kHz`;
+}
+
 function isAacTier(tier) {
   const u = String(tier || '').toUpperCase();
   return !u || u === 'HIGH' || u === 'LOW';
