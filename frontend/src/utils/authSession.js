@@ -10,6 +10,7 @@ export function clearSession() {
   try {
     localStorage.removeItem('tidal-user');
     localStorage.removeItem('tidal-effective-plan');
+    localStorage.removeItem('tidal-user-profile');
   } catch { /* ignore */ }
   clearMediaToken();
 }
@@ -34,6 +35,25 @@ export function getStoredEffectivePlan() {
   }
 }
 
+/** Stale-while-revalidate cache of the /api/auth/me profile, so the Account page
+ *  shows the real plan/limits instantly instead of a free-plan placeholder while
+ *  the (network-bound) /me request is in flight. */
+export function persistUserProfile(data) {
+  try {
+    if (data) localStorage.setItem('tidal-user-profile', JSON.stringify(data));
+    else localStorage.removeItem('tidal-user-profile');
+  } catch { /* ignore */ }
+}
+
+export function getStoredUserProfile() {
+  try {
+    const raw = localStorage.getItem('tidal-user-profile');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Session check result for app boot and visibility recheck. */
 export async function validateSession() {
   const token = getAccessToken();
@@ -51,6 +71,7 @@ export async function validateSession() {
       if (res.ok) {
         const data = await parseJsonSafe(res);
         if (data?.effective_plan) persistEffectivePlan(data.effective_plan);
+        persistUserProfile(data);
         return {
           ok: true,
           plan: data?.effective_plan || getStoredEffectivePlan(),

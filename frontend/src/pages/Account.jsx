@@ -5,6 +5,8 @@ import {
   registerUser,
   userDataFromLogin,
   persistEffectivePlan,
+  persistUserProfile,
+  getStoredUserProfile,
   signOut,
   getAccessToken,
 } from '../utils/authSession';
@@ -175,7 +177,9 @@ export default function Account() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [authError, setAuthError] = useState('');
-  const [userData, setUserData] = useState(null);
+  // Seed from the cached profile so the real plan/limits show instantly instead
+  // of a free-plan placeholder while the slow /api/auth/me request is in flight.
+  const [userData, setUserData] = useState(() => (getAccessToken() ? getStoredUserProfile() : null));
   const [authLoading, setAuthLoading] = useState(false);
   const [authSlow, setAuthSlow] = useState(false);
   const [verifyResendMsg, setVerifyResendMsg] = useState('');
@@ -201,6 +205,7 @@ export default function Account() {
       if (res.ok) {
         const data = await parseJsonSafe(res);
         if (data?.effective_plan) persistEffectivePlan(data.effective_plan);
+        persistUserProfile(data);
         setUserData(data);
         setDjAnalysisEnabled?.(!!data?.dj_enabled);
         setIsLoggedIn(true);
@@ -209,6 +214,7 @@ export default function Account() {
         setUserData(null);
         clearAccessToken();
         localStorage.removeItem('tidal-user');
+        persistUserProfile(null);
       } else {
         setUserData(null);
         setIsLoggedIn(false);
