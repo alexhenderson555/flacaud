@@ -7,7 +7,7 @@ describe('hotkeyHintLines', () => {
     expect(text).toContain(PLAYER_HOTKEYS.volumeUp);
     expect(text).toContain(PLAYER_HOTKEYS.trackRadio);
     expect(text).toContain(PLAYER_HOTKEYS.shuffle);
-    expect(text).toContain(PLAYER_HOTKEYS.seekBackAlt);
+    expect(text).toContain(PLAYER_HOTKEYS.cinema);
     expect(hotkeyHintLines('en')).toHaveLength(2);
   });
 

@@ -79,25 +79,6 @@ export function usePlayerHotkeys({
           e.preventDefault();
           setVolume((v) => Math.max(0, v - 0.05));
           break;
-        case 'BracketRight':
-          e.preventDefault();
-          if (resolveAudio() && currentTrack) {
-            const el = resolveAudio();
-            el.currentTime = Math.min(
-              el.duration || Infinity,
-              el.currentTime + SEEK_STEP,
-            );
-          }
-          break;
-        case 'BracketLeft':
-          e.preventDefault();
-          {
-            const el = resolveAudio();
-            if (el) {
-              el.currentTime = Math.max(0, el.currentTime - SEEK_STEP);
-            }
-          }
-          break;
         case 'Escape':
           e.preventDefault();
           closeAllPanels();
