@@ -18,6 +18,9 @@ export default function KaraokeMode({
   const [lyrics, setLyrics] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const activeIndex = useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progress });
+  // Plain lyrics (no timestamps) have no active line — light every line instead
+  // of dimming all-but-the-last.
+  const synced = lyrics.some((l) => Number(l?.time) > 0);
 
   useEffect(() => {
     if (!currentTrack) return;
@@ -120,14 +123,14 @@ export default function KaraokeMode({
         ) : (
           <div className="karaoke-mode__lyrics-track">
             {lyrics.map((line, idx) => {
-              const isActive = idx === activeIndex;
-              const isPast = idx < activeIndex;
+              const isActive = synced ? idx === activeIndex : true;
+              const isPast = synced ? idx < activeIndex : false;
               return (
                 <motion.div
                   key={`${line.time}-${idx}`}
                   className={`karaoke-mode__line${isActive ? ' karaoke-mode__line--active' : ''}${isPast ? ' karaoke-mode__line--past' : ''}`}
                   animate={{
-                    opacity: isActive ? 1 : isPast ? 0.34 : 0.58,
+                    opacity: synced ? (isActive ? 1 : isPast ? 0.34 : 0.58) : 1,
                   }}
                   transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
                 >

@@ -16,9 +16,13 @@ export function useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progres
   const activeIdxRef = useRef(-1);
   const waitForResetRef = useRef(false);
   const waitFramesRef = useRef(0);
+  // Plain lyrics (no per-line timestamps) have no meaningful active line — every
+  // line.time is 0, which would otherwise snap to the last line. Report "no
+  // active line" (-1) so the UI can light all lines uniformly.
+  const synced = Array.isArray(lyrics) && lyrics.some((l) => Number(l?.time) > 0);
 
   useEffect(() => {
-    if (lyrics.length > 0) {
+    if (lyrics.length > 0 && synced) {
       activeIdxRef.current = 0;
       setActiveIdx(0);
       waitForResetRef.current = true; // new track: ignore a stale carried-over clock
@@ -28,10 +32,10 @@ export function useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progres
       setActiveIdx(-1);
       waitForResetRef.current = false;
     }
-  }, [lyrics]);
+  }, [lyrics, synced]);
 
   useEffect(() => {
-    if (!lyrics?.length) return undefined;
+    if (!lyrics?.length || !synced) return undefined;
 
     let rafId;
     const update = () => {
@@ -54,7 +58,7 @@ export function useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progres
     };
     rafId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(rafId);
-  }, [lyrics, getMainAudioEl, audioRef, progress]);
+  }, [lyrics, synced, getMainAudioEl, audioRef, progress]);
 
   return activeIdx;
 }
