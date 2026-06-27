@@ -407,7 +407,7 @@ export default function Genreverse() {
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ width: '100%', maxWidth: '800px', marginTop: '40px' }}
+          style={{ width: '100%', maxWidth: '100%', marginTop: '40px' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '12px', flexWrap: 'wrap' }}>
             <h2 className="page-header__title" style={{ fontSize: '1.5rem', margin: 0 }}>
