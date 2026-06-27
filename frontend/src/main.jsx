@@ -64,18 +64,26 @@ if (hasAuthSession()) {
   registerPwaAfterAuth();
 }
 
+// Match App.jsx's auth-boot loading screen exactly so the code-split (Suspense)
+// phase and the auth-boot phase read as ONE continuous screen — not two
+// ("looks loaded… then loading again"). lang lives in the persisted store.
+const bootLang = (() => {
+  try {
+    const persisted = JSON.parse(localStorage.getItem('tidal-player-store') || '{}');
+    return persisted?.state?.lang === 'ru' ? 'ru' : 'en';
+  } catch {
+    return 'en';
+  }
+})();
+
 const LoadingFallback = () => (
   <div
-    style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      color: 'var(--text-muted)',
-      background: 'var(--bg-main)',
-    }}
+    className="app-container app-container--loading"
+    style={{ paddingTop: window.__TAURI__ ? '38px' : '0' }}
   >
-    Loading...
+    <div className="app-loading-message">
+      {bootLang === 'ru' ? 'Загрузка…' : 'Loading…'}
+    </div>
   </div>
 );
 
