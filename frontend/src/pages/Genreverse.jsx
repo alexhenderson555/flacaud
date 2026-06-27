@@ -171,7 +171,7 @@ export default function Genreverse() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             style={{ 
               display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(140px, 42vw, 220px), 1fr))',
               gap: '24px', 
               width: '100%',
               paddingBottom: '40px'
@@ -236,16 +236,16 @@ export default function Genreverse() {
 
                 <div style={{
                   position: 'absolute',
-                  bottom: '24px',
-                  left: '24px',
-                  right: '24px',
+                  bottom: 'clamp(12px, 4vw, 24px)',
+                  left: 'clamp(12px, 4vw, 24px)',
+                  right: 'clamp(12px, 4vw, 24px)',
                   display: 'flex',
                   alignItems: 'flex-end',
                 }}>
                   <span style={{
                     color: '#fff',
                     fontWeight: '800',
-                    fontSize: '1.6rem',
+                    fontSize: 'clamp(1.05rem, 4.5vw, 1.6rem)',
                     lineHeight: '1.2',
                     letterSpacing: '-0.5px',
                     textShadow: '0 2px 10px rgba(0,0,0,0.5)',
