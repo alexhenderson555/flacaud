@@ -2394,6 +2394,173 @@
           "Buddha Hotel Ibiza Lounge Bar Music DJ",
           "Future Bartenderz"
         ]
+      },
+      {
+        "name": "Afro House",
+        "image": "",
+        "artists": [
+          "Black Coffee",
+          "Keinemusik",
+          "&ME",
+          "Rampa",
+          "Adam Port",
+          "Themba",
+          "Caiiro",
+          "Da Capo",
+          "Shimza",
+          "Culoe De Song",
+          "Enoo Napa",
+          "&friends"
+        ]
+      },
+      {
+        "name": "Organic House",
+        "image": "",
+        "artists": [
+          "Be Svendsen",
+          "Bedouin",
+          "Rodriguez Jr.",
+          "Armen Miran",
+          "Hraach",
+          "Acid Pauli",
+          "Sebastien Leger",
+          "Lee Burridge",
+          "YokoO",
+          "Tim Green"
+        ]
+      },
+      {
+        "name": "Melodic Techno",
+        "image": "",
+        "artists": [
+          "Tale Of Us",
+          "Mind Against",
+          "Mathame",
+          "Adriatique",
+          "Massano",
+          "Anyma",
+          "ARTBAT",
+          "Stephan Bodzin",
+          "Maceo Plex",
+          "Kevin de Vries",
+          "Argy"
+        ]
+      },
+      {
+        "name": "Minimal / Deep Tech",
+        "image": "",
+        "artists": [
+          "Michael Bibi",
+          "Cloonee",
+          "Chris Stussy",
+          "Archie Hamilton",
+          "PAWSA",
+          "Dennis Cruz",
+          "Marco Carola",
+          "Hot Since 82",
+          "Rossi."
+        ]
+      },
+      {
+        "name": "Bass House",
+        "image": "",
+        "artists": [
+          "Chris Lake",
+          "Fisher",
+          "Dom Dolla",
+          "Jauz",
+          "AC Slater",
+          "Joyryde",
+          "Habstrakt"
+        ]
+      },
+      {
+        "name": "Future House",
+        "image": "",
+        "artists": [
+          "Oliver Heldens",
+          "Tchami",
+          "Don Diablo",
+          "Mike Williams",
+          "Brooks",
+          "Curbi"
+        ]
+      },
+      {
+        "name": "UK Garage",
+        "image": "",
+        "artists": [
+          "Disclosure",
+          "MJ Cole",
+          "Interplanetary Criminal",
+          "Sammy Virji",
+          "Conducta",
+          "DJ EZ",
+          "Wookie"
+        ]
+      },
+      {
+        "name": "Breakbeat",
+        "image": "",
+        "artists": [
+          "The Prodigy",
+          "The Chemical Brothers",
+          "Fatboy Slim",
+          "Stanton Warriors",
+          "Overmono",
+          "Hybrid"
+        ]
+      },
+      {
+        "name": "Psytrance",
+        "image": "",
+        "artists": [
+          "Infected Mushroom",
+          "Vini Vici",
+          "Astrix",
+          "Ace Ventura",
+          "Captain Hook",
+          "Liquid Soul",
+          "Ajja"
+        ]
+      },
+      {
+        "name": "Hard Techno",
+        "image": "",
+        "artists": [
+          "I Hate Models",
+          "999999999",
+          "SPFDJ",
+          "Sara Landry",
+          "Hector Oaks",
+          "KlangKuenstler",
+          "Trym"
+        ]
+      },
+      {
+        "name": "Liquid Drum and Bass",
+        "image": "",
+        "artists": [
+          "Netsky",
+          "High Contrast",
+          "London Elektricity",
+          "Etherwood",
+          "Hybrid Minds",
+          "Keeno",
+          "Fred V"
+        ]
+      },
+      {
+        "name": "Big Room",
+        "image": "",
+        "artists": [
+          "Martin Garrix",
+          "Hardwell",
+          "Tiesto",
+          "Dimitri Vegas & Like Mike",
+          "W&W",
+          "Afrojack"
+        ]
       }
     ]
   },
