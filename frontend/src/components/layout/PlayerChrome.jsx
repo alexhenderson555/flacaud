@@ -3,6 +3,7 @@ import { usePlayer, usePlayerPlayback } from '../../store/usePlayerStore';
 import GlobalAudio from '../player/GlobalAudio';
 import PlayerOverlays from '../player/PlayerOverlays';
 import PlayerBar from '../PlayerBar';
+import PlayerCinemaOverlay from '../player/PlayerCinemaOverlay';
 import HotkeyHint from '../HotkeyHint';
 import DownloadToast from '../DownloadToast';
 import CommandPalette from '../CommandPalette';
@@ -14,6 +15,8 @@ function PlayerChrome({ playbackEnabled = true }) {
   const {
     t,
     lang,
+    cinema,
+    setCinema,
     overlays,
     transport,
     likedTracks,
@@ -164,6 +167,21 @@ function PlayerChrome({ playbackEnabled = true }) {
         toggleShuffle={toggleShuffle}
         cycleRepeat={cycleRepeat}
       />
+
+      {cinema && (
+        <PlayerCinemaOverlay
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          lang={lang}
+          onTogglePlay={() => {
+            if (!currentTrack) return;
+            if (isPlaying) audioRef.current?.pause();
+            else audioRef.current?.play();
+          }}
+          onNext={transport.playNext}
+          onExit={() => setCinema(false)}
+        />
+      )}
 
       <PlayerOverlays
         isKaraokeOpen={overlays.isKaraokeOpen}

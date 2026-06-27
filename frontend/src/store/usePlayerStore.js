@@ -35,6 +35,11 @@ export const usePlayerStore = create(
       visualizerEnabled: false,
       setVisualizerEnabled: (visualizerEnabled) => set({ visualizerEnabled }),
 
+      // Cinema / hidden mode (not persisted — always starts off).
+      cinema: false,
+      setCinema: (cinema) => set({ cinema }),
+      toggleCinema: () => set((s) => ({ cinema: !s.cinema })),
+
       lang: 'en',
       setLang: (lang) => set({ lang }),
 
