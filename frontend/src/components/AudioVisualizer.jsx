@@ -35,6 +35,7 @@ function resizeVisualizerCanvas(canvas) {
 export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   const canvasRef = useRef(null);
   const analyserRef = useRef(null);
+  const boundElRef = useRef(null);
   const dataArrayRef = useRef(null);
   const reqRef = useRef(null);
   const colorsRef = useRef(readAccentColors());
@@ -91,6 +92,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const analyser = getAudioAnalyser({ current: el });
       if (!analyser) return false;
       analyserRef.current = analyser;
+      boundElRef.current = el;
       dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
       return true;
     };
@@ -203,6 +205,10 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       if (time - lastFrame < FRAME_MS) return;
       lastFrame = time;
 
+      // Re-bind when the main <audio> element swaps to the other A/B slot (e.g. a
+      // quality change 320k -> lossless), otherwise the analyser stays on the
+      // now-idle element and the visualizer goes flat / disappears.
+      if (el && el !== boundElRef.current) bindAnalyser();
       if (!analyserRef.current && !bindAnalyser()) return;
 
       const width = canvas.width;
