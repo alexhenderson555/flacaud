@@ -563,7 +563,7 @@ async def build_recommendations(
     artist_counts: dict[str, int] = defaultdict(int)
 
     saved: list[SavedTrack] = []
-    if user and session and not genre:
+    if user and session:
         saved, library_seen = _library_seeds(user, session)
         seen.update(library_seen)
 
@@ -590,10 +590,18 @@ async def build_recommendations(
             except Exception as e:
                 logger.error(f"Failed to search for genre artists: {e}")
 
+            genre_tids: list[str] = []
             for t in genre_tracks[:6]:
-                if t.provider_id:
-                    seed_tids.append(str(t.provider_id))
+                if t.provider_id and str(t.provider_id) not in seen:
+                    genre_tids.append(str(t.provider_id))
                     seen.add(str(t.provider_id))
+            # Personalize: blend a few of the listener's own library tracks in as
+            # extra radio seeds so the station reflects their taste, not just the
+            # static genre artists. Genre still leads (interleaved first); with an
+            # empty library it stays pure genre.
+            lib_rows = _pick_seed_tracks(saved, n=min(3, len(saved))) if saved else []
+            lib_tids = [str(r.provider_id) for r in lib_rows]
+            seed_tids = _interleave_round_robin(genre_tids, lib_tids) if lib_tids else genre_tids
         else:
             seed_rows = _pick_seed_tracks(saved)
             seed_tids = [str(r.provider_id) for r in seed_rows]
