@@ -25,7 +25,12 @@ export function usePlayerCinemaMode() {
       }
       if (e.code === 'KeyC' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
+        const willOpen = !usePlayerStore.getState().cinema;
         toggleCinema();
+        // requestFullscreen needs a user gesture — do it here (keydown), not the effect.
+        if (willOpen && !document.fullscreenElement) {
+          document.documentElement.requestFullscreen?.().catch(() => {});
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -34,6 +39,10 @@ export function usePlayerCinemaMode() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('app-cinema-active', cinema);
+    // Leaving cinema (X / Esc / C) also drops out of fullscreen — exit needs no gesture.
+    if (!cinema && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
     return () => document.documentElement.classList.remove('app-cinema-active');
   }, [cinema]);
 

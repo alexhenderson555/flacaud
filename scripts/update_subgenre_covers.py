@@ -36,6 +36,11 @@ async def update_subgenres():
             if not artists:
                 continue
 
+            # Only fetch covers for subgenres that don't have one yet (newly added
+            # ones) — avoids re-querying all 192 every run.
+            if subgenre.get('image'):
+                continue
+
             top_artist = artists[0]
             print(f"  Searching for top artist: {top_artist} (subgenre: {subgenre['name']})")
 
