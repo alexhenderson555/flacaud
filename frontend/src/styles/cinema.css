@@ -11,6 +11,7 @@ html.app-cinema-active .legal-footer {
 }
 
 .cinema-overlay {
+  --cinema-accent: var(--accent-solid);
   position: fixed;
   inset: 0;
   z-index: 60; /* above the visualizer, below modal overlays (~100) */
@@ -26,6 +27,55 @@ html.app-cinema-active .legal-footer {
 @keyframes cinema-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Ambient cover-tinted glow — two soft blobs slowly drifting + breathing (bloom),
+   behind the info/controls, complementing the visualizer rather than covering it. */
+.cinema-overlay__glow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cinema-overlay__glow::before,
+.cinema-overlay__glow::after {
+  content: '';
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--cinema-accent), transparent 70%);
+  filter: blur(60px);
+  opacity: 0.26;
+  will-change: transform, opacity;
+}
+
+.cinema-overlay__glow::before {
+  top: -22vh;
+  left: -12vw;
+  animation: cinema-drift-a 18s ease-in-out infinite alternate;
+}
+
+.cinema-overlay__glow::after {
+  bottom: -26vh;
+  right: -12vw;
+  animation: cinema-drift-b 23s ease-in-out infinite alternate;
+}
+
+@keyframes cinema-drift-a {
+  from { transform: translate(0, 0) scale(1); opacity: 0.2; }
+  to { transform: translate(8vw, 6vh) scale(1.18); opacity: 0.34; }
+}
+
+@keyframes cinema-drift-b {
+  from { transform: translate(0, 0) scale(1.12); opacity: 0.32; }
+  to { transform: translate(-7vw, -5vh) scale(1); opacity: 0.18; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-overlay__glow::before,
+  .cinema-overlay__glow::after { animation: none; }
 }
 
 .cinema-overlay__info {

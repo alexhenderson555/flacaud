@@ -1,12 +1,15 @@
+import { useEffect, useState } from 'react';
 import { Pause, Play, SkipForward, X } from 'lucide-react';
 import { coverImgSrc } from '../../utils/coverUrl';
+import { sampleCoverTheme } from '../../utils/coverTheme';
 import { normalizeArtists } from '../../utils/trackNormalize';
 import '../../styles/cinema.css';
 
 /**
  * Chrome-less now-playing overlay shown in cinema mode: cover + title + artists
  * (bottom-left) and pause / next controls (bottom-right), over the visualizer.
- * The container is click-through except the controls so the view stays clean.
+ * A soft, slowly-drifting glow tinted from the cover art adds ambient motion
+ * beyond the bars. The container is click-through except the controls.
  */
 export default function PlayerCinemaOverlay({
   currentTrack,
@@ -16,12 +19,32 @@ export default function PlayerCinemaOverlay({
   onExit,
   lang = 'en',
 }) {
+  const [accent, setAccent] = useState(null);
+  const cover = currentTrack?.cover_url ? coverImgSrc(currentTrack.cover_url) : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!cover) {
+      setAccent(null);
+      return undefined;
+    }
+    sampleCoverTheme(cover).then((a) => {
+      if (!cancelled) setAccent(a?.solid || null);
+    });
+    return () => { cancelled = true; };
+  }, [cover]);
+
   if (!currentTrack) return null;
   const artists = normalizeArtists(currentTrack).join(', ');
-  const cover = currentTrack.cover_url ? coverImgSrc(currentTrack.cover_url) : null;
 
   return (
-    <div className="cinema-overlay" data-testid="cinema-overlay">
+    <div
+      className="cinema-overlay"
+      data-testid="cinema-overlay"
+      style={accent ? { '--cinema-accent': accent } : undefined}
+    >
+      <div className="cinema-overlay__glow" aria-hidden />
+
       <div className="cinema-overlay__info">
         {cover && <img className="cinema-overlay__cover" src={cover} alt="" />}
         <div className="cinema-overlay__meta">
