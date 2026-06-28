@@ -41,11 +41,21 @@ export default function PromoCodeBlock({
           </button>
         )}
       </div>
-      <p className="upgrade-promo__hint">
+      <p
+        className="upgrade-promo__hint"
+        style={redeemAfterLogin ? {
+          color: 'var(--text-secondary)',
+          background: 'rgba(37, 117, 252, 0.1)',
+          border: '1px solid rgba(37, 117, 252, 0.25)',
+          borderRadius: '10px',
+          padding: '8px 12px',
+          fontSize: '0.85rem',
+        } : undefined}
+      >
         {redeemAfterLogin
           ? t(
-            'Enter your code, then press Log In or Sign Up — the plan applies right after.',
-            'Введите код и нажмите «Войти» или «Регистрация» — тариф применится сразу после входа.',
+            'Enter your code, then Log In or Sign Up — the plan applies automatically right after.',
+            'Введите код и войдите или зарегистрируйтесь — тариф применится автоматически сразу после входа.',
           )
           : t(
             'Codes from Telegram or promotions apply instantly.',
