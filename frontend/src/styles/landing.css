@@ -165,3 +165,53 @@
 .landing--cinema .landing__egg {
   opacity: 0;
 }
+
+/* Mobile menu drawer — full-screen opaque overlay so the nav doesn't bleed over
+   the hero (it had no styles, so it rendered in-flow). Sits below the header
+   (z 50) so the close (X) button stays on top and clickable. */
+.landing__mobile-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(8, 8, 12, 0.98);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: landing-drawer-in 0.22s ease;
+}
+
+@keyframes landing-drawer-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.landing__mobile-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  width: 100%;
+  padding: 0 32px;
+}
+
+.landing__mobile-nav a {
+  color: var(--text-primary);
+  font-size: 1.6rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.landing__mobile-nav a:hover {
+  color: var(--accent-solid);
+}
+
+.landing__mobile-cta {
+  margin-top: 14px;
+  padding: 14px 44px;
+  border-radius: 30px;
+  background: var(--accent-gradient);
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 1.15rem;
+}
