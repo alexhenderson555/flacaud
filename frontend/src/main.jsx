@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import App from './App.jsx'
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { initClientObservability } from './clientObservability.js'
+import { initFeatureFlags } from './utils/featureFlags.js'
 import { lazyRoute } from './utils/lazyRoute.js'
 import './index.css'
 import './styles/player-bar.css'
@@ -11,6 +12,7 @@ import './styles/mobile-shell.css'
 import './styles/karaoke.css'
 
 initClientObservability()
+initFeatureFlags()
 
 const Search = lazyRoute(() => import('./pages/Search.jsx'));
 const Account = lazyRoute(() => import('./pages/Account.jsx'));
