@@ -27,11 +27,11 @@ function readAccentColors() {
   return { accent, transparent };
 }
 
-function resizeVisualizerCanvas(canvas) {
+function resizeVisualizerCanvas(canvas, isCinema) {
   // In fullscreen (cinema) the viewport jumps to the full screen resolution; at
   // DPR 2 that's ~3x the pixels to paint per frame and the bars stutter. Cap DPR
   // to 1 in fullscreen — the soft bars don't need the extra crispness.
-  const maxDpr = document.fullscreenElement ? 1 : MAX_DPR;
+  const maxDpr = (document.fullscreenElement || isCinema) ? 1 : MAX_DPR;
   const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
   canvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
   canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
@@ -50,6 +50,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   // Visual style read through a ref so switching modes doesn't tear down the
   // animation loop / re-bind the analyser.
   const visualMode = usePlayerStore((s) => s.visualMode);
+  const cinema = usePlayerStore((s) => s.cinema);
   const modeRef = useRef(visualMode);
   useEffect(() => { modeRef.current = visualMode; }, [visualMode]);
 
@@ -78,7 +79,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     if (!canvas) return undefined;
 
     const onResize = () => {
-      resizeVisualizerCanvas(canvas);
+      resizeVisualizerCanvas(canvas, cinema);
       gradCacheRef.current = [];
     };
     onResize();
@@ -89,7 +90,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       window.removeEventListener('resize', onResize);
       document.removeEventListener('fullscreenchange', onResize);
     };
-  }, []);
+  }, [cinema]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
