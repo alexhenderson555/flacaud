@@ -108,6 +108,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     let lastBeat = -1e9;
     let spin = 0; // rotation accumulator (radial / orb)
     const ripples = []; // expanding rings emitted on beats (orb mode)
+    let peaks = null; // peak-hold heights per bar (bars mode)
 
     const updateBeat = (smoothed, time) => {
       let e = 0;
