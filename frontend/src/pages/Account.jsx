@@ -1019,93 +1019,83 @@ export default function Account() {
               />
             </button>
           </div>
-
-          {/* Visualizer */}
-          <div
-            className="glass-panel"
-            style={{
-              padding: '24px',
-              borderRadius: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <div
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
-                  background: 'rgba(37, 117, 252, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--accent-solid)',
-                }}
+          {/* Background Visualizer */}
+          <div className="glass-panel settings-panel" style={{ flexWrap: 'wrap', gap: '20px' }}>
+            <div style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="settings-panel__header" style={{ marginBottom: 0 }}>
+                <div
+                  className="settings-panel__icon"
+                  style={{
+                    background: 'rgba(37, 117, 252, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--accent-solid)',
+                  }}
+                >
+                  <Activity size={24} />
+                </div>
+                <div>
+                  <h3 className="settings-panel__title">{t('bgVis')}</h3>
+                  <p className="settings-panel__desc">{t('bgDesc')}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVisualizerEnabled(!visualizerEnabled)}
+                className={`settings-pill-btn${visualizerEnabled ? ' settings-pill-btn--on' : ' settings-pill-btn--off'}`}
+                style={{ flexShrink: 0 }}
               >
-                <Activity size={24} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{t('bgVis')}</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('bgDesc')}</p>
-              </div>
+                {visualizerEnabled ? 'ON' : 'OFF'}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-              className={`settings-pill-btn${visualizerEnabled ? ' settings-pill-btn--on' : ' settings-pill-btn--off'}`}
-            >
-              {visualizerEnabled ? 'ON' : 'OFF'}
-            </button>
+
+            {visualizerEnabled && (
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '8px', paddingTop: '24px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                      {lang === 'ru' ? 'Чувствительность к биту' : 'Beat Sensitivity'}
+                    </label>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{visualSensitivity.toFixed(1)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.5"
+                    step="0.1"
+                    value={visualSensitivity}
+                    onChange={(e) => setVisualSensitivity(parseFloat(e.target.value))}
+                    style={{ width: '100%', accentColor: 'var(--accent-solid)' }}
+                  />
+                  <p style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {lang === 'ru' ? 'Выше = анимации дергаются сильнее даже на тихих треках.' : 'Higher = more reactive animations even on quiet tracks.'}
+                  </p>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                      {lang === 'ru' ? 'Сглаживание (Плавность)' : 'Animation Smoothing'}
+                    </label>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{Math.round(visualSmoothing * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="0.95"
+                    step="0.05"
+                    value={visualSmoothing}
+                    onChange={(e) => setVisualSmoothing(parseFloat(e.target.value))}
+                    style={{ width: '100%', accentColor: 'var(--accent-solid)' }}
+                  />
+                  <p style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {lang === 'ru' ? 'Меньше = резкие скачки. Больше = плавные, как желе, переходы.' : 'Lower = sharp jumps. Higher = fluid jelly-like motion.'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Visualizer Settings */}
-          {visualizerEnabled && (
-            <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', marginBottom: '32px' }}>
-              <div style={{ marginBottom: '24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <label style={{ fontSize: '0.95rem', fontWeight: 600 }}>
-                    {lang === 'ru' ? 'Чувствительность к биту' : 'Beat Sensitivity'}
-                  </label>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{visualSensitivity.toFixed(1)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.5"
-                  step="0.1"
-                  value={visualSensitivity}
-                  onChange={(e) => setVisualSensitivity(parseFloat(e.target.value))}
-                  style={{ width: '100%', accentColor: 'var(--accent-solid)' }}
-                />
-                <p style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {lang === 'ru' ? 'Выше = анимации дергаются сильнее даже на тихих треках.' : 'Higher = more reactive animations even on quiet tracks.'}
-                </p>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <label style={{ fontSize: '0.95rem', fontWeight: 600 }}>
-                    {lang === 'ru' ? 'Сглаживание (Плавность)' : 'Animation Smoothing'}
-                  </label>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{Math.round(visualSmoothing * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="0.95"
-                  step="0.05"
-                  value={visualSmoothing}
-                  onChange={(e) => setVisualSmoothing(parseFloat(e.target.value))}
-                  style={{ width: '100%', accentColor: 'var(--accent-solid)' }}
-                />
-                <p style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {lang === 'ru' ? 'Меньше = резкие скачки. Больше = плавные, как желе, переходы.' : 'Lower = sharp jumps. Higher = fluid jelly-like motion.'}
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* Appearance */}
           <div className="glass-panel settings-panel settings-panel--appearance">
