@@ -26,20 +26,23 @@ export function barBinRange(barIndex, barCount, binCount) {
 
   if (barCount === 1) return { start: minBin, end: maxBin + 1 };
 
-  const logMin = Math.log(minBin);
-  const logMax = Math.log(maxBin);
+  // Use a strictly monotonic mapping so start(i+1) >= start(i) + 1.
+  // This guarantees no two bars sample the exact same frequency bin, preventing plateaus.
+  const getBin = (i) => {
+    const t = i / (barCount - 1);
+    const extra = Math.max(0, (maxBin - minBin) - (barCount - 1));
+    return Math.floor(minBin + i + Math.pow(t, 2.5) * extra);
+  };
+
+  const start = getBin(barIndex);
+  let end = getBin(barIndex + 1);
   
-  const t0 = barIndex / barCount;
-  const t1 = (barIndex + 1) / barCount;
-  
-  const start = Math.floor(Math.exp(logMin + t0 * (logMax - logMin)));
-  let end = Math.floor(Math.exp(logMin + t1 * (logMax - logMin)));
+  if (barIndex === barCount - 1) {
+    end = maxBin + 1;
+  }
   
   // Ensure every bar gets at least 1 bin
   if (end <= start) end = start + 1;
-  
-  // Cap at maxBin for the last bar
-  if (barIndex === barCount - 1) end = Math.min(binCount, Math.max(end, maxBin + 1));
   
   return { start: Math.min(start, binCount - 1), end: Math.min(end, binCount) };
 }
