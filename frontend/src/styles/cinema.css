@@ -46,8 +46,8 @@ html.app-cinema-active .legal-footer {
   height: 60vw;
   border-radius: 50%;
   background: radial-gradient(circle, var(--cinema-accent), transparent 70%);
-  filter: blur(60px);
-  opacity: 0.26;
+  filter: blur(48px);
+  opacity: 0.32;
   will-change: transform, opacity;
 }
 
@@ -63,14 +63,16 @@ html.app-cinema-active .legal-footer {
   animation: cinema-drift-b 23s ease-in-out infinite alternate;
 }
 
+/* Translate + opacity only (no scale) — keeps the blurred layer's footprint
+   constant so the compositor doesn't re-blend an ever-larger area each frame. */
 @keyframes cinema-drift-a {
-  from { transform: translate(0, 0) scale(1); opacity: 0.2; }
-  to { transform: translate(8vw, 6vh) scale(1.18); opacity: 0.34; }
+  from { transform: translate(0, 0); opacity: 0.34; }
+  to { transform: translate(8vw, 6vh); opacity: 0.54; }
 }
 
 @keyframes cinema-drift-b {
-  from { transform: translate(0, 0) scale(1.12); opacity: 0.32; }
-  to { transform: translate(-7vw, -5vh) scale(1); opacity: 0.18; }
+  from { transform: translate(0, 0); opacity: 0.5; }
+  to { transform: translate(-7vw, -5vh); opacity: 0.28; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -145,6 +147,17 @@ html.app-cinema-active .legal-footer {
   background: rgba(255, 255, 255, 0.2);
   transform: scale(1.06);
 }
+
+.cinema-overlay__btn--liked {
+  color: #ff4d6d;
+  background: rgba(255, 77, 109, 0.16);
+  border-color: rgba(255, 77, 109, 0.4);
+}
+
+.cinema-overlay__btn--liked:hover { background: rgba(255, 77, 109, 0.26); }
+
+/* Visual-style switch is secondary to play/next — a touch smaller. */
+.cinema-overlay__btn--visual { width: 56px; height: 56px; }
 
 .cinema-overlay__exit {
   position: fixed;

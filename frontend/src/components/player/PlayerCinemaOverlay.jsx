@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Pause, Play, SkipForward, X } from 'lucide-react';
+import { Heart, Pause, Play, Shapes, SkipForward, X } from 'lucide-react';
 import { coverImgSrc } from '../../utils/coverUrl';
 import { sampleCoverTheme } from '../../utils/coverTheme';
-import { normalizeArtists } from '../../utils/trackNormalize';
+import { isTrackLiked, normalizeArtists } from '../../utils/trackNormalize';
 import '../../styles/cinema.css';
 
 /**
@@ -17,6 +17,10 @@ export default function PlayerCinemaOverlay({
   onTogglePlay,
   onNext,
   onExit,
+  likedTracks,
+  onToggleLike,
+  visualMode = 'bars',
+  onCycleVisual,
   lang = 'en',
 }) {
   const [accent, setAccent] = useState(null);
@@ -36,6 +40,13 @@ export default function PlayerCinemaOverlay({
 
   if (!currentTrack) return null;
   const artists = normalizeArtists(currentTrack).join(', ');
+  const liked = isTrackLiked(likedTracks, currentTrack);
+  const visualLabel = {
+    bars: lang === 'ru' ? 'Бары' : 'Bars',
+    radial: lang === 'ru' ? 'Радиальный' : 'Radial',
+    wave: lang === 'ru' ? 'Волна' : 'Wave',
+    orb: lang === 'ru' ? 'Сфера' : 'Orb',
+  }[visualMode] || visualMode;
 
   return (
     <div
@@ -54,6 +65,30 @@ export default function PlayerCinemaOverlay({
       </div>
 
       <div className="cinema-overlay__controls">
+        {onCycleVisual && (
+          <button
+            type="button"
+            className="cinema-overlay__btn cinema-overlay__btn--visual"
+            onClick={onCycleVisual}
+            aria-label={lang === 'ru' ? 'Сменить анимацию' : 'Change visual style'}
+            title={`${lang === 'ru' ? 'Анимация' : 'Visual'}: ${visualLabel} · V`}
+          >
+            <Shapes size={22} />
+          </button>
+        )}
+        {onToggleLike && (
+          <button
+            type="button"
+            className={`cinema-overlay__btn${liked ? ' cinema-overlay__btn--liked' : ''}`}
+            onClick={(e) => onToggleLike(e)}
+            aria-pressed={liked}
+            aria-label={liked
+              ? (lang === 'ru' ? 'Убрать из любимых' : 'Unlike')
+              : (lang === 'ru' ? 'В любимые' : 'Like')}
+          >
+            <Heart size={24} fill={liked ? 'currentColor' : 'none'} />
+          </button>
+        )}
         <button
           type="button"
           className="cinema-overlay__btn"

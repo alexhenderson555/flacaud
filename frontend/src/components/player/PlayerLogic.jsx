@@ -64,6 +64,7 @@ export default function PlayerLogic({ children }) {
   const setTheme = usePlayerStore(s => s.setTheme);
   const visualizerEnabled = usePlayerStore(s => s.visualizerEnabled);
   const setVisualizerEnabled = usePlayerStore(s => s.setVisualizerEnabled);
+  const cycleVisualMode = usePlayerStore(s => s.cycleVisualMode);
   const lang = usePlayerStore(s => s.lang);
   const setLang = usePlayerStore(s => s.setLang);
   const volume = usePlayerStore(s => s.volume);
@@ -420,6 +421,17 @@ export default function PlayerLogic({ children }) {
         const saved = await downloadCachedTrack(track, quality);
         if (saved) showToast(t('quickCacheSave'));
       }
+      const trackId = String(track.provider_id);
+      const registryEntry = downloadedRegistryRef.current[trackId];
+      if (registryEntry && registryEntry.at) {
+        const downloadedAt = registryEntry.at * 1000;
+        if (Date.now() - downloadedAt < 60 * 60 * 1000) {
+          const msg = lang === 'ru' 
+            ? 'Вы уже скачивали этот трек менее часа назад. Точно хотите скачать снова?' 
+            : 'You downloaded this track less than an hour ago. Download again?';
+          if (!window.confirm(msg)) return;
+        }
+      }
       const url = track.source_url || `https://tidal.com/track/${track.provider_id}`;
       const isPlayingCurrent = isCurrentTrack && isPlaying;
       const optimisticId = `opt-${String(track.provider_id)}-${Date.now()}`;
@@ -548,6 +560,7 @@ export default function PlayerLogic({ children }) {
     cycleRepeat: playbackModes.cycleRepeat,
     toggleLike,
     startTrackRadio: transport.startTrackRadio,
+    cycleVisualMode,
     pauseSetEmbed,
     embedEngaged,
     toggleSetEmbed,

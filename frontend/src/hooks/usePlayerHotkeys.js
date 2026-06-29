@@ -4,6 +4,28 @@ import { PARTY_MODE_ENABLED } from './usePartyModeAvailable';
 const SEEK_STEP = 5;
 
 /**
+ * Seeking by writing `currentTime` mid-playback produces an audible click at the
+ * waveform discontinuity. Mute across the seek and restore once it lands (on the
+ * `seeked` event, with a safety timeout) so the jump is silent.
+ */
+function seekWithoutClick(el, time) {
+  if (!el) return;
+  const target = Math.max(0, Math.min(el.duration || Infinity, time));
+  const wasMuted = el.muted;
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    el.removeEventListener('seeked', restore);
+    el.muted = wasMuted;
+  };
+  el.muted = true;
+  el.addEventListener('seeked', restore, { once: true });
+  el.currentTime = target;
+  setTimeout(restore, 250);
+}
+
+/**
  * Global player keyboard shortcuts (ignored when typing in inputs).
  */
 export function usePlayerHotkeys({
@@ -24,6 +46,7 @@ export function usePlayerHotkeys({
   cycleRepeat,
   toggleLike,
   startTrackRadio,
+  cycleVisualMode,
 }) {
   useEffect(() => {
     if (!enabled) return undefined;
@@ -49,10 +72,7 @@ export function usePlayerHotkeys({
             e.preventDefault();
             const el = resolveAudio();
             if (el && currentTrack) {
-              el.currentTime = Math.min(
-                el.duration || Infinity,
-                el.currentTime + SEEK_STEP,
-              );
+              seekWithoutClick(el, el.currentTime + SEEK_STEP);
             }
           } else {
             e.preventDefault();
@@ -64,7 +84,7 @@ export function usePlayerHotkeys({
             e.preventDefault();
             const el = resolveAudio();
             if (el) {
-              el.currentTime = Math.max(0, el.currentTime - SEEK_STEP);
+              seekWithoutClick(el, el.currentTime - SEEK_STEP);
             }
           } else {
             e.preventDefault();
@@ -128,6 +148,12 @@ export function usePlayerHotkeys({
             } else {
               document.exitFullscreen().catch(() => {});
             }
+          }
+          break;
+        case 'KeyV':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            cycleVisualMode?.();
           }
           break;
         case 'KeyM':
