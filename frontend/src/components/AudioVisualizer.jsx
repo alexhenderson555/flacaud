@@ -27,7 +27,11 @@ function readAccentColors() {
 }
 
 function resizeVisualizerCanvas(canvas) {
-  const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+  // In fullscreen (cinema) the viewport jumps to the full screen resolution; at
+  // DPR 2 that's ~3x the pixels to paint per frame and the bars stutter. Cap DPR
+  // to 1 in fullscreen — the soft bars don't need the extra crispness.
+  const maxDpr = document.fullscreenElement ? 1 : MAX_DPR;
+  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
   canvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
   canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
 }
@@ -72,7 +76,12 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     };
     onResize();
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    // Entering/leaving fullscreen changes the viewport + the DPR cap above.
+    document.addEventListener('fullscreenchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('fullscreenchange', onResize);
+    };
   }, []);
 
   useEffect(() => {

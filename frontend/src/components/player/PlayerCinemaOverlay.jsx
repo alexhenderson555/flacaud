@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Pause, Play, SkipForward, X } from 'lucide-react';
+import { Heart, Pause, Play, SkipForward, X } from 'lucide-react';
 import { coverImgSrc } from '../../utils/coverUrl';
 import { sampleCoverTheme } from '../../utils/coverTheme';
-import { normalizeArtists } from '../../utils/trackNormalize';
+import { isTrackLiked, normalizeArtists } from '../../utils/trackNormalize';
 import '../../styles/cinema.css';
 
 /**
@@ -17,6 +17,8 @@ export default function PlayerCinemaOverlay({
   onTogglePlay,
   onNext,
   onExit,
+  likedTracks,
+  onToggleLike,
   lang = 'en',
 }) {
   const [accent, setAccent] = useState(null);
@@ -36,6 +38,7 @@ export default function PlayerCinemaOverlay({
 
   if (!currentTrack) return null;
   const artists = normalizeArtists(currentTrack).join(', ');
+  const liked = isTrackLiked(likedTracks, currentTrack);
 
   return (
     <div
@@ -54,6 +57,19 @@ export default function PlayerCinemaOverlay({
       </div>
 
       <div className="cinema-overlay__controls">
+        {onToggleLike && (
+          <button
+            type="button"
+            className={`cinema-overlay__btn${liked ? ' cinema-overlay__btn--liked' : ''}`}
+            onClick={(e) => onToggleLike(e)}
+            aria-pressed={liked}
+            aria-label={liked
+              ? (lang === 'ru' ? 'Убрать из любимых' : 'Unlike')
+              : (lang === 'ru' ? 'В любимые' : 'Like')}
+          >
+            <Heart size={24} fill={liked ? 'currentColor' : 'none'} />
+          </button>
+        )}
         <button
           type="button"
           className="cinema-overlay__btn"

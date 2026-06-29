@@ -180,6 +180,8 @@ function PlayerChrome({ playbackEnabled = true }) {
           }}
           onNext={transport.playNext}
           onExit={() => setCinema(false)}
+          likedTracks={likedTracks}
+          onToggleLike={(e) => currentTrack && toggleLike?.(currentTrack, e)}
         />
       )}
 
