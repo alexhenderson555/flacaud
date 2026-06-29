@@ -314,38 +314,60 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       ctx.restore();
     };
 
-    // Time-domain oscilloscope: amplitude scales with energy + beat (kicks swell
-    // the wave), quiet detail is lifted, and a bright white core rides a colored
-    // glow so it reads on the dark backdrop.
-    const paintWave = (timeData, beat) => {
+    // Frequency-domain wave: smoothly connecting the frequency bins.
+    const paintWave = (smoothed, beat) => {
       const { accent } = colorsRef.current;
       const w = canvas.width;
       const h = canvas.height;
       const mid = h / 2;
-      const n = timeData.length;
-      const step = Math.max(1, Math.floor(n / Math.min(w, 1600)));
-      const amp = h * (0.16 + beat.e * 0.5 + beatEnv * 0.22);
+      const n = smoothed.length;
+      const step = w / Math.max(1, n - 1);
+      const amp = h * (0.3 + beat.e * 0.2 + beatEnv * 0.15);
+
       ctx.save();
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.beginPath();
-      let first = true;
-      for (let i = 0; i < n; i += step) {
-        let v = (timeData[i] - 128) / 128;
-        v = Math.sign(v) * Math.pow(Math.abs(v), 0.7);
-        const x = (i / n) * w;
+      
+      // Draw top edge
+      for (let i = 0; i < n; i += 1) {
+        const v = smoothed[i] / 255;
+        const x = i * step;
         const y = mid - v * amp;
-        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
+      
+      // Draw bottom edge (mirrored)
+      for (let i = n - 1; i >= 0; i -= 1) {
+        const v = smoothed[i] / 255;
+        const x = i * step;
+        const y = mid + v * amp;
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+
       ctx.shadowBlur = 24 + beatEnv * 36;
       ctx.shadowColor = accent;
+      
+      // Fill with a soft glow
+      const grad = ctx.createLinearGradient(0, mid - amp, 0, mid + amp);
+      grad.addColorStop(0, 'transparent');
+      grad.addColorStop(0.5, `rgba(255,255,255,${0.15 + beatEnv * 0.15})`);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Stroke outer edge
       ctx.strokeStyle = accent;
-      ctx.lineWidth = Math.max(3, h * 0.007);
+      ctx.lineWidth = Math.max(3, h * 0.005);
       ctx.stroke();
+      
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = `rgba(255,255,255,${0.7 + beatEnv * 0.3})`;
+      ctx.strokeStyle = `rgba(255,255,255,${0.6 + beatEnv * 0.4})`;
       ctx.lineWidth = Math.max(1.2, h * 0.002);
       ctx.stroke();
+      
       ctx.restore();
     };
 
@@ -353,11 +375,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       if (mode === 'radial') return paintRadial(smoothed, beat);
       if (mode === 'orb') return paintOrb(smoothed, beat);
       if (mode === 'wave') {
-        if (analyserRef.current && timeDataRef.current) {
-          analyserRef.current.getByteTimeDomainData(timeDataRef.current);
-          return paintWave(timeDataRef.current, beat);
-        }
-        return undefined;
+        return paintWave(smoothed, beat);
       }
       return paintBars(smoothed);
     };
