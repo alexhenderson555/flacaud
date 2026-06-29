@@ -20,26 +20,28 @@ export function spectrumSlotCount(barCount) {
 export function barBinRange(barIndex, barCount, binCount) {
   if (binCount <= 1 || barCount <= 0) return { start: 0, end: 1 };
 
-  const maxBin = Math.max(8, Math.floor((binCount - 1) * 0.72));
+  // Focus on the musically active part of the spectrum (skip the extreme highs)
+  const maxBin = Math.max(8, Math.floor((binCount - 1) * 0.75));
+  const minBin = 1; // Start at bin 1 to avoid DC offset
 
-  if (barIndex === 0) {
-    return { start: 1, end: Math.min(binCount, 6) };
-  }
+  if (barCount === 1) return { start: minBin, end: maxBin + 1 };
 
-  const minBin = 5;
   const logMin = Math.log(minBin);
   const logMax = Math.log(maxBin);
-  const adjustedIndex = barIndex - 1;
-  const adjustedCount = Math.max(1, barCount - 1);
-  const t0 = adjustedIndex / adjustedCount;
-  const t1 = (adjustedIndex + 1) / adjustedCount;
-  const start = Math.min(maxBin, Math.floor(Math.exp(logMin + t0 * (logMax - logMin))));
-  let end = Math.min(
-    binCount,
-    Math.max(start + 1, Math.floor(Math.exp(logMin + t1 * (logMax - logMin)))),
-  );
-  if (barIndex === barCount - 1) end = Math.min(binCount, maxBin + 1);
-  return { start, end };
+  
+  const t0 = barIndex / barCount;
+  const t1 = (barIndex + 1) / barCount;
+  
+  const start = Math.floor(Math.exp(logMin + t0 * (logMax - logMin)));
+  let end = Math.floor(Math.exp(logMin + t1 * (logMax - logMin)));
+  
+  // Ensure every bar gets at least 1 bin
+  if (end <= start) end = start + 1;
+  
+  // Cap at maxBin for the last bar
+  if (barIndex === barCount - 1) end = Math.min(binCount, Math.max(end, maxBin + 1));
+  
+  return { start: Math.min(start, binCount - 1), end: Math.min(end, binCount) };
 }
 
 export function sampleBandPeak(data, barIndex, barCount) {
