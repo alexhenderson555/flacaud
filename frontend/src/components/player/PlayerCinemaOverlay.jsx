@@ -45,7 +45,7 @@ export default function PlayerCinemaOverlay({
     bars: lang === 'ru' ? 'Бары' : 'Bars',
     radial: lang === 'ru' ? 'Радиальный' : 'Radial',
     wave: lang === 'ru' ? 'Волна' : 'Wave',
-    orb: lang === 'ru' ? 'Сфера' : 'Orb',
+    particles: lang === 'ru' ? 'Частицы' : 'Particles',
   }[visualMode] || visualMode;
 
   return (

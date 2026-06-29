@@ -23,7 +23,7 @@ export function barBinRange(barIndex, barCount, binCount) {
   const maxBin = Math.max(8, Math.floor((binCount - 1) * 0.72));
 
   if (barIndex === 0) {
-    return { start: 0, end: Math.min(binCount, 6) };
+    return { start: 1, end: Math.min(binCount, 6) };
   }
 
   const minBin = 5;
