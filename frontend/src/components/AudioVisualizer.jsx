@@ -51,6 +51,9 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   // animation loop / re-bind the analyser.
   const visualMode = usePlayerStore((s) => s.visualMode);
   const cinema = usePlayerStore((s) => s.cinema);
+  const visualSensitivity = usePlayerStore((s) => s.visualSensitivity);
+  const visualSmoothing = usePlayerStore((s) => s.visualSmoothing);
+  
   const modeRef = useRef(visualMode);
   useEffect(() => { modeRef.current = visualMode; }, [visualMode]);
 
@@ -447,7 +450,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
         return;
       }
       const zeros = new Uint8Array(prev.length);
-      const decayed = smoothBarLevels(prev, zeros, IDLE_ATTACK, IDLE_DECAY);
+      const decayed = smoothBarLevels(prev, zeros, visualSmoothing);
       smoothLevelsRef.current = decayed;
       ctx.clearRect(0, 0, width, height);
       if (visualizerPeakLevel(decayed) > IDLE_CUTOFF) {
@@ -491,8 +494,18 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       ctx.clearRect(0, 0, width, height);
 
       analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-      const targetLevels = computeBarLevels(dataArrayRef.current, window.innerWidth);
-      const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels);
+      
+      // Apply sensitivity to the raw frequency data before any processing
+      let scaledData = dataArrayRef.current;
+      if (visualSensitivity !== 1.0) {
+        scaledData = new Uint8Array(dataArrayRef.current.length);
+        for (let i = 0; i < scaledData.length; i++) {
+          scaledData[i] = Math.min(255, dataArrayRef.current[i] * visualSensitivity);
+        }
+      }
+
+      const targetLevels = computeBarLevels(scaledData, window.innerWidth);
+      const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels, visualSmoothing);
       smoothLevelsRef.current = smoothed;
       const beat = updateBeat(smoothed, time);
       paintMode(modeRef.current, smoothed, beat, time);

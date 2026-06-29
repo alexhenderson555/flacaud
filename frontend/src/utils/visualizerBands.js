@@ -96,9 +96,19 @@ export function computeBarLevels(data, viewportWidth) {
 }
 
 /** Attack/decay smoothing so bars animate instead of flickering. */
-export function smoothBarLevels(previous, target, attack = 0.42, decay = 0.16) {
+export function smoothBarLevels(previous, target, smoothing = 0.5) {
   const count = target.length;
   const out = previous?.length === count ? previous : new Float32Array(count);
+  
+  // Base attack and decay logic mapped from smoothing
+  // A higher smoothing (0.9) means very low attack/decay (0.05).
+  // A lower smoothing (0.1) means very high attack/decay (0.8).
+  const inverse = 1.0 - smoothing; // 0.1 to 0.9
+  // Attack is generally faster than decay so the bars pop instantly
+  const attack = Math.max(0.1, inverse * 0.85);
+  // Decay is slower so the bars fall smoothly
+  const decay = Math.max(0.02, inverse * 0.35);
+
   for (let i = 0; i < count; i += 1) {
     const prev = out[i] ?? target[i];
     const blend = target[i] > prev ? attack : decay;

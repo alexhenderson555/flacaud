@@ -44,6 +44,11 @@ export const usePlayerStore = create(
         return { visualMode: modes[(i + 1) % modes.length] };
       }),
 
+      visualSensitivity: 1.0,
+      setVisualSensitivity: (visualSensitivity) => set({ visualSensitivity }),
+      visualSmoothing: 0.5,
+      setVisualSmoothing: (visualSmoothing) => set({ visualSmoothing }),
+
       // Cinema / hidden mode (not persisted — always starts off).
       cinema: false,
       setCinema: (cinema) => set({ cinema }),
@@ -64,6 +69,8 @@ export const usePlayerStore = create(
         theme: state.theme,
         visualizerEnabled: state.visualizerEnabled,
         visualMode: state.visualMode,
+        visualSensitivity: state.visualSensitivity,
+        visualSmoothing: state.visualSmoothing,
         lang: state.lang,
         volume: state.volume,
         defaultPlaybackQuality: state.defaultPlaybackQuality,
