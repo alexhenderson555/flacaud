@@ -290,10 +290,13 @@ async def search(req: SearchRequest) -> SearchResponse:
             if not suggested:
                 suggested, kind = suggest_search_query(query)
             if not suggested and hasattr(p, "search_page"):
-                trimmed = suggest_trim_suffix_search(
-                    req.query,
-                    lambda q, limit, offset: p.search_page(q, limit, offset),
-                )
+                def _do_trim():
+                    return suggest_trim_suffix_search(
+                        req.query,
+                        lambda q, limit, offset: p.search_page(q, limit, offset),
+                    )
+                trimmed = await asyncio.to_thread(_do_trim)
+                
                 if trimmed and trimmed.strip().lower() != req.query.strip().lower():
                     suggested = trimmed
                     kind = "typo"
