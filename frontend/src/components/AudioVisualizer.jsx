@@ -114,13 +114,22 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     const ripples = []; // expanding rings emitted on beats (orb mode)
     let peaks = null; // peak-hold heights per bar (bars mode)
 
+    let prevE = 0;
     const updateBeat = (smoothed, time) => {
       let e = 0;
       const n = Math.min(12, smoothed.length);
       for (let i = 0; i < n; i += 1) e += smoothed[i];
       e = n ? e / n / 255 : 0;
+      
+      const delta = Math.max(0, e - prevE);
+      prevE = e;
+      
       energyAvg = energyAvg * 0.92 + e * 0.08;
-      if (e > energyAvg * 1.28 && e > 0.1 && time - lastBeat > 110) {
+      
+      // Trigger beat on significant rise over average OR sharp sudden spike (delta)
+      const isBeat = (e > energyAvg * 1.2 || delta > 0.05) && e > 0.05 && (time - lastBeat > 110);
+      
+      if (isBeat) {
         lastBeat = time;
         beatEnv = 1;
         if (modeRef.current === 'particles') ripples.push({ r: 0, a: 1 });
@@ -128,7 +137,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
         beatEnv *= 0.86;
       }
       spin += 0.003 + e * 0.012;
-      return { e };
+      return { e, delta };
     };
 
     const bindAnalyser = () => {
@@ -261,7 +270,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     };
 
     // Hyperspace particle system: Stars flying outward from the center that react to bass.
-    const maxParticles = 300;
+    const maxParticles = 400;
     const paintParticles = (smoothed, beat) => {
       const { accent } = colorsRef.current;
       const w = canvas.width;
@@ -270,34 +279,44 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const cy = h / 2;
       
       // Spawn new particles based on energy
-      if (ripples.length < maxParticles) { // Reusing 'ripples' array for particles
-        const toSpawn = Math.floor(1 + beat.e * 8 + beatEnv * 15);
+      if (ripples.length < maxParticles) {
+        const toSpawn = Math.floor(1 + beat.e * 10 + beatEnv * 20);
         for (let i = 0; i < toSpawn && ripples.length < maxParticles; i++) {
           const ang = Math.random() * Math.PI * 2;
-          const dist = Math.random() * 30 + 10;
+          const dist = Math.random() * 40 + 20;
           ripples.push({
             ang, dist, 
-            speed: Math.random() * 2 + 1,
-            size: Math.random() * 2.5 + 1,
-            life: 1.0
+            speed: Math.random() * 3 + 1,
+            baseSize: Math.random() * 2.5 + 1,
+            life: 1.0,
+            band: Math.floor(Math.pow(Math.random(), 2) * smoothed.length) // more bass stars
           });
         }
       }
 
       ctx.save();
-      ctx.fillStyle = accent;
-      ctx.shadowBlur = 12 + beatEnv * 20;
+      ctx.strokeStyle = accent;
+      ctx.shadowBlur = 10 + beatEnv * 15;
       ctx.shadowColor = accent;
       
-      const speedMult = 1 + beat.e * 4 + beatEnv * 8;
+      // Extreme acceleration on beat
+      const globalSpeedMult = 1 + beat.e * 2 + beatEnv * 5;
       
       for (let i = ripples.length - 1; i >= 0; i--) {
         const p = ripples[i];
-        // Exponential speed as it gets further (3D hyperdrive effect)
-        p.dist += p.speed * speedMult * (p.dist * 0.015);
-        p.ang += 0.002; // slow rotation of the galaxy
-        p.life -= 0.003 * speedMult;
         
+        // Individual frequency reactivity
+        const v = (smoothed[p.band] || 0) / 255;
+        const localSpeedMult = globalSpeedMult * (1 + v * 3);
+        
+        // Calculate previous position for motion blur (shooting star effect)
+        const prevDist = p.dist;
+        p.dist += p.speed * localSpeedMult * (p.dist * 0.015);
+        p.ang += 0.001;
+        p.life -= 0.004 * localSpeedMult;
+        
+        const prevX = cx + Math.cos(p.ang + spin) * prevDist;
+        const prevY = cy + Math.sin(p.ang + spin) * prevDist;
         const x = cx + Math.cos(p.ang + spin) * p.dist;
         const y = cy + Math.sin(p.ang + spin) * p.dist;
         
@@ -306,12 +325,28 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
           continue;
         }
 
-        ctx.globalAlpha = Math.min(1, p.life * 2) * (0.6 + beatEnv * 0.4);
+        ctx.globalAlpha = Math.min(1, p.life * 2) * (0.2 + v * 0.8 + beatEnv * 0.4);
         ctx.beginPath();
-        const renderSize = p.size * (p.dist * 0.01) * (1 + beatEnv * 0.5);
-        ctx.arc(x, y, Math.max(0.5, renderSize), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        const renderSize = p.baseSize * (p.dist * 0.005) * (1 + v * 3 + beatEnv);
+        ctx.lineWidth = Math.max(0.5, renderSize);
+        ctx.lineCap = 'round';
+        ctx.stroke();
       }
+
+      // Draw a glowing bass core in the center
+      const coreR = Math.min(w, h) * (0.05 + beat.e * 0.03 + beatEnv * 0.08);
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2);
+      grad.addColorStop(0, `rgba(255,255,255,${0.6 + beatEnv * 0.4})`);
+      grad.addColorStop(0.2, accent);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.shadowBlur = 40 + beatEnv * 60;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR * 2, 0, Math.PI * 2);
+      ctx.fill();
+      
       ctx.restore();
     };
 
