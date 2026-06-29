@@ -7,6 +7,7 @@ html.app-cinema-active .player-bar,
 html.app-cinema-active .hotkey-hint,
 html.app-cinema-active .legal-footer {
   opacity: 0 !important;
+  visibility: hidden !important;
   pointer-events: none !important;
 }
 
