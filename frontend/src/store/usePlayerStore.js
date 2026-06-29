@@ -36,10 +36,10 @@ export const usePlayerStore = create(
       setVisualizerEnabled: (visualizerEnabled) => set({ visualizerEnabled }),
 
       // Which beat-reactive renderer the visualizer draws (cinema & normal).
-      visualMode: 'bars', // 'bars' | 'radial' | 'wave' | 'orb'
+      visualMode: 'bars', // 'bars' | 'radial' | 'wave' | 'orb' | 'vortex'
       setVisualMode: (visualMode) => set({ visualMode }),
       cycleVisualMode: () => set((s) => {
-        const modes = ['bars', 'radial', 'wave', 'orb'];
+        const modes = ['bars', 'radial', 'wave', 'orb', 'vortex'];
         const i = modes.indexOf(s.visualMode);
         return { visualMode: modes[(i + 1) % modes.length] };
       }),

@@ -371,9 +371,66 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       ctx.restore();
     };
 
-    const paintMode = (mode, smoothed, beat) => {
+    // A 3D-like tunnel of concentric rings rushing toward the viewer.
+    const paintVortex = (smoothed, beat, time) => {
+      const { accent } = colorsRef.current;
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const minDim = Math.min(w, h);
+      
+      const numRings = 24;
+      const speed = time * 0.001 * (1 + beatEnv * 0.8);
+      
+      ctx.save();
+      ctx.lineJoin = 'round';
+      
+      for (let i = 0; i < numRings; i += 1) {
+        // Compute depth 0..1 where 1 is furthest away, 0 is at screen
+        const z = (i / numRings - (speed % (1 / numRings)) + 1) % 1;
+        const scale = 1 / (z + 0.02); 
+        if (scale > 40) continue;
+        
+        const baseR = minDim * 0.02 * scale;
+        const points = 64;
+        const stepIdx = smoothed.length / (points / 2); // mirrored half
+        
+        ctx.beginPath();
+        for (let j = 0; j <= points; j += 1) {
+          const m = j < points / 2 ? j : points - j;
+          const val = (smoothed[Math.floor(m * stepIdx)] || 0) / 255;
+          const ang = (j / points) * Math.PI * 2 + spin * (i % 2 === 0 ? 1 : -0.5) + z;
+          // Rings warp heavily to the bass
+          const r = baseR + val * minDim * 0.015 * scale * (0.8 + beatEnv * 0.5);
+          const x = cx + Math.cos(ang) * r;
+          const y = cy + Math.sin(ang) * r;
+          if (j === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        
+        // Fade out in distance, fade out when flying past the camera
+        const alpha = Math.max(0, Math.min(1, (1 - z) * 1.5)) * Math.min(1, z * 10);
+        ctx.globalAlpha = alpha * (0.4 + beatEnv * 0.6);
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = Math.max(1, 2 * scale * 0.15);
+        
+        if (i % 3 === 0) {
+          ctx.shadowBlur = 20 * scale * beatEnv;
+          ctx.shadowColor = accent;
+        } else {
+          ctx.shadowBlur = 0;
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    const paintMode = (mode, smoothed, beat, time) => {
       if (mode === 'radial') return paintRadial(smoothed, beat);
       if (mode === 'orb') return paintOrb(smoothed, beat);
+      if (mode === 'vortex') return paintVortex(smoothed, beat, time);
       if (mode === 'wave') {
         return paintWave(smoothed, beat);
       }
@@ -437,7 +494,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels);
       smoothLevelsRef.current = smoothed;
       const beat = updateBeat(smoothed, time);
-      paintMode(modeRef.current, smoothed, beat);
+      paintMode(modeRef.current, smoothed, beat, time);
     };
 
     reqRef.current = requestAnimationFrame(draw);
