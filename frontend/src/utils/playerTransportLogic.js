@@ -48,11 +48,6 @@ export function syncPlaylistRef(playlistRef, playlist) {
 export function prepareAudioForNewTrack(audioEl, volume) {
   if (!audioEl) return;
   audioEl.volume = volume;
-  try {
-    audioEl.currentTime = 0;
-  } catch {
-    /* ignore */
-  }
 }
 
 /** Supports numeric or functional updates (for hotkeys that step volume). */

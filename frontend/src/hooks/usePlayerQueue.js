@@ -105,6 +105,7 @@ export function usePlayerQueue({
 
     const trackId = String(playable.provider_id);
     clearTrackSwitchState({ pendingSeekRef, pendingPlayAfterSeekRef, skipEndedRef });
+    if (pendingSeekRef) pendingSeekRef.current = 0;
     crossfadingRef.current = false;
     crossfadeStartedForRef.current = null;
     pendingPlayRef.current = true;
