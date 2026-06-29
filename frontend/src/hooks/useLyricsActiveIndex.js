@@ -23,16 +23,26 @@ export function useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progres
 
   useEffect(() => {
     if (lyrics.length > 0 && synced) {
-      activeIdxRef.current = 0;
-      setActiveIdx(0);
-      waitForResetRef.current = true; // new track: ignore a stale carried-over clock
-      waitFramesRef.current = 0;
+      const t = getPlaybackCurrentTime({ getMainAudioEl, audioRef, progress });
+      const initialIdx = getActiveLyricIndex(lyrics, t, LYRICS_SYNC_LEAD_S);
+      // Only protect against stale clock if the calculated index is the very end 
+      // of the song, but we suspect it's a fresh track. Otherwise, trust the clock.
+      if (t > FRESH_START_MAX_S && initialIdx >= lyrics.length - 3) {
+        activeIdxRef.current = 0;
+        setActiveIdx(0);
+        waitForResetRef.current = true;
+        waitFramesRef.current = 0;
+      } else {
+        activeIdxRef.current = initialIdx;
+        setActiveIdx(initialIdx);
+        waitForResetRef.current = false;
+      }
     } else {
       activeIdxRef.current = -1;
       setActiveIdx(-1);
       waitForResetRef.current = false;
     }
-  }, [lyrics, synced]);
+  }, [lyrics, synced, getMainAudioEl, audioRef, progress]);
 
   useEffect(() => {
     if (!lyrics?.length || !synced) return undefined;
