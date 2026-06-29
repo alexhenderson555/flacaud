@@ -51,8 +51,8 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   // animation loop / re-bind the analyser.
   const visualMode = usePlayerStore((s) => s.visualMode);
   const cinema = usePlayerStore((s) => s.cinema);
-  const visualSensitivity = usePlayerStore((s) => s.visualSensitivity);
-  const visualSmoothing = usePlayerStore((s) => s.visualSmoothing);
+  const visualSensitivity = usePlayerStore((s) => s.visualSensitivity) ?? 1.0;
+  const visualSmoothing = usePlayerStore((s) => s.visualSmoothing) ?? 0.5;
   
   const modeRef = useRef(visualMode);
   useEffect(() => { modeRef.current = visualMode; }, [visualMode]);
