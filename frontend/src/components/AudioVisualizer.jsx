@@ -123,7 +123,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       if (e > energyAvg * 1.28 && e > 0.1 && time - lastBeat > 110) {
         lastBeat = time;
         beatEnv = 1;
-        if (modeRef.current === 'orb') ripples.push({ r: 0, a: 1 });
+        if (modeRef.current === 'particles') ripples.push({ r: 0, a: 1 });
       } else {
         beatEnv *= 0.86;
       }
@@ -260,61 +260,58 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       ctx.restore();
     };
 
-    // A central orb with a hot white core that swells with energy + punches on
-    // the beat, a frequency "crown" of spokes, and rings that fly outward on hits.
-    const paintOrb = (smoothed, beat) => {
-      const { accent, transparent } = colorsRef.current;
+    // Hyperspace particle system: Stars flying outward from the center that react to bass.
+    const maxParticles = 300;
+    const paintParticles = (smoothed, beat) => {
+      const { accent } = colorsRef.current;
       const w = canvas.width;
       const h = canvas.height;
       const cx = w / 2;
       const cy = h / 2;
-      const minDim = Math.min(w, h);
-      const energy = visualizerPeakLevel(smoothed) / 255;
-      const r = minDim * (0.1 + energy * 0.08 + beat.e * 0.06 + beatEnv * 0.14);
+      
+      // Spawn new particles based on energy
+      if (ripples.length < maxParticles) { // Reusing 'ripples' array for particles
+        const toSpawn = Math.floor(1 + beat.e * 8 + beatEnv * 15);
+        for (let i = 0; i < toSpawn && ripples.length < maxParticles; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const dist = Math.random() * 30 + 10;
+          ripples.push({
+            ang, dist, 
+            speed: Math.random() * 2 + 1,
+            size: Math.random() * 2.5 + 1,
+            life: 1.0
+          });
+        }
+      }
+
       ctx.save();
-      ctx.lineCap = 'round';
-      // beat-emitted ripples (age + cull in place)
-      for (let i = ripples.length - 1; i >= 0; i -= 1) {
-        const rp = ripples[i];
-        rp.r += minDim * 0.014;
-        rp.a *= 0.95;
-        if (rp.a < 0.03) { ripples.splice(i, 1); continue; }
-        ctx.globalAlpha = rp.a * 0.55;
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = Math.max(1.5, minDim * 0.0035);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + rp.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      // frequency crown
-      const spokes = Math.min(64, smoothed.length);
-      const stepIdx = smoothed.length / spokes;
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = Math.max(2, minDim * 0.004);
-      for (let i = 0; i < spokes; i += 1) {
-        const val = (smoothed[Math.floor(i * stepIdx)] || 0) / 255;
-        const ang = (i / spokes) * Math.PI * 2 + spin;
-        const r0 = r * 1.08;
-        const r1 = r0 + val * minDim * 0.17 * (0.6 + beatEnv * 0.9);
-        const c = Math.cos(ang);
-        const s = Math.sin(ang);
-        ctx.beginPath();
-        ctx.moveTo(cx + c * r0, cy + s * r0);
-        ctx.lineTo(cx + c * r1, cy + s * r1);
-        ctx.stroke();
-      }
-      // glowing core with a hot white center
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-      grad.addColorStop(0.35, accent);
-      grad.addColorStop(1, transparent);
-      ctx.shadowBlur = 40 + beatEnv * 60;
+      ctx.fillStyle = accent;
+      ctx.shadowBlur = 12 + beatEnv * 20;
       ctx.shadowColor = accent;
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
+      
+      const speedMult = 1 + beat.e * 4 + beatEnv * 8;
+      
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const p = ripples[i];
+        // Exponential speed as it gets further (3D hyperdrive effect)
+        p.dist += p.speed * speedMult * (p.dist * 0.015);
+        p.ang += 0.002; // slow rotation of the galaxy
+        p.life -= 0.003 * speedMult;
+        
+        const x = cx + Math.cos(p.ang + spin) * p.dist;
+        const y = cy + Math.sin(p.ang + spin) * p.dist;
+        
+        if (p.life <= 0 || x < 0 || x > w || y < 0 || y > h) {
+          ripples.splice(i, 1);
+          continue;
+        }
+
+        ctx.globalAlpha = Math.min(1, p.life * 2) * (0.6 + beatEnv * 0.4);
+        ctx.beginPath();
+        const renderSize = p.size * (p.dist * 0.01) * (1 + beatEnv * 0.5);
+        ctx.arc(x, y, Math.max(0.5, renderSize), 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     };
 
@@ -433,7 +430,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
 
     const paintMode = (mode, smoothed, beat, time) => {
       if (mode === 'radial') return paintRadial(smoothed, beat);
-      if (mode === 'orb') return paintOrb(smoothed, beat);
+      if (mode === 'particles') return paintParticles(smoothed, beat);
       if (mode === 'vortex') return paintVortex(smoothed, beat, time);
       if (mode === 'wave') {
         return paintWave(smoothed, beat);
