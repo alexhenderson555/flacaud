@@ -197,8 +197,6 @@ def _append_unique(
             u = _to_universal(t)
         except Exception:
             continue
-        if client:
-            u = _enrich_tidal_uni(client, u)
         pid = str(u.provider_id)
         aid = _primary_artist_id(u)
         if pid in seen or not _track_ok(u):
@@ -387,19 +385,24 @@ async def _expand_similar_graph(
     hop_ids = list(anchor_track_ids)
     random.shuffle(hop_ids)
     hop_ids = hop_ids[: max(4, min(len(hop_ids), random.randint(5, 10)))]
-    for tid in hop_ids:
-        if len(tracks) >= limit:
-            return
-        if tid in seen:
-            continue
+
+    async def _fetch_and_append(tid: str) -> None:
         try:
             similar = await asyncio.to_thread(client.get_similar_tracks, tid, per_anchor)
+            return similar
+        except Exception as e:
+            logger.debug("similar graph hop failed track=%s: %s", tid, e)
+            return []
+
+    results = await asyncio.gather(*[_fetch_and_append(tid) for tid in hop_ids if tid not in seen])
+    for similar in results:
+        if similar:
             _append_unique(
                 tracks, seen, artist_counts, similar,
                 limit=limit, client=client, max_per_artist=max_per_artist,
             )
-        except Exception as e:
-            logger.debug("similar graph hop failed track=%s: %s", tid, e)
+            if len(tracks) >= limit:
+                return
 
 
 async def _sparse_artist_radio_fallback(
@@ -501,12 +504,19 @@ async def build_track_radio(
             saved, _ = _library_seeds(user, session)
             affinity = _library_affinity_track_ids(user, session, track_id, saved)
             random.shuffle(affinity)
-            for lib_tid in affinity[: random.randint(3, 7)]:
+            affinity = affinity[: random.randint(3, 7)]
+
+            async def _fetch_affinity(lib_tid: str):
+                return await _fetch_track_neighbourhood(client, lib_tid)
+
+            affinity_results = await asyncio.gather(*[_fetch_affinity(tid) for tid in affinity])
+            for radio, similar, mix in affinity_results:
                 if len(tracks) >= limit:
                     break
-                await _collect_track_neighbourhood(
-                    client, lib_tid, tracks, seen, artist_counts, limit,
-                    max_per_artist=2,
+                ordered_raw = _interleave_round_robin(radio, similar, mix)
+                _append_unique(
+                    tracks, seen, artist_counts, ordered_raw,
+                    limit=limit, client=client, max_per_artist=2,
                 )
 
         min_track_signal = max(4, int(limit * _MIN_TRACK_SIGNAL_RATIO))
