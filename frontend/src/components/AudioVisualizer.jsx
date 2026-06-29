@@ -10,7 +10,7 @@ import {
   visualizerShouldAnimate,
 } from '../utils/visualizerRuntime';
 
-const FRAME_MS = 1000 / 30;
+const FRAME_MS = 1000 / 60;
 const GRAD_BUCKETS = 36;
 const MAX_DPR = 2;
 const IDLE_ATTACK = 0.2;
@@ -100,6 +100,32 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     let playEl = null;
     let lastFrame = 0;
 
+    // --- Beat tracking (shared by the dynamic modes) ---------------------------
+    // Bass-weighted instant energy vs. its slow rolling average detects kicks;
+    // beatEnv punches to 1 on a hit and decays fast, driving the "pop" everywhere.
+    let energyAvg = 0;
+    let beatEnv = 0;
+    let lastBeat = -1e9;
+    let spin = 0; // rotation accumulator (radial / orb)
+    const ripples = []; // expanding rings emitted on beats (orb mode)
+
+    const updateBeat = (smoothed, time) => {
+      let e = 0;
+      const n = Math.min(12, smoothed.length);
+      for (let i = 0; i < n; i += 1) e += smoothed[i];
+      e = n ? e / n / 255 : 0;
+      energyAvg = energyAvg * 0.92 + e * 0.08;
+      if (e > energyAvg * 1.28 && e > 0.1 && time - lastBeat > 110) {
+        lastBeat = time;
+        beatEnv = 1;
+        if (modeRef.current === 'orb') ripples.push({ r: 0, a: 1 });
+      } else {
+        beatEnv *= 0.86;
+      }
+      spin += 0.003 + e * 0.012;
+      return { e };
+    };
+
     const bindAnalyser = () => {
       const el = resolveAudioEl();
       if (!el) return false;
@@ -185,32 +211,40 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       }
     };
 
-    // Spectrum wrapped around a circle, mirrored; the inner ring pulses with the
-    // overall energy so it breathes with the beat.
-    const paintRadial = (smoothed) => {
+    // Spectrum wrapped around a rotating ring; the ring flares and every spoke
+    // stretches on the beat. Glow is kept on the single ring (not per-spoke) so
+    // it stays cheap at 60fps.
+    const paintRadial = (smoothed, beat) => {
       const { accent } = colorsRef.current;
       const w = canvas.width;
       const h = canvas.height;
       const cx = w / 2;
       const cy = h / 2;
       const minDim = Math.min(w, h);
-      const energy = visualizerPeakLevel(smoothed) / 255;
-      const baseR = minDim * 0.16 * (1 + energy * 0.18);
-      // Subsample + mirror to keep stroke (and shadow) count bounded.
-      const half = Math.min(56, smoothed.length);
+      const baseR = minDim * (0.14 + beat.e * 0.05 + beatEnv * 0.06);
+      const half = Math.min(64, smoothed.length);
       const stepIdx = smoothed.length / half;
       const total = half * 2;
       ctx.save();
-      ctx.shadowBlur = 16;
-      ctx.shadowColor = accent;
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = Math.max(2, minDim * 0.004);
       ctx.lineCap = 'round';
+      // glowing ring that flares on the beat
+      ctx.beginPath();
+      ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+      ctx.strokeStyle = accent;
+      ctx.shadowBlur = 18 + beatEnv * 30;
+      ctx.shadowColor = accent;
+      ctx.globalAlpha = 0.45 + beatEnv * 0.45;
+      ctx.lineWidth = Math.max(1.5, minDim * 0.003) * (1 + beatEnv * 2.5);
+      ctx.stroke();
+      // spectrum spokes (mirrored, rotating), length amplified + beat-boosted
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = Math.max(2, minDim * 0.0055);
       for (let i = 0; i < total; i += 1) {
         const m = i < half ? i : total - 1 - i;
         const val = (smoothed[Math.floor(m * stepIdx)] || 0) / 255;
-        const ang = (i / total) * Math.PI * 2 - Math.PI / 2;
-        const len = baseR + val * minDim * 0.26;
+        const ang = (i / total) * Math.PI * 2 - Math.PI / 2 + spin;
+        const len = baseR + val * minDim * 0.32 * (0.7 + beatEnv * 0.7);
         const cos = Math.cos(ang);
         const sin = Math.sin(ang);
         ctx.beginPath();
@@ -221,9 +255,9 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       ctx.restore();
     };
 
-    // A central glowing orb that swells with energy, ringed by pulses driven by
-    // the bass bands.
-    const paintOrb = (smoothed) => {
+    // A central orb with a hot white core that swells with energy + punches on
+    // the beat, a frequency "crown" of spokes, and rings that fly outward on hits.
+    const paintOrb = (smoothed, beat) => {
       const { accent, transparent } = colorsRef.current;
       const w = canvas.width;
       const h = canvas.height;
@@ -231,66 +265,96 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const cy = h / 2;
       const minDim = Math.min(w, h);
       const energy = visualizerPeakLevel(smoothed) / 255;
-      let bass = 0;
-      const nb = Math.min(6, smoothed.length);
-      for (let i = 0; i < nb; i += 1) bass += smoothed[i];
-      bass = nb ? bass / nb / 255 : 0;
-      const r = minDim * (0.12 + energy * 0.13);
+      const r = minDim * (0.1 + energy * 0.08 + beat.e * 0.06 + beatEnv * 0.14);
       ctx.save();
+      ctx.lineCap = 'round';
+      // beat-emitted ripples (age + cull in place)
+      for (let i = ripples.length - 1; i >= 0; i -= 1) {
+        const rp = ripples[i];
+        rp.r += minDim * 0.014;
+        rp.a *= 0.95;
+        if (rp.a < 0.03) { ripples.splice(i, 1); continue; }
+        ctx.globalAlpha = rp.a * 0.55;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = Math.max(1.5, minDim * 0.0035);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + rp.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // frequency crown
+      const spokes = Math.min(64, smoothed.length);
+      const stepIdx = smoothed.length / spokes;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(2, minDim * 0.004);
+      for (let i = 0; i < spokes; i += 1) {
+        const val = (smoothed[Math.floor(i * stepIdx)] || 0) / 255;
+        const ang = (i / spokes) * Math.PI * 2 + spin;
+        const r0 = r * 1.08;
+        const r1 = r0 + val * minDim * 0.17 * (0.6 + beatEnv * 0.9);
+        const c = Math.cos(ang);
+        const s = Math.sin(ang);
+        ctx.beginPath();
+        ctx.moveTo(cx + c * r0, cy + s * r0);
+        ctx.lineTo(cx + c * r1, cy + s * r1);
+        ctx.stroke();
+      }
+      // glowing core with a hot white center
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      grad.addColorStop(0, accent);
+      grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+      grad.addColorStop(0.35, accent);
       grad.addColorStop(1, transparent);
-      ctx.shadowBlur = 50;
+      ctx.shadowBlur = 40 + beatEnv * 60;
       ctx.shadowColor = accent;
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = Math.max(1.5, minDim * 0.0025);
-      for (let k = 1; k <= 3; k += 1) {
-        ctx.globalAlpha = 0.35 / k;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + k * (minDim * 0.03 + bass * minDim * 0.12), 0, Math.PI * 2);
-        ctx.stroke();
-      }
       ctx.restore();
     };
 
-    // Time-domain oscilloscope — the raw waveform, so it tracks the rhythm 1:1.
-    const paintWave = (timeData) => {
+    // Time-domain oscilloscope: amplitude scales with energy + beat (kicks swell
+    // the wave), quiet detail is lifted, and a bright white core rides a colored
+    // glow so it reads on the dark backdrop.
+    const paintWave = (timeData, beat) => {
       const { accent } = colorsRef.current;
       const w = canvas.width;
       const h = canvas.height;
       const mid = h / 2;
       const n = timeData.length;
-      const step = Math.max(1, Math.floor(n / (w / 2)));
+      const step = Math.max(1, Math.floor(n / Math.min(w, 1600)));
+      const amp = h * (0.16 + beat.e * 0.5 + beatEnv * 0.22);
       ctx.save();
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = Math.max(2, h * 0.004);
       ctx.lineJoin = 'round';
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = accent;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       let first = true;
       for (let i = 0; i < n; i += step) {
-        const v = (timeData[i] - 128) / 128;
+        let v = (timeData[i] - 128) / 128;
+        v = Math.sign(v) * Math.pow(Math.abs(v), 0.7);
         const x = (i / n) * w;
-        const y = mid + v * (h * 0.32);
+        const y = mid - v * amp;
         if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
       }
+      ctx.shadowBlur = 24 + beatEnv * 36;
+      ctx.shadowColor = accent;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(3, h * 0.007);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(255,255,255,${0.7 + beatEnv * 0.3})`;
+      ctx.lineWidth = Math.max(1.2, h * 0.002);
       ctx.stroke();
       ctx.restore();
     };
 
-    const paintMode = (mode, smoothed) => {
-      if (mode === 'radial') return paintRadial(smoothed);
-      if (mode === 'orb') return paintOrb(smoothed);
+    const paintMode = (mode, smoothed, beat) => {
+      if (mode === 'radial') return paintRadial(smoothed, beat);
+      if (mode === 'orb') return paintOrb(smoothed, beat);
       if (mode === 'wave') {
         if (analyserRef.current && timeDataRef.current) {
           analyserRef.current.getByteTimeDomainData(timeDataRef.current);
-          return paintWave(timeDataRef.current);
+          return paintWave(timeDataRef.current, beat);
         }
         return undefined;
       }
@@ -353,7 +417,8 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const targetLevels = computeBarLevels(dataArrayRef.current, window.innerWidth);
       const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels);
       smoothLevelsRef.current = smoothed;
-      paintMode(modeRef.current, smoothed);
+      const beat = updateBeat(smoothed, time);
+      paintMode(modeRef.current, smoothed, beat);
     };
 
     reqRef.current = requestAnimationFrame(draw);
