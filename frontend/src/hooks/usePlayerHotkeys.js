@@ -46,6 +46,7 @@ export function usePlayerHotkeys({
   cycleRepeat,
   toggleLike,
   startTrackRadio,
+  cycleVisualMode,
 }) {
   useEffect(() => {
     if (!enabled) return undefined;
@@ -147,6 +148,12 @@ export function usePlayerHotkeys({
             } else {
               document.exitFullscreen().catch(() => {});
             }
+          }
+          break;
+        case 'KeyV':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            cycleVisualMode?.();
           }
           break;
         case 'KeyM':

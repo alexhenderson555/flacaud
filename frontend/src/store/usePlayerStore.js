@@ -35,6 +35,15 @@ export const usePlayerStore = create(
       visualizerEnabled: false,
       setVisualizerEnabled: (visualizerEnabled) => set({ visualizerEnabled }),
 
+      // Which beat-reactive renderer the visualizer draws (cinema & normal).
+      visualMode: 'bars', // 'bars' | 'radial' | 'wave' | 'orb'
+      setVisualMode: (visualMode) => set({ visualMode }),
+      cycleVisualMode: () => set((s) => {
+        const modes = ['bars', 'radial', 'wave', 'orb'];
+        const i = modes.indexOf(s.visualMode);
+        return { visualMode: modes[(i + 1) % modes.length] };
+      }),
+
       // Cinema / hidden mode (not persisted — always starts off).
       cinema: false,
       setCinema: (cinema) => set({ cinema }),
@@ -54,6 +63,7 @@ export const usePlayerStore = create(
       partialize: (state) => ({
         theme: state.theme,
         visualizerEnabled: state.visualizerEnabled,
+        visualMode: state.visualMode,
         lang: state.lang,
         volume: state.volume,
         defaultPlaybackQuality: state.defaultPlaybackQuality,

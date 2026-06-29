@@ -156,6 +156,9 @@ html.app-cinema-active .legal-footer {
 
 .cinema-overlay__btn--liked:hover { background: rgba(255, 77, 109, 0.26); }
 
+/* Visual-style switch is secondary to play/next — a touch smaller. */
+.cinema-overlay__btn--visual { width: 56px; height: 56px; }
+
 .cinema-overlay__exit {
   position: fixed;
   top: clamp(20px, 3vw, 40px);

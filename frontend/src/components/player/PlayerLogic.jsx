@@ -64,6 +64,7 @@ export default function PlayerLogic({ children }) {
   const setTheme = usePlayerStore(s => s.setTheme);
   const visualizerEnabled = usePlayerStore(s => s.visualizerEnabled);
   const setVisualizerEnabled = usePlayerStore(s => s.setVisualizerEnabled);
+  const cycleVisualMode = usePlayerStore(s => s.cycleVisualMode);
   const lang = usePlayerStore(s => s.lang);
   const setLang = usePlayerStore(s => s.setLang);
   const volume = usePlayerStore(s => s.volume);
@@ -548,6 +549,7 @@ export default function PlayerLogic({ children }) {
     cycleRepeat: playbackModes.cycleRepeat,
     toggleLike,
     startTrackRadio: transport.startTrackRadio,
+    cycleVisualMode,
     pauseSetEmbed,
     embedEngaged,
     toggleSetEmbed,

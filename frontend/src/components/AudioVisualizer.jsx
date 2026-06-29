@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { getAudioAnalyser, initAudioEngine, resumeAudioContext } from '../utils/audioEngine';
+import { usePlayerStore } from '../store/usePlayerStore';
 import {
   computeBarLevels,
   smoothBarLevels,
@@ -45,6 +46,12 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   const colorsRef = useRef(readAccentColors());
   const gradCacheRef = useRef([]);
   const smoothLevelsRef = useRef(null);
+  const timeDataRef = useRef(null);
+  // Visual style read through a ref so switching modes doesn't tear down the
+  // animation loop / re-bind the analyser.
+  const visualMode = usePlayerStore((s) => s.visualMode);
+  const modeRef = useRef(visualMode);
+  useEffect(() => { modeRef.current = visualMode; }, [visualMode]);
 
   useEffect(() => {
     colorsRef.current = readAccentColors();
@@ -103,6 +110,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       analyserRef.current = analyser;
       boundElRef.current = el;
       dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+      timeDataRef.current = new Uint8Array(analyser.fftSize);
       return true;
     };
 
@@ -177,6 +185,118 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       }
     };
 
+    // Spectrum wrapped around a circle, mirrored; the inner ring pulses with the
+    // overall energy so it breathes with the beat.
+    const paintRadial = (smoothed) => {
+      const { accent } = colorsRef.current;
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const minDim = Math.min(w, h);
+      const energy = visualizerPeakLevel(smoothed) / 255;
+      const baseR = minDim * 0.16 * (1 + energy * 0.18);
+      // Subsample + mirror to keep stroke (and shadow) count bounded.
+      const half = Math.min(56, smoothed.length);
+      const stepIdx = smoothed.length / half;
+      const total = half * 2;
+      ctx.save();
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = accent;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(2, minDim * 0.004);
+      ctx.lineCap = 'round';
+      for (let i = 0; i < total; i += 1) {
+        const m = i < half ? i : total - 1 - i;
+        const val = (smoothed[Math.floor(m * stepIdx)] || 0) / 255;
+        const ang = (i / total) * Math.PI * 2 - Math.PI / 2;
+        const len = baseR + val * minDim * 0.26;
+        const cos = Math.cos(ang);
+        const sin = Math.sin(ang);
+        ctx.beginPath();
+        ctx.moveTo(cx + cos * baseR, cy + sin * baseR);
+        ctx.lineTo(cx + cos * len, cy + sin * len);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    // A central glowing orb that swells with energy, ringed by pulses driven by
+    // the bass bands.
+    const paintOrb = (smoothed) => {
+      const { accent, transparent } = colorsRef.current;
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const minDim = Math.min(w, h);
+      const energy = visualizerPeakLevel(smoothed) / 255;
+      let bass = 0;
+      const nb = Math.min(6, smoothed.length);
+      for (let i = 0; i < nb; i += 1) bass += smoothed[i];
+      bass = nb ? bass / nb / 255 : 0;
+      const r = minDim * (0.12 + energy * 0.13);
+      ctx.save();
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      grad.addColorStop(0, accent);
+      grad.addColorStop(1, transparent);
+      ctx.shadowBlur = 50;
+      ctx.shadowColor = accent;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1.5, minDim * 0.0025);
+      for (let k = 1; k <= 3; k += 1) {
+        ctx.globalAlpha = 0.35 / k;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + k * (minDim * 0.03 + bass * minDim * 0.12), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    // Time-domain oscilloscope — the raw waveform, so it tracks the rhythm 1:1.
+    const paintWave = (timeData) => {
+      const { accent } = colorsRef.current;
+      const w = canvas.width;
+      const h = canvas.height;
+      const mid = h / 2;
+      const n = timeData.length;
+      const step = Math.max(1, Math.floor(n / (w / 2)));
+      ctx.save();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(2, h * 0.004);
+      ctx.lineJoin = 'round';
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = accent;
+      ctx.beginPath();
+      let first = true;
+      for (let i = 0; i < n; i += step) {
+        const v = (timeData[i] - 128) / 128;
+        const x = (i / n) * w;
+        const y = mid + v * (h * 0.32);
+        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    const paintMode = (mode, smoothed) => {
+      if (mode === 'radial') return paintRadial(smoothed);
+      if (mode === 'orb') return paintOrb(smoothed);
+      if (mode === 'wave') {
+        if (analyserRef.current && timeDataRef.current) {
+          analyserRef.current.getByteTimeDomainData(timeDataRef.current);
+          return paintWave(timeDataRef.current);
+        }
+        return undefined;
+      }
+      return paintBars(smoothed);
+    };
+
     const decayBars = () => {
       const width = canvas.width;
       const height = canvas.height;
@@ -207,7 +327,12 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       });
 
       if (!shouldAnimate) {
-        decayBars();
+        if (modeRef.current === 'bars') {
+          decayBars();
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          smoothLevelsRef.current = null;
+        }
         return;
       }
 
@@ -228,7 +353,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const targetLevels = computeBarLevels(dataArrayRef.current, window.innerWidth);
       const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels);
       smoothLevelsRef.current = smoothed;
-      paintBars(smoothed);
+      paintMode(modeRef.current, smoothed);
     };
 
     reqRef.current = requestAnimationFrame(draw);

@@ -17,6 +17,8 @@ function PlayerChrome({ playbackEnabled = true }) {
     lang,
     cinema,
     setCinema,
+    visualMode,
+    cycleVisualMode,
     overlays,
     transport,
     likedTracks,
@@ -182,6 +184,8 @@ function PlayerChrome({ playbackEnabled = true }) {
           onExit={() => setCinema(false)}
           likedTracks={likedTracks}
           onToggleLike={(e) => currentTrack && toggleLike?.(currentTrack, e)}
+          visualMode={visualMode}
+          onCycleVisual={cycleVisualMode}
         />
       )}
 
