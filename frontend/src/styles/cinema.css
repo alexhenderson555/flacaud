@@ -46,7 +46,6 @@ html.app-cinema-active .legal-footer {
   height: 60vw;
   border-radius: 50%;
   background: radial-gradient(circle, var(--cinema-accent), transparent 70%);
-  filter: blur(48px);
   opacity: 0.32;
   will-change: transform, opacity;
 }
