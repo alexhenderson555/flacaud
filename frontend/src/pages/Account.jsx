@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { usePlayer } from '../store/usePlayerStore';
 import { apiFetch, parseJsonSafe, messageForApiError } from '../utils/apiClient';
 import {
   loginWithPassword,
@@ -165,6 +166,11 @@ export default function Account() {
     setDjAnalysisEnabled,
     djFeaturesAvailable,
   } = useOutletContext();
+
+  const visualSensitivity = usePlayer(s => s.visualSensitivity) ?? 1.0;
+  const setVisualSensitivity = usePlayer(s => s.setVisualSensitivity);
+  const visualSmoothing = usePlayer(s => s.visualSmoothing) ?? 0.5;
+  const setVisualSmoothing = usePlayer(s => s.setVisualSmoothing);
 
   const t = (key) => dict[lang][key] || key;
 
