@@ -156,10 +156,6 @@ export default function Account() {
     setTheme,
     visualizerEnabled,
     setVisualizerEnabled,
-    visualSensitivity = 1.0,
-    setVisualSensitivity,
-    visualSmoothing = 0.5,
-    setVisualSmoothing,
     defaultPlaybackQuality,
     setDefaultPlaybackQuality,
     autoPlaybackQuality,
@@ -170,6 +166,11 @@ export default function Account() {
     setDjAnalysisEnabled,
     djFeaturesAvailable,
   } = useOutletContext();
+
+  const visualSensitivity = usePlayer(s => s.visualSensitivity) ?? 1.0;
+  const setVisualSensitivity = usePlayer(s => s.setVisualSensitivity);
+  const visualSmoothing = usePlayer(s => s.visualSmoothing) ?? 0.5;
+  const setVisualSmoothing = usePlayer(s => s.setVisualSmoothing);
 
 
   const t = (key) => dict[lang][key] || key;
