@@ -30,6 +30,10 @@ import {
   Disc3,
   HardDrive,
   Palette,
+  AudioLines,
+  Gem,
+  Check,
+  Lock,
 } from 'lucide-react';
 import UpgradeModal from '../components/UpgradeModal';
 import DownloadHistory from '../components/account/DownloadHistory';
@@ -133,8 +137,8 @@ const dict = {
 };
 
 const QUALITY_TIERS = [
-  { id: 'HIGH', label: '320k', spec: 'AAC 320 kbps' },
-  { id: 'LOSSLESS', label: 'Lossless', spec: 'FLAC (CD on Basic, Hi-Res on Pro)' },
+  { id: 'HIGH', label: '320k', spec: 'AAC 320 kbps', Icon: AudioLines },
+  { id: 'LOSSLESS', label: 'Lossless', spec: 'FLAC (CD on Basic, Hi-Res on Pro)', Icon: Gem },
 ];
 
 function formatBytes(bytes) {
@@ -885,11 +889,13 @@ export default function Account() {
                 <div className="quality-tier-grid">
                   {QUALITY_TIERS.map((q) => {
                     const allowed = isQualityAllowedForPlan(q.id, plan);
+                    const active = defaultPlaybackQuality === q.id;
+                    const TierIcon = q.Icon;
                     return (
                       <button
                         key={q.id}
                         type="button"
-                        className={`quality-tier-card${defaultPlaybackQuality === q.id ? ' quality-tier-card--active' : ''}${allowed ? '' : ' quality-tier-card--disabled'}`}
+                        className={`quality-tier-card${active ? ' quality-tier-card--active' : ''}${allowed ? '' : ' quality-tier-card--disabled'}`}
                         disabled={!allowed}
                         onClick={() => {
                           if (!allowed) {
@@ -904,6 +910,14 @@ export default function Account() {
                           setDefaultPlaybackQuality(q.id);
                         }}
                       >
+                        <span className="quality-tier-card__top">
+                          <span className={`quality-tier-card__icon${active ? ' quality-tier-card__icon--active' : ''}`}>
+                            <TierIcon size={18} />
+                          </span>
+                          <span className={`quality-tier-card__check${active ? ' quality-tier-card__check--on' : ''}`} aria-hidden>
+                            {allowed ? <Check size={13} strokeWidth={3} /> : <Lock size={12} />}
+                          </span>
+                        </span>
                         <span className="quality-tier-card__name">{q.label}</span>
                         <span className="quality-tier-card__spec">{q.spec}</span>
                       </button>
