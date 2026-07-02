@@ -9,8 +9,8 @@ import pytest
 from tidal_dl_ru.providers.tidal.models import AudioQuality, PlaybackManifest
 from tidal_dl_ru.server.streaming import (
     _FAST_START_BYTES,
-    _resolve_tidal_stream,
-    _stream_quality_candidates,
+    resolve_tidal_stream,
+    stream_quality_candidates,
 )
 
 
@@ -55,13 +55,13 @@ def test_fast_start_smaller_buffer():
 
 def test_lossless_candidates_escalate_to_hi_res_not_high():
     hi = getattr(AudioQuality, "HI_RES_LOSSLESS", None)
-    lossless_cands = _stream_quality_candidates(AudioQuality.LOSSLESS)
+    lossless_cands = stream_quality_candidates(AudioQuality.LOSSLESS)
     assert lossless_cands[0] == AudioQuality.LOSSLESS
     assert AudioQuality.HIGH not in lossless_cands
     if hi is not None:
         assert hi in lossless_cands
-        assert AudioQuality.HIGH not in _stream_quality_candidates(hi)
-        assert AudioQuality.LOSSLESS in _stream_quality_candidates(hi)
+        assert AudioQuality.HIGH not in stream_quality_candidates(hi)
+        assert AudioQuality.LOSSLESS in stream_quality_candidates(hi)
 
 
 def test_resolve_lossless_skips_aac_bts_and_uses_flac_dash():
@@ -86,7 +86,7 @@ def test_resolve_lossless_skips_aac_bts_and_uses_flac_dash():
         "tidal_dl_ru.server.streaming.fetch_playback_manifest",
         side_effect=get_manifest,
     ):
-        res = _resolve_tidal_stream(provider, "123", AudioQuality.LOSSLESS)
+        res = resolve_tidal_stream(provider, "123", AudioQuality.LOSSLESS)
     assert res["type"] == "dash_stream"
     assert AudioQuality.LOSSLESS in calls
 
@@ -113,6 +113,6 @@ def test_resolve_hi_res_prefers_lossless_bts_over_high_bts():
         "tidal_dl_ru.server.streaming.fetch_playback_manifest",
         side_effect=get_manifest,
     ):
-        res = _resolve_tidal_stream(provider, "123", hi)
+        res = resolve_tidal_stream(provider, "123", hi)
     assert res["type"] == "redirect"
     assert res["url"] == "https://cdn.example/track.flac"

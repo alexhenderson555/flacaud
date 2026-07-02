@@ -13,7 +13,7 @@ import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from tidal_dl_ru.core.models import Track
 from tidal_dl_ru.providers.match_types import MatchDetail, UserMatchRule
@@ -495,11 +495,14 @@ def match_tracks_to_tidal(
             return idx, hit, detail
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_match_text, item): item[0] for item in pending}
-            for future in as_completed(futures):
-                idx = futures[future]
+            text_futures: dict[Any, int] = {}
+            for item in pending:
+                fut = pool.submit(_match_text, item)  # type: ignore[arg-type]
+                text_futures[fut] = item[0]
+            for future in as_completed(text_futures):
+                idx = text_futures[future]
                 try:
-                    _, hit, detail = future.result()
+                    _, hit, detail = future.result()  # type: ignore[misc]
                 except Exception:
                     hit, detail = None, _detail_from_source(idx, sources[idx], matched=False, method="error")
                 hits[idx] = hit

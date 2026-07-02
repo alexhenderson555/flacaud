@@ -41,7 +41,7 @@ cd frontend && npm run test && npm run lint && npm run build
 cd frontend && npm run e2e
 ```
 
-**Snapshot (2026-06-17):** pytest **372** passed · vitest **282** passed · Playwright **52** pass / **8** fail (player/quality/queue UI drift).
+**Snapshot (2026-07-02):** pytest **372** passed · vitest **282** passed · Playwright ~62 specs (run `npm run e2e` for current pass/fail; see docs/PROJECT_SCORE.md).
 
 ## Production deploy
 

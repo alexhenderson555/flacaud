@@ -153,6 +153,7 @@ def register_user(
     session.refresh(new_user)
 
     if email:
+        assert new_user.id is not None
         token = sign_email_verify_token(new_user.id)
         background_tasks.add_task(_queue_verification_email, email, new_user.username, token)
 
@@ -174,6 +175,7 @@ def login(
     if _email_verify_required() and not user.email_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before logging in")
 
+    assert user.id is not None
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
@@ -220,6 +222,7 @@ def forgot_password(
 
     user = session.exec(select(User).where(User.email == email)).first()
     if user and user.email and user.hashed_password:
+        assert user.id is not None
         token = sign_password_reset_token(user.id)
         background_tasks.add_task(_queue_password_reset_email, user.email, user.username, token)
         log.info(
@@ -244,6 +247,7 @@ def reset_password(body: ResetPasswordRequest, session: Session = Depends(get_se
     user.hashed_password = get_password_hash(body.password)
     session.add(user)
     session.commit()
+    assert user.id is not None
     revoke_all_refresh_sessions_for_user(session, user.id)
     log.info(
         "password_reset_ok user_id=%s",
@@ -282,6 +286,7 @@ def resend_verification(
     if not current_user.email:
         raise HTTPException(status_code=400, detail="No email on account")
 
+    assert current_user.id is not None
     token = sign_email_verify_token(current_user.id)
     background_tasks.add_task(
         _queue_verification_email,
@@ -363,6 +368,7 @@ def export_account_data(current_user: User = Depends(get_current_user), session:
 @router.get("/media-token")
 def media_token(current_user: User = Depends(get_current_user)):
     """Mint a short-lived token for <audio src>/<a href> media URLs."""
+    assert current_user.id is not None
     return {"token": sign_media_token(current_user.id), "expires_in": MEDIA_TOKEN_TTL}
 
 
@@ -388,6 +394,7 @@ def refresh_session(
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=403, detail="Please verify your email")
 
+    assert user.id is not None
     access_token = create_access_token(
         data={"sub": user.username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),

@@ -225,7 +225,7 @@ class YtDlpCatalogProvider(Provider):
         raw, _title, _kind, _skipped = self._extract_raw_tracks(url)
         if not raw:
             raise ProviderError(f"{self.display_name}: no tracks found at URL")
-        matched, unmatched = match_tracks_to_tidal(raw)
+        matched, unmatched, _details = match_tracks_to_tidal(raw)
         if not matched:
             raise ProviderError(
                 f"{self.display_name}: could not match any tracks on Tidal"
@@ -235,7 +235,7 @@ class YtDlpCatalogProvider(Provider):
 
     def expand_with_stats(self, url: str) -> tuple[list[Track], Optional[str], str, int, int]:
         raw, title, kind, _skipped = self._extract_raw_tracks(url)
-        matched, unmatched = match_tracks_to_tidal(raw)
+        matched, unmatched, _details = match_tracks_to_tidal(raw)
         if not matched:
             raise ProviderError(
                 f"{self.display_name}: could not match any tracks on Tidal"

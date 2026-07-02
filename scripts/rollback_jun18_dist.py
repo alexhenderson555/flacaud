@@ -16,6 +16,12 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=True)
 
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
+
 RECOVERED = ROOT / "frontend" / "dist-recovered"
 LIVE = ROOT / "frontend" / "dist"
 BACKUP = ROOT / "frontend" / "dist-pre-rollback"

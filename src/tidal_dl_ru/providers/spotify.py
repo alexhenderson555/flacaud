@@ -219,12 +219,12 @@ class SpotifyProvider(Provider):
             return [], title, kind, 0, 0
 
         if kind == "track" and not os.environ.get("SPOTIPY_CLIENT_ID"):
-            matched, unmatched = match_tracks_to_tidal(raw)
+            matched, unmatched, _details = match_tracks_to_tidal(raw)
             if not matched:
                 raise ProviderError("Could not match Spotify track on Tidal")
             return matched, title, kind, len(raw), unmatched
 
-        matched, unmatched = match_tracks_to_tidal(raw)
+        matched, unmatched, _details = match_tracks_to_tidal(raw)
         if not matched:
             raise ProviderError("Could not match any Spotify tracks on Tidal")
         return matched, title, kind, len(raw), unmatched

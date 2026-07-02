@@ -429,7 +429,7 @@ async def resolve_tidal_transfer(url: str) -> tuple[str, Optional[str], list[Tra
 def track_to_saved_base(track: Track) -> SavedTrackBase:
     quality = track.quality
     if hasattr(quality, "value"):
-        quality = quality.value
+        quality = quality.value  # type: ignore[union-attr]
     provider = (track.provider or "tidal").lower().strip()
     return SavedTrackBase(
         provider=provider,
@@ -449,7 +449,7 @@ def track_to_saved_base(track: Track) -> SavedTrackBase:
 def track_to_playlist_json(track: Track) -> dict:
     quality = track.quality
     if hasattr(quality, "value"):
-        quality = quality.value
+        quality = quality.value  # type: ignore[union-attr]
     return {
         "provider": track.provider or "tidal",
         "provider_id": str(track.provider_id),
@@ -566,6 +566,7 @@ def import_tracks_to_library(
     added = 0
     already = 0
     seen: set[str] = set()
+    assert user.id is not None
     for track in tracks:
         base = track_to_saved_base(track)
         pid = base.provider_id

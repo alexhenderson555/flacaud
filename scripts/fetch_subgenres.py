@@ -6,6 +6,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from tidal_dl_ru.providers.tidal.client import TidalClient
 
+_SUBGENRES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "src", "tidal_dl_ru", "data", "subgenres.json"
+)
+
 
 def main():
     api = TidalClient()
@@ -47,7 +51,7 @@ def main():
 
         res[g['name']] = subs_data
 
-    with open("subgenres.json", "w", encoding="utf-8") as f:
+    with open(_SUBGENRES_PATH, "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":

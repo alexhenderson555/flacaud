@@ -56,7 +56,7 @@ def get_library(current_user: User = Depends(get_current_user), session: Session
     statement = (
         select(SavedTrack)
         .where(SavedTrack.user_id == current_user.id)
-        .order_by(SavedTrack.added_at.desc())
+        .order_by(SavedTrack.added_at.desc())  # type: ignore[attr-defined]
     )
     return list(session.exec(statement).all())
 
@@ -152,7 +152,7 @@ def get_playlists(current_user: User = Depends(get_current_user), session: Sessi
     statement = (
         select(Playlist)
         .where(Playlist.user_id == current_user.id)
-        .order_by(Playlist.created_at.desc())
+        .order_by(Playlist.created_at.desc())  # type: ignore[attr-defined]
     )
     return [_playlist_to_dict(p) for p in session.exec(statement).all()]
 

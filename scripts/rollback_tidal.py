@@ -14,6 +14,12 @@ try:
     from dotenv import load_dotenv
 
     load_dotenv(ROOT / ".env")
+
+
+    if (ROOT / ".env.local").is_file():
+
+
+        load_dotenv(ROOT / ".env.local", override=True)
 except ImportError:
     pass
 

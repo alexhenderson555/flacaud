@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=True)
 
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
+
 from scripts.repair_servers import (  # noqa: E402
     COMPOSE_FILES,
     DEPLOY_PATH,

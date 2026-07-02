@@ -92,7 +92,7 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             <span>{t('account')}</span>
           </NavLink>
 
-          <div className="nav-item mobile-only" onClick={() => setIsMobileMenuOpen(true)}>
+          <div className="nav-item mobile-only" role="button" tabIndex={0} onClick={() => setIsMobileMenuOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsMobileMenuOpen(true); }}>
             <Menu size={20} />
             <span>{t('more')}</span>
           </div>
@@ -115,13 +115,13 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             exit={{ opacity: 0, y: 40 }}
             onClick={closeMenu}
           >
-            <div className="mobile-menu-overlay__header" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-menu-overlay__header" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}>
               <h2 className="mobile-menu-overlay__title">{t('moreOptions')}</h2>
               <button type="button" className="mobile-menu-overlay__close" onClick={closeMenu} aria-label="Close">
                 <X size={22} />
               </button>
             </div>
-            <nav className="mobile-menu-grid" onClick={(e) => e.stopPropagation()} aria-label={t('moreOptions')}>
+            <nav className="mobile-menu-grid" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} aria-label={t('moreOptions')}>
               {MOBILE_MORE_LINKS.map(({ to, icon: Icon, labelKey }) => (
                 <NavLink
                   key={to}

@@ -181,11 +181,14 @@ export default function ArtistProfile() {
             {albums.map((album) => (
               <div
                 key={album.id}
+                role="button"
+                tabIndex={0}
                 className="glass-panel"
                 style={{ padding: '16px', borderRadius: '16px', cursor: 'pointer', transition: 'transform 0.2s, background 0.2s' }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.background = 'var(--bg-surface-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = 'var(--bg-surface)'; }}
                 onClick={() => navigate(`/album/${album.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/album/${album.id}`); }}
               >
                 <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px', boxShadow: '0 10px 20px rgba(0,0,0,0.3)' }}>
                   {album.cover_url ? (

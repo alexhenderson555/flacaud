@@ -42,7 +42,7 @@ _JUNK_TITLE_FRAGMENTS = (
 
 import os
 
-_GENRES_DB_PATH = os.path.join(os.path.dirname(__file__), "genres_db.json")
+_GENRES_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "genres_db.json")
 
 def _get_genres_db():
     if not hasattr(_get_genres_db, "cache"):
@@ -252,7 +252,7 @@ def _library_seeds(user: User, session: Session) -> tuple[list[SavedTrack], set[
         session.exec(
             select(SavedTrack)
             .where(SavedTrack.user_id == user.id)
-            .order_by(SavedTrack.added_at.desc())
+            .order_by(SavedTrack.added_at.desc())  # type: ignore[attr-defined]
             .limit(40)
         ).all()
     )
@@ -285,13 +285,13 @@ def _library_affinity_track_ids(
         from tidal_dl_ru.database.models import PlaylistTrack
         playlists_with_seed = session.exec(
             select(PlaylistTrack.playlist_id)
-            .join(Playlist, PlaylistTrack.playlist_id == Playlist.id)
+            .join(Playlist, PlaylistTrack.playlist_id == Playlist.id)  # type: ignore[arg-type]
             .where(Playlist.user_id == user.id, PlaylistTrack.provider_id == seed)
         ).all()
         if playlists_with_seed:
             track_rows = session.exec(
                 select(PlaylistTrack.provider_id)
-                .where(PlaylistTrack.playlist_id.in_(playlists_with_seed))
+                .where(PlaylistTrack.playlist_id.in_(playlists_with_seed))  # type: ignore[attr-defined]
             ).all()
             for pid in track_rows:
                 spid = str(pid)
@@ -386,7 +386,7 @@ async def _expand_similar_graph(
     random.shuffle(hop_ids)
     hop_ids = hop_ids[: max(4, min(len(hop_ids), random.randint(5, 10)))]
 
-    async def _fetch_and_append(tid: str) -> None:
+    async def _fetch_and_append(tid: str) -> list:
         try:
             similar = await asyncio.to_thread(client.get_similar_tracks, tid, per_anchor)
             return similar
@@ -447,7 +447,8 @@ async def build_track_radio_fast(
             max_per_artist=_RADIO_MAX_PER_ARTIST,
         )
         try:
-            seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
+            if meta is not None:
+                seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
         except Exception:
             seed_uni = None
         tracks = await _finalize_track_covers(client, tracks)
@@ -520,13 +521,14 @@ async def build_track_radio(
                 )
 
         min_track_signal = max(4, int(limit * _MIN_TRACK_SIGNAL_RATIO))
-        if len(tracks) < min_track_signal:
+        if len(tracks) < min_track_signal and meta is not None:
             await _sparse_artist_radio_fallback(
                 client, _seed_artist_ids(meta), tracks, seen, artist_counts, limit,
             )
 
         try:
-            seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
+            if meta is not None:
+                seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
         except Exception:
             seed_uni = None
         tracks = await _finalize_track_covers(client, tracks)

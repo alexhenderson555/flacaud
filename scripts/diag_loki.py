@@ -7,6 +7,12 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=True)
+
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
 import paramiko
 
 from scripts.repair_servers import DEPLOY_PATH, TIDAL_HOST, TIDAL_USER, _password, compose_files

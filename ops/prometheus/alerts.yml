@@ -36,3 +36,55 @@ groups:
         annotations:
           summary: Tidal token pool unhealthy
           description: No healthy Tidal accounts in pool — streaming may fail.
+
+      # ── SLO-based alerts ──────────────────────────────────────────────
+
+      - alert: FlacAudErrorBudgetBurnFast
+        expr: |
+          sum(rate(flacaud_http_requests_total{status_class="5xx"}[5m]))
+          / sum(rate(flacaud_http_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Fast error-budget burn — 5xx rate above 1%
+          description: >
+            5xx error rate exceeds 1% over the last 5 minutes.
+            This burns the monthly error budget 10x faster than allowed (0.1%).
+            Check API logs and downstream services (DB, Redis, Tidal pool).
+
+      - alert: FlacAudErrorBudgetBurnSlow
+        expr: |
+          sum(rate(flacaud_http_requests_total{status_class="5xx"}[1h]))
+          / sum(rate(flacaud_http_requests_total[1h])) > 0.001
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Slow error-budget burn — 5xx rate above 0.1%
+          description: >
+            5xx error rate exceeds 0.1% for 30+ minutes.
+            On pace to exhaust the monthly error budget if sustained.
+
+      - alert: FlacAudUptimeSLOBurn
+        expr: avg_over_time(flacaud_health_ok[1h]) < 0.999
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Uptime SLO at risk — below 99.9% over 1h
+          description: >
+            Health-check uptime averaged below 99.9% over the past hour
+            (budget: 43.2 min / 30 days). Investigate recurring health failures.
+
+      - alert: FlacAudAPIHighErrorRate
+        expr: |
+          sum(rate(flacaud_http_requests_total{status_class="5xx"}[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: High 5xx error rate — more than 5 errors/min
+          description: >
+            API is returning 5xx responses at a rate exceeding 5/min.
+            Check docker compose logs api --tail 100 for tracebacks.

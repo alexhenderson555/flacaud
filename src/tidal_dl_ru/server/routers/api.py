@@ -93,6 +93,7 @@ class RedeemCodeRequest(BaseModel):
 
 @router.post("/api/activation/redeem")
 def api_redeem_code(req: RedeemCodeRequest, current_user: User = Depends(get_current_user)):
+    assert current_user.id is not None
     ok, message = redeem_code(
         req.code,
         user_id=current_user.id,

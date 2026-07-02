@@ -200,8 +200,8 @@ function QueueReorderRow({ trackId, track, onPlay, onRemove, onDragEnd }) {
 function QueueRow({ track, isActive, onPlay, onRemove, onDragStart }) {
   return (
     <div
-      role={onPlay ? 'button' : undefined}
-      tabIndex={onPlay ? 0 : undefined}
+      role="button"
+      tabIndex={0}
       onClick={onPlay}
       onKeyDown={(e) => {
         if (!onPlay) return;

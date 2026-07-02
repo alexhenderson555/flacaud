@@ -10,6 +10,7 @@ from tidal_dl_ru.database.auth import decode_token, get_current_user, get_media_
 from tidal_dl_ru.database.models import User
 from tidal_dl_ru.plan_limits import cap_stream_quality
 from tidal_dl_ru.server import jobs as job_state
+from tidal_dl_ru.server.outbound_url import OutboundUrlError, validate_public_http_url
 from tidal_dl_ru.server.schemas import JobCreate, JobHistoryItem, JobStatus
 from tidal_dl_ru.server.settings import settings
 
@@ -36,18 +37,23 @@ async def create_job(
 
     via_bot = bool(token) and decode_token(token).get("src") == "bot"
     if not via_bot:
+        assert current_user.id is not None
         allowed, _ = reserve_web_download(current_user.id)
         if not allowed:
             raise HTTPException(status_code=403, detail="Daily limit reached.")
 
     if req.job_type == "analyze_set":
+        try:
+            safe_url = validate_public_http_url(req.url)
+        except OutboundUrlError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid set URL: {e}")
         job_id = job_state.new_job_id()
         job_state.create(job_id, provider="youtube", job_type="analyze_set", owner_id=current_user.id)
         arq_pool = getattr(request.app.state, "arq", None)
         if arq_pool is None:
             raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
 
-        await arq_pool.enqueue_job("analyze_set", job_id, req.url, _job_id=job_id)
+        await arq_pool.enqueue_job("analyze_set", job_id, safe_url, _job_id=job_id)
 
         status = job_state.load(job_id)
         if status is None:
@@ -94,6 +100,7 @@ def my_jobs(
     current_user: User = Depends(get_current_user),
 ) -> list[JobHistoryItem]:
     """Recent download jobs for the logged-in user."""
+    assert current_user.id is not None
     rows = job_state.list_jobs_for_owner(current_user.id, limit=min(max(limit, 1), 80))
     out: list[JobHistoryItem] = []
     for s in rows:

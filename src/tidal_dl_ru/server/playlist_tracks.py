@@ -11,7 +11,7 @@ from tidal_dl_ru.database.models import Playlist, PlaylistTrack
 
 def sync_playlist_tracks(session: Session, playlist: Playlist, tracks_payload: list[dict]) -> None:
     """Replace normalized rows for a playlist (keeps tracks_json as source of truth)."""
-    session.exec(delete(PlaylistTrack).where(PlaylistTrack.playlist_id == playlist.id))
+    session.exec(delete(PlaylistTrack).where(PlaylistTrack.playlist_id == playlist.id))  # type: ignore[arg-type]
     for pos, row in enumerate(tracks_payload):
         artists = row.get("artists") or []
         session.add(

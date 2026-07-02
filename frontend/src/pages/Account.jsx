@@ -524,7 +524,10 @@ export default function Account() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
                   <div
+                    role="button"
+                    tabIndex={0}
                     onClick={cycleAvatar}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') cycleAvatar(); }}
                     style={{
                       width: '80px',
                       height: '80px',
@@ -805,7 +808,10 @@ export default function Account() {
                 )}
 
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setIsRegistering(!isRegistering)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsRegistering(!isRegistering); }}
                   style={{
                     color: 'var(--text-secondary)',
                     fontSize: '0.9rem',

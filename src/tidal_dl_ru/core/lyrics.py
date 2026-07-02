@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeout
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import httpx
 import syncedlyrics
@@ -384,7 +384,7 @@ def _plain_lyrics_race(queries: list[str]) -> Optional[str]:
 
     pool = ThreadPoolExecutor(max_workers=min(6, len(tasks)))
     try:
-        futures = {pool.submit(fn): name for name, fn in tasks}
+        futures: dict[Any, str] = {pool.submit(fn): name for name, fn in tasks}
         try:
             for fut in as_completed(futures, timeout=_PLAIN_RACE_TIMEOUT_S):
                 try:
@@ -539,18 +539,18 @@ def _race_lyrics_sources(
     Returns (lrc_text, timed_out). Empty results after a timeout are not cached
   so the next request can retry slow providers (LRCLIB often needs 10–15s).
     """
-    tasks: list[tuple[str, object]] = [
+    tasks: list[tuple[str, Callable[[], Any]]] = [
         ("lrclib", lambda: _lrclib_lookup(artist, title, album, duration, isrc)),
     ]
     primary_query = queries[0] if queries else f"{artist} - {title}"
     for prov in _FAST_LYRICS_PROVIDERS:
         tasks.append(
-            (f"{prov}:{primary_query}", lambda p=prov, qq=primary_query: _syncedlyrics_provider(qq, p, synced_only=True)),
+            (f"{prov}:{primary_query}", lambda p=prov, qq=primary_query: _syncedlyrics_provider(qq, p, synced_only=True)),  # type: ignore[misc]
         )
 
     pool = ThreadPoolExecutor(max_workers=min(8, len(tasks)))
     try:
-        futures = {pool.submit(fn): name for name, fn in tasks}
+        futures: dict[Any, str] = {pool.submit(fn): name for name, fn in tasks}
         try:
             for fut in as_completed(futures, timeout=_LYRICS_RACE_TIMEOUT_S):
                 try:

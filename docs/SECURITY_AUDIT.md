@@ -51,7 +51,7 @@ Overall ~**7.8/10** (was ~6.2). Remaining gaps: set-analyzer SSRF blocklist, bro
 
 | Area | Status | Notes |
 |------|--------|-------|
-| `.env` / keys in repo | OK | Not committed; `xray_config*.json` gitignored |
+| `.env` / keys in repo | OK | Not committed; `.env` holds placeholders, real secrets in `.env.local` (gitignored); `xray_config*.json` gitignored |
 | Grafana default password | OK | `GRAFANA_ADMIN_PASSWORD` required in compose overlay |
 
 ## Rate limiting

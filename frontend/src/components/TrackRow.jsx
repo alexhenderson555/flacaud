@@ -141,7 +141,7 @@ function TrackRow({
       ) : null}
 
       {actions && (
-        <div className="track-row__actions" onClick={(e) => e.stopPropagation()}>
+        <div className="track-row__actions" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}>
           {actions}
         </div>
       )}

@@ -451,7 +451,7 @@ def read_bpm_key(path: Path):
     bpm, key = None, None
     try:
         if ext == ".flac":
-            audio = FLAC(path)
+            audio: FLAC | MP4 | ID3 = FLAC(path)
             if "BPM" in audio:
                 bpm = float(audio["BPM"][0])
             if "INITIALKEY" in audio:

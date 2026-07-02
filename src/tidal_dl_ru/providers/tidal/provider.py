@@ -134,9 +134,9 @@ class TidalProvider(Provider):
             return TidalClient(
                 http=http,
                 tokens=tokens,
-                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(
+                on_auth_error=(lambda _id=acc.id: lambda status: tidal_pool.report_failure(
                     _id, status
-                ),
+                ))(),
             )
         except tidal_pool.NoAccountAvailable:
             # Pool is empty — try single-account dev mode.
@@ -180,9 +180,9 @@ class TidalProvider(Provider):
                 client = TidalClient(
                     http=http,
                     tokens=tokens,
-                    on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(
+                    on_auth_error=(lambda _id=acc.id: lambda status: tidal_pool.report_failure(
                         _id, status
-                    ),
+                    ))(),
                 )
             except tidal_pool.NoAccountAvailable:
                 client = TidalClient(http=http)

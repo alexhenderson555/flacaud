@@ -65,7 +65,7 @@ def fetch_playback_manifest(
             rotating = TidalClient(
                 http=own_http,
                 tokens=tokens,
-                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),
+                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
             )
             manifest, rate_limited = _fetch_once(rotating, track_id, enum_q)
         finally:

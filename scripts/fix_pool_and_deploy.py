@@ -13,6 +13,12 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
+
 os.environ.setdefault("DEPLOY_DOMAIN", "flacaud.ru")
 os.environ.setdefault("DOMAIN", "flacaud.ru")
 os.environ.setdefault("TIDALDLRU_PUBLIC_API_BASE", "https://flacaud.ru")

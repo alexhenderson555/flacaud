@@ -56,7 +56,7 @@ def list_sets(
     statement = (
         select(SavedSet)
         .where(SavedSet.user_id == current_user.id)
-        .order_by(SavedSet.updated_at.desc())
+        .order_by(SavedSet.updated_at.desc())  # type: ignore[attr-defined]
     )
     return [_row_to_read(r) for r in session.exec(statement).all()]
 

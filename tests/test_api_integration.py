@@ -7,7 +7,7 @@ neither Redis nor a database — they exercise the real routing + guards.
 import pytest
 from fastapi.testclient import TestClient
 
-from tidal_dl_ru.database.auth import get_current_user
+from tidal_dl_ru.database.auth import get_current_user, oauth2_scheme
 from tidal_dl_ru.database.models import User
 from tidal_dl_ru.server import jobs as job_state
 from tidal_dl_ru.server.app import app
@@ -45,6 +45,43 @@ class TestJobsRequireAuth:
 
     def test_zip_requires_auth(self):
         assert client.get("/api/jobs/whatever/zip").status_code == 401
+
+
+class TestSetAnalyzerSSRF:
+    """The analyze_set endpoint must reject URLs that point at private/loopback
+    addresses before enqueuing the yt-dlp fetch."""
+
+    def _authed(self, monkeypatch):
+        app.dependency_overrides[get_current_user] = lambda: _user(1)
+        # Suppress quota check so it doesn't touch the DB.
+        monkeypatch.setattr(
+            "tidal_dl_ru.bot.users.reserve_web_download",
+            lambda uid: (True, _user(uid)),
+        )
+
+    def test_rejects_localhost_url(self, monkeypatch):
+        self._authed(monkeypatch)
+        r = client.post(
+            "/api/jobs",
+            json={"url": "http://localhost:8080/set", "job_type": "analyze_set"},
+        )
+        assert r.status_code in (400, 422)
+
+    def test_rejects_file_scheme(self, monkeypatch):
+        self._authed(monkeypatch)
+        r = client.post(
+            "/api/jobs",
+            json={"url": "file:///etc/passwd", "job_type": "analyze_set"},
+        )
+        assert r.status_code in (400, 422)
+
+    def test_rejects_169_254_metadata(self, monkeypatch):
+        self._authed(monkeypatch)
+        r = client.post(
+            "/api/jobs",
+            json={"url": "http://169.254.169.254/latest/meta-data/", "job_type": "analyze_set"},
+        )
+        assert r.status_code in (400, 422)
 
 
 class TestJobHistory:

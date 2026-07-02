@@ -166,7 +166,7 @@ async def _resolve_for_import(body: TransferImportRequest) -> TransferPreviewRes
     if not (body.url or "").strip():
         raise HTTPException(status_code=400, detail="Preview expired — run Preview again.")
     try:
-        resolved = await resolve_transfer(body.url.strip())
+        resolved = await resolve_transfer((body.url or "").strip())
     except ProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _preview_from_dict(preview_dict_from_result(resolved), body.task_id)
@@ -297,6 +297,7 @@ async def transfer_import(
     if body.download_flac and import_url:
         from tidal_dl_ru.bot.users import reserve_web_download
 
+        assert current_user.id is not None
         allowed, _ = reserve_web_download(current_user.id)
         if not allowed:
             raise HTTPException(status_code=403, detail="Daily download limit reached.")
@@ -328,7 +329,7 @@ async def transfer_import(
         download_job_id = job_id
 
     log_import_done(
-        user_id=current_user.id,
+        user_id=current_user.id,  # type: ignore[arg-type]
         username=current_user.username or "",
         playlist_id=playlist_id,
         added=added,

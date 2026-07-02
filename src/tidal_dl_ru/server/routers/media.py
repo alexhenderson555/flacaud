@@ -29,21 +29,21 @@ from tidal_dl_ru.server.metrics import record_stream_error
 from tidal_dl_ru.server.range_file import ranged_file_response
 from tidal_dl_ru.server.streaming import (
     TidalStreamUnavailable,
-    _api_detail,
-    _bts_cache_path,
-    _dash_file_media_type,
-    _dash_stream_bytes_needed,
-    _delivered_stream_meta,
-    _ensure_bts_cache,
-    _ensure_dash_cache,
-    _find_merged_dash_file,
-    _quality_to_enum,
-    _requires_full_file_before_play,
-    _resolve_dash_stream_cached,
-    _schedule_bts_warm,
-    _schedule_dash_warm,
-    _serve_bts_progressive,
-    _stream_cache_dir,
+    api_detail,
+    bts_cache_path,
+    dash_file_media_type,
+    dash_stream_bytes_needed,
+    delivered_stream_meta,
+    ensure_bts_cache,
+    ensure_dash_cache,
+    find_merged_dash_file,
+    quality_to_enum,
+    requires_full_file_before_play,
+    resolve_dash_stream_cached,
+    schedule_bts_warm,
+    schedule_dash_warm,
+    serve_bts_progressive,
+    stream_cache_dir,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +148,7 @@ async def image_proxy(url: str):
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail="Upstream image unavailable")
         headers = {
+            # Public image proxy: SSRF-filtered, no auth, no credentials.
             "Access-Control-Allow-Origin": "*",
             "Cache-Control": "public, max-age=86400",
         }
@@ -266,6 +267,7 @@ async def get_lyrics(
 
 @router.get("/api/downloads")
 def get_downloads(current_user: User = Depends(get_current_user)) -> dict[str, str | dict]:
+    assert current_user.id is not None
     return job_state.get_downloaded_registry_for_owner(current_user.id)
 
 
@@ -312,7 +314,7 @@ async def get_track_quality(
 
         def _get_meta():
             with p._client() as client:
-                return _delivered_stream_meta(
+                return delivered_stream_meta(
                     track_id, ui, current_user.effective_plan, client=client,
                 )
 
@@ -332,6 +334,7 @@ async def stream_track_ready(
 ):
     """Lightweight poll — merged cache exists. Kicks warm on miss (for clients that use this)."""
     if bypass_registry.lower() != "true":
+        assert current_user.id is not None
         registry = job_state.get_downloaded_registry_for_owner(current_user.id)
         reg_file = job_state.registry_file_for_quality(registry, track_id, quality)
         if reg_file is not None:
@@ -341,9 +344,9 @@ async def stream_track_ready(
         return {"ready": False}
 
     quality = cap_stream_quality(quality, current_user.effective_plan)
-    q_enum = _quality_to_enum(quality)
-    cache_dir = _stream_cache_dir()
-    merged = _find_merged_dash_file(cache_dir, track_id, q_enum)
+    q_enum = quality_to_enum(quality)
+    cache_dir = stream_cache_dir()
+    merged = find_merged_dash_file(cache_dir, track_id, q_enum)
     if merged is not None:
         return {"ready": True, "source": "cache", "bytes": merged.stat().st_size}
 
@@ -367,11 +370,11 @@ async def warm_stream_track(
         return {"status": "noop", "mode": "unsupported"}
 
     quality = cap_stream_quality(quality, current_user.effective_plan)
-    q_enum = _quality_to_enum(quality)
-    cache_dir = _stream_cache_dir()
+    q_enum = quality_to_enum(quality)
+    cache_dir = stream_cache_dir()
 
     try:
-        dash = await _resolve_dash_stream_cached(
+        dash = await resolve_dash_stream_cached(
             p, track_id, q_enum, cache_dir, current_user.effective_plan,
         )
     except Exception as exc:
@@ -380,15 +383,15 @@ async def warm_stream_track(
 
     res = dash["res"]
     if res["type"] == "redirect":
-        cache_path = _bts_cache_path(cache_dir, track_id, q_enum, res["url"])
-        _schedule_bts_warm(res["url"], cache_path)
-        if _requires_full_file_before_play(q_enum):
+        cache_path = bts_cache_path(cache_dir, track_id, q_enum, res["url"])
+        schedule_bts_warm(res["url"], cache_path)
+        if requires_full_file_before_play(q_enum):
             return {"status": "warming", "mode": "bts_cache"}
         return {"status": "warming", "mode": "bts_progressive"}
     if res["type"] != "dash_stream":
         return {"status": "noop", "mode": res["type"]}
 
-    _schedule_dash_warm(
+    schedule_dash_warm(
         dash["urls"], dash["tmp_path"], dash["fmp4_path"], dash["final_path"],
     )
     return {"status": "warming", "mode": "dash_stream"}
@@ -397,6 +400,7 @@ async def warm_stream_track(
 @router.get("/api/stream/{provider}/{track_id}")
 async def stream_track(provider: str, track_id: str, request: Request, current_user: User = Depends(get_media_user), quality: str = "HIGH", bypass_registry: str = "false"):
     if bypass_registry.lower() != "true":
+        assert current_user.id is not None
         registry = job_state.get_downloaded_registry_for_owner(current_user.id)
         reg_file = job_state.registry_file_for_quality(registry, track_id, quality)
         if reg_file is not None:
@@ -409,18 +413,18 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
 
     if provider == "tidal":
         quality = cap_stream_quality(quality, current_user.effective_plan)
-        q_enum = _quality_to_enum(quality)
+        q_enum = quality_to_enum(quality)
 
-        cache_dir = _stream_cache_dir()
+        cache_dir = stream_cache_dir()
 
         try:
-            merged = _find_merged_dash_file(cache_dir, track_id, q_enum)
+            merged = find_merged_dash_file(cache_dir, track_id, q_enum)
             if merged is not None:
                 return ranged_file_response(
-                    merged, request, _dash_file_media_type(merged),
+                    merged, request, dash_file_media_type(merged),
                 )
 
-            dash = await _resolve_dash_stream_cached(
+            dash = await resolve_dash_stream_cached(
                 p, track_id, q_enum, cache_dir, current_user.effective_plan,
             )
             res = dash["res"]
@@ -443,18 +447,18 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
             )
 
             if res["type"] == "redirect":
-                if _requires_full_file_before_play(q_enum):
-                    cache_path = _bts_cache_path(cache_dir, track_id, q_enum, res["url"])
-                    serve_path = await _ensure_bts_cache(res["url"], cache_path)
+                if requires_full_file_before_play(q_enum):
+                    cache_path = bts_cache_path(cache_dir, track_id, q_enum, res["url"])
+                    serve_path = await ensure_bts_cache(res["url"], cache_path)
                     return ranged_file_response(
                         serve_path,
                         request,
-                        _dash_file_media_type(serve_path),
+                        dash_file_media_type(serve_path),
                         quality_hdr,
                     )
-                return await _serve_bts_progressive(
+                return await serve_bts_progressive(
                     res["url"],
-                    _bts_cache_path(cache_dir, track_id, q_enum, res["url"]),
+                    bts_cache_path(cache_dir, track_id, q_enum, res["url"]),
                     request,
                     quality_hdr,
                 )
@@ -466,23 +470,23 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
                 final_path = dash["final_path"]
                 file_media_type = dash["file_media_type"]
 
-                serve_path = await _ensure_dash_cache(
+                serve_path = await ensure_dash_cache(
                     urls,
                     tmp_path,
                     fmp4_path,
                     final_path,
-                    _dash_stream_bytes_needed(request),
+                    dash_stream_bytes_needed(request),
                 )
                 if not serve_path.is_file() or serve_path in (tmp_path, fmp4_path):
                     record_stream_error("not_ready")
                     raise HTTPException(
                         status_code=503,
-                        detail=_api_detail("stream_not_ready", "Stream not ready"),
+                        detail=api_detail("stream_not_ready", "Stream not ready"),
                     )
                 return ranged_file_response(
                     serve_path,
                     request,
-                    _dash_file_media_type(serve_path),
+                    dash_file_media_type(serve_path),
                     quality_hdr,
                 )
 
@@ -496,7 +500,7 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
             if e.rate_limited:
                 raise HTTPException(
                     status_code=503,
-                    detail=_api_detail(
+                    detail=api_detail(
                         "tidal_rate_limited",
                         "Tidal is rate limiting playback — retry in a few seconds",
                     ),
@@ -504,14 +508,14 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
                 ) from e
             raise HTTPException(
                 status_code=503,
-                detail=_api_detail("stream_failed", "Could not prepare stream"),
+                detail=api_detail("stream_failed", "Could not prepare stream"),
             ) from e
         except Exception as e:
             logger.info(f"Streaming error: {e}")
             record_stream_error("failed")
             raise HTTPException(
                 status_code=503,
-                detail=_api_detail("stream_failed", "Could not prepare stream"),
+                detail=api_detail("stream_failed", "Could not prepare stream"),
             ) from e
 
     raise HTTPException(status_code=400, detail="Streaming not supported for this provider")
