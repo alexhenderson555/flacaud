@@ -283,23 +283,18 @@ export function pauseAudioForTrackSwitch(audioEl) {
 }
 
 /**
- * Pause for a new track and drop stale media so the next src starts from 0.
+ * Pause for a new track. Web Audio–routed elements keep their src and
+ * position: emptying them (`src = ''` with no load()) dismisses the OS media
+ * notification mid-switch and leaves the element in a state where the next
+ * play() emits a blip of stale audio, and seeking the dying stream to 0
+ * fires a wasted network request. The next stream URL lands as a fresh src
+ * attribute, which re-runs the load algorithm and resets position on its
+ * own; pendingSeek(0) covers the rest.
  */
 export function prepareMainAudioForTrackSwitch(audioEl) {
   if (!audioEl) return;
   pauseAudioForTrackSwitch(audioEl);
-  try {
-    audioEl.currentTime = 0;
-  } catch {
-    /* ignore */
-  }
-  if (audioEl._sourceNode) {
-    try {
-      audioEl.src = '';
-    } catch {
-      /* ignore */
-    }
-  } else {
+  if (!audioEl._sourceNode) {
     clearAudioElementSrc(audioEl);
   }
 }

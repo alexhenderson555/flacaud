@@ -653,6 +653,24 @@ export default function PlayerBar({
               <div className="player-bar__mini-artist" title={artistTooltip}>{artistLine}</div>
             </div>
             <div className="player-bar__mini-transport">
+              <button
+                type="button"
+                className="player-bar__mini-like"
+                data-testid="player-mini-like-btn"
+                aria-label={liked
+                  ? (lang === 'ru' ? 'Убрать из библиотеки' : 'Remove from Library')
+                  : (lang === 'ru' ? 'Добавить в библиотеку' : 'Add to Library')}
+                aria-pressed={liked}
+                disabled={!currentTrack || setActive}
+                onClick={(e) => { e.stopPropagation(); toggleLike(currentTrack, e); }}
+              >
+                <Heart
+                  size={20}
+                  fill={liked ? 'var(--accent-solid)' : 'none'}
+                  color={liked ? 'var(--accent-solid)' : 'var(--text-primary)'}
+                  style={{ transition: 'all 0.2s' }}
+                />
+              </button>
               {miniSkipNextBtn(34)}
               {transportBtn(36)}
             </div>
