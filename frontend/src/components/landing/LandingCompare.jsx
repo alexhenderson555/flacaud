@@ -39,7 +39,7 @@ export default function LandingCompare({ t }) {
               <tr key={label}>
                 <th scope="row">{label}</th>
                 {vals.map((v, i) => (
-                  <td key={String(v)} className={i === 0 ? 'landing-compare__highlight' : ''}>
+                  <td key={i} className={i === 0 ? 'landing-compare__highlight' : ''}>
                     <Cell value={v} partialLabel={t.comparePartial} />
                   </td>
                 ))}

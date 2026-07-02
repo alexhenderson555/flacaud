@@ -47,8 +47,8 @@ describe('barBinRange', () => {
     const first = barBinRange(0, barCount, binCount);
     const last = barBinRange(barCount - 1, barCount, binCount);
 
-    expect(first.start).toBe(0);
-    expect(first.end).toBeGreaterThan(1);
+    expect(first.start).toBe(1); // bin 0 is DC offset, skipped
+    expect(first.end).toBeGreaterThan(first.start);
     expect(last.end).toBeLessThanOrEqual(binCount);
     expect(last.start).toBeGreaterThan(first.start);
   });
@@ -89,15 +89,18 @@ describe('bandEqualizerGain', () => {
 });
 
 describe('computeBarLevels', () => {
-  it('puts bass energy in the center and stays symmetric', () => {
+  it('puts bass energy near the center and stays symmetric', () => {
     const data = new Uint8Array(256);
     data.fill(12);
     data[2] = 240;
     data[3] = 220;
     const levels = computeBarLevels(data, 1400);
-    const center = levels[Math.floor(levels.length / 2)];
-    expect(center).toBeGreaterThan(30);
-    expect(center).toBeGreaterThan(levels[0]); // center (bass) louder than the treble edge
+    // Strictly monotonic bin mapping: each bar owns unique bins, so bass at
+    // bins 2-3 lights bars adjacent to the exact center, not the center itself.
+    const mid = Math.floor(levels.length / 2);
+    const centerZone = Math.max(...levels.slice(mid - 3, mid + 4));
+    expect(centerZone).toBeGreaterThan(30);
+    expect(centerZone).toBeGreaterThan(levels[0]); // bass zone louder than the treble edge
     expect(Math.abs(levels[0] - levels[levels.length - 1])).toBeLessThan(8);
   });
 
