@@ -25,7 +25,7 @@
     "framer-motion": "^12.40.0",
     "i18next": "^26.3.1",
     "localforage": "^1.10.0",
-    "lucide-react": "^1.17.0",
+    "lucide-react": "^1.23.0",
     "music-tempo": "^1.0.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
