@@ -85,7 +85,7 @@ def test_dash_stream_supports_range_requests(client, monkeypatch):
     )
     monkeypatch.setattr("tidal_dl_ru.server.routers.media.asyncio.to_thread", _fake_to_thread)
     monkeypatch.setattr(
-        "tidal_dl_ru.server.routers.media._ensure_dash_cache",
+        "tidal_dl_ru.server.routers.media.ensure_dash_cache",
         _fake_ensure,
     )
 

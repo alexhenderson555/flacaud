@@ -71,7 +71,7 @@ def load(job_id: str) -> Optional[JobStatus]:
     raw = r.get(_key(job_id))
     if raw is None:
         return None
-    return JobStatus.model_validate(json.loads(raw))
+    return JobStatus.model_validate(json.loads(raw))  # type: ignore[arg-type]
 
 
 def set_job_quality(job_id: str, quality: str) -> None:
@@ -363,13 +363,13 @@ def list_jobs_for_owner(owner_id: int, *, limit: int = 40) -> list[JobStatus]:
     found: list[JobStatus] = []
     cursor = 0
     while True:
-        cursor, keys = r.scan(cursor, match="tidaldl:job:*", count=200)
+        cursor, keys = r.scan(cursor, match="tidaldl:job:*", count=200)  # type: ignore[misc]
         for key in keys:
             raw = r.get(key)
             if not raw:
                 continue
             try:
-                status = JobStatus.model_validate(json.loads(raw))
+                status = JobStatus.model_validate(json.loads(raw))  # type: ignore[arg-type]
             except Exception:
                 continue
             if status.owner_id == owner_id and status.job_type == "download":

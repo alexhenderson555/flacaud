@@ -8,8 +8,8 @@ from tidal_dl_ru.providers.tidal.models import Track as TidalTrack
 from tidal_dl_ru.server.recommendations import (
     _append_unique,
     _finalize_track_covers,
-    _tracks_needing_cover_enrich,
     _track_ok,
+    _tracks_needing_cover_enrich,
     build_recommendations,
     build_track_radio,
     build_track_radio_fast,

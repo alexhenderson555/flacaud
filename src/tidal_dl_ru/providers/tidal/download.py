@@ -44,8 +44,8 @@ def _stream_urls_from_dash(root: ET.Element) -> tuple[list[str], str]:
     template = repr_el.find("mpd:SegmentTemplate", ns)
     if template is None:
         # SegmentList fallback — fairly rare for Tidal
-        urls = [s.get("media") for s in repr_el.findall(".//mpd:SegmentURL", ns)]
-        return [u for u in urls if u], codecs
+        seg_urls = [s.get("media") for s in repr_el.findall(".//mpd:SegmentURL", ns)]
+        return [u for u in seg_urls if u], codecs
 
     init = template.get("initialization", "")
     media = template.get("media", "")
@@ -62,12 +62,13 @@ def _stream_urls_from_dash(root: ET.Element) -> tuple[list[str], str]:
             timescale = int(template.get("timescale", "1"))
             seg_dur = int(duration_attr) / timescale
             period = root.find("mpd:Period", ns)
-            total = float(period.get("duration", "PT0S").lstrip("PT").rstrip("S") or 0)
-            count = max(1, int(total / seg_dur) + 1)
+            if period is not None:
+                total = float(period.get("duration", "PT0S").lstrip("PT").rstrip("S") or 0)
+                count = max(1, int(total / seg_dur) + 1)
         else:
             count = 1
 
-    urls = [init] if init else []
+    urls: list[str] = [init] if init else []
     for i in range(start_number, start_number + count):
         urls.append(media.replace("$Number$", str(i)))
     return urls, codecs

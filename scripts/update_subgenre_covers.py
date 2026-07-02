@@ -18,7 +18,7 @@ from tidal_dl_ru.core.router import get_provider_by_name
 
 
 async def update_subgenres():
-    db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src', 'tidal_dl_ru', 'server', 'genres_db.json'))
+    db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src', 'tidal_dl_ru', 'data', 'genres_db.json'))
     with open(db_path, 'r', encoding='utf-8') as f:
         db = json.load(f)
 

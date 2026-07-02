@@ -72,15 +72,18 @@ class Settings:
     fetch_lyrics: bool = _bool("TIDALDLRU_LYRICS", False)
     # Max parallel ARQ workers per process — affects pool concurrency.
     arq_max_jobs: int = int(os.environ.get("TIDALDLRU_ARQ_MAX_JOBS", "4"))
+    set_audio_cache_dir: Path = Path(
+        os.environ.get(
+            "TIDALDLRU_SET_AUDIO_CACHE",
+            str(Path(os.environ.get(
+                "TIDALDLRU_JOBS_DIR",
+                str(Path.home() / ".local" / "share" / "tidal-dl-ru" / "jobs"),
+            )) / "set_audio_cache"),
+        )
+    )
 
 
 settings = Settings()
 settings.jobs_dir.mkdir(parents=True, exist_ok=True)
 settings.stream_cache_dir.mkdir(parents=True, exist_ok=True)
-settings.set_audio_cache_dir = Path(
-    os.environ.get(
-        "TIDALDLRU_SET_AUDIO_CACHE",
-        str(settings.jobs_dir / "set_audio_cache"),
-    )
-)
 settings.set_audio_cache_dir.mkdir(parents=True, exist_ok=True)

@@ -51,6 +51,7 @@ def notify_expiring_subscriptions() -> int:
                 expires = expires.replace(tzinfo=timezone.utc)
             if expires <= now or expires > horizon:
                 continue
+            assert user.id is not None
             key = _warn_key(user.id, expires)
             if r.get(key):
                 continue

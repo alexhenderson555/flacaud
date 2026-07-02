@@ -18,7 +18,11 @@ sys.path.insert(0, str(ROOT))
 try:
     from dotenv import load_dotenv
 
+    # Real secrets live in .env.local (gitignored); .env holds placeholders.
+    # Load .env first, then .env.local overrides with real values.
     load_dotenv(ROOT / ".env", override=True)
+    if (ROOT / ".env.local").is_file():
+        load_dotenv(ROOT / ".env.local", override=True)
 except ImportError:
     pass
 

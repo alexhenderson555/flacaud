@@ -55,7 +55,7 @@ async def analyze_set_task(
     from ShazamAPI import Shazam
 
 
-    results = []
+    results: list = []
 
     with tempfile.TemporaryDirectory() as temp_dir:
         audio_base = os.path.join(temp_dir, "set_audio")

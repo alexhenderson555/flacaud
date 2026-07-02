@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { BRAND_LOGO_SRC } from '../../brand';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
@@ -60,7 +61,11 @@ export default function LandingHeader({ t, onToggleLang }) {
         </button>
       </div>
 
-      {menuOpen && (
+      {/* Portal to body: the header's backdrop-filter makes it the containing
+          block for position:fixed children, so the drawer would size to the
+          header (68px) instead of the viewport and the links would bleed
+          over the hero. */}
+      {menuOpen && createPortal(
         <div className="landing__mobile-drawer" role="dialog" aria-modal="true">
           <nav className="landing__mobile-nav">
             {links.map((l) => (
@@ -72,7 +77,8 @@ export default function LandingHeader({ t, onToggleLang }) {
               {t.navSignIn}
             </Link>
           </nav>
-        </div>
+        </div>,
+        document.body,
       )}
     </header>
   );

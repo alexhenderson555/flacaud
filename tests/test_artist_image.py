@@ -1,7 +1,8 @@
 """Tests for artist portrait lookup (Wikimedia / Deezer / iTunes)."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from tidal_dl_ru.server import artist_image_cache
 from tidal_dl_ru.server.artist_image import (

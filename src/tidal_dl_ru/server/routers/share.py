@@ -84,11 +84,11 @@ def get_share_preview(token: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Share link not found or expired")
 
     kind, row = found
-    if kind == "playlist":
+    if kind == "playlist" and isinstance(row, Playlist):
         track_rows = session.exec(
             select(PlaylistTrack)
             .where(PlaylistTrack.playlist_id == row.id)
-            .order_by(PlaylistTrack.position)
+            .order_by(PlaylistTrack.position)  # type: ignore[arg-type]
         ).all()
         tracks = [
             {
@@ -111,6 +111,9 @@ def get_share_preview(token: str, session: Session = Depends(get_session)):
             preview_tracks=tracks[:MAX_PREVIEW],
             owner_username=_owner_name(session, row.user_id),
         )
+
+    if not isinstance(row, SavedSet):
+        raise HTTPException(status_code=404, detail="Share link not found or expired")
 
     tracks = parse_tracks_json(row.tracks_json)
     count = row.track_count or len(tracks)
@@ -138,7 +141,7 @@ def claim_share(
     kind, source = found
     now = datetime.now(timezone.utc)
 
-    if kind == "playlist":
+    if kind == "playlist" and isinstance(source, Playlist):
         if source.user_id == current_user.id:
             return ShareClaimResult(ok=True, kind="playlist", title=source.name, id=source.id, already_had=True)
 
@@ -153,7 +156,7 @@ def claim_share(
         track_rows = session.exec(
             select(PlaylistTrack)
             .where(PlaylistTrack.playlist_id == source.id)
-            .order_by(PlaylistTrack.position)
+            .order_by(PlaylistTrack.position)  # type: ignore[arg-type]
         ).all()
         incoming_tracks = [
             {
@@ -174,7 +177,7 @@ def claim_share(
             existing_track_rows = session.exec(
                 select(PlaylistTrack)
                 .where(PlaylistTrack.playlist_id == existing.id)
-                .order_by(PlaylistTrack.position)
+                .order_by(PlaylistTrack.position)  # type: ignore[arg-type]
             ).all()
             existing_tracks = [
                 {
@@ -219,6 +222,8 @@ def claim_share(
         return ShareClaimResult(ok=True, kind="playlist", title=pl.name, id=pl.id)
 
     # set
+    if not isinstance(source, SavedSet):
+        raise HTTPException(status_code=400, detail="Invalid share type")
     if source.user_id == current_user.id:
         return ShareClaimResult(ok=True, kind="set", title=source.title, id=source.id, already_had=True)
 

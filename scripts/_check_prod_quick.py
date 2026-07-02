@@ -7,6 +7,12 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
+
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
 from scripts.repair_servers import (  # noqa: E402
     COMPOSE_FILES,
     DEPLOY_PATH,

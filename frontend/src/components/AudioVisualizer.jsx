@@ -13,8 +13,6 @@ import {
 const FRAME_MS = 1000 / 60;
 const GRAD_BUCKETS = 36;
 const MAX_DPR = 2;
-const IDLE_ATTACK = 0.2;
-const IDLE_DECAY = 0.28;
 const IDLE_CUTOFF = 0.5;
 
 function readAccentColors() {
@@ -112,7 +110,6 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     let lastBeat = -1e9;
     let spin = 0; // rotation accumulator (radial / orb)
     const ripples = []; // expanding rings emitted on beats (orb mode)
-    let peaks = null; // peak-hold heights per bar (bars mode)
 
     let prevE = 0;
     const updateBeat = (smoothed, time) => {

@@ -243,14 +243,14 @@ def probe_tidal_qualities(client, track_id: str, *, manifest_client=None) -> dic
     ui_max = max_quality if max_quality != "LOW" else ui_available[-1]
     ui_actual = {k: v for k, v in actual.items() if k != "LOW"}
     ui_available, ui_actual = expand_probe_available(ui_available, ui_actual, ui_max)
-    
+
     dl_tiers = set(downloadable)
     if ui_max == "HI_RES" or "HI_RES" in dl_tiers:
         dl_tiers.update(("LOSSLESS", "HIGH"))
     elif ui_max == "LOSSLESS" or "LOSSLESS" in dl_tiers:
         dl_tiers.add("HIGH")
     downloadable_out = [q for q in _UI_QUALITY_ORDER if q in dl_tiers]
-    
+
     lossless: dict = {"available": False, "hires_only": False}
     if flac_manifest is not None:
         from tidal_dl_ru.providers.tidal.download import manifest_lossless_meta

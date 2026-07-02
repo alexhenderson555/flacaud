@@ -121,8 +121,10 @@ class YouTubeMusicNativeProvider(YtDlpCatalogProvider):
             return None
 
         qs = parse_qs(parsed.query or "")
-        playlist_id = (qs.get("list") or [None])[0]
-        video_id = (qs.get("v") or [None])[0]
+        _list = qs.get("list") or []
+        _vid = qs.get("v") or []
+        playlist_id: str | None = _list[0] if _list else None
+        video_id: str | None = _vid[0] if _vid else None
         path = parsed.path or ""
         path_parts = [p for p in path.split("/") if p]
         browse_id = path_parts[1] if len(path_parts) >= 2 and path_parts[0] == "browse" else None

@@ -338,7 +338,10 @@ export default function CommandPalette({
                   <div
                     key={res.id}
                     data-testid={`command-item-${res.id}`}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => res.action()}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') res.action(); }}
                     onMouseEnter={() => setSelectedIdx(i)}
                     style={{
                       display: 'flex',

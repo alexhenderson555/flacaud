@@ -54,16 +54,25 @@ export default function Titlebar() {
       }}
     >
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <div 
+        <div
+          role="button"
+          tabIndex={0}
           onClick={handleClose}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClose(); }}
           style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff5f56', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         />
-        <div 
+        <div
+          role="button"
+          tabIndex={0}
           onClick={handleMinimize}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMinimize(); }}
           style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ffbd2e', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         />
-        <div 
+        <div
+          role="button"
+          tabIndex={0}
           onClick={handleMaximize}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMaximize(); }}
           style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         />
       </div>

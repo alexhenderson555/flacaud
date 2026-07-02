@@ -180,7 +180,7 @@ def _analyze_tidal_track_preview_impl(track_id: str) -> dict | None:
     if not provider:
         return None
 
-    from tidal_dl_ru.server.routers.media import _resolve_tidal_stream
+    from tidal_dl_ru.server.streaming import resolve_tidal_stream
 
     qualities = [AudioQuality.HIGH, AudioQuality.LOSSLESS]
 
@@ -189,7 +189,7 @@ def _analyze_tidal_track_preview_impl(track_id: str) -> dict | None:
 
         for quality in qualities:
             try:
-                info = _resolve_tidal_stream(provider, str(track_id), quality)
+                info = resolve_tidal_stream(provider, str(track_id), quality)
             except Exception as e:
                 logger.info("dj_preview: stream resolve failed %s (%s): %s", track_id, quality, e)
                 continue

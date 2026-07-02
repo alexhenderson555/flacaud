@@ -33,7 +33,7 @@ from tidal_dl_ru.server.settings import settings
 logger = logging.getLogger(__name__)
 
 
-def _stream_cache_dir() -> Path:
+def stream_cache_dir() -> Path:
     settings.stream_cache_dir.mkdir(parents=True, exist_ok=True)
     return settings.stream_cache_dir
 
@@ -50,7 +50,7 @@ def _try_acquire_merge_lock(lock: FileLock) -> bool:
         return False
 
 
-def _api_detail(code: str, message: str) -> dict[str, str]:
+def api_detail(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
 
 
@@ -62,7 +62,7 @@ class TidalStreamUnavailable(RuntimeError):
         self.rate_limited = rate_limited
 
 
-stream_locks = collections.defaultdict(asyncio.Lock)
+stream_locks: dict[str, asyncio.Lock] = collections.defaultdict(asyncio.Lock)
 
 
 _dash_cache_jobs: dict[str, asyncio.Task] = {}
@@ -145,7 +145,7 @@ async def _estimate_dash_total_bytes(urls: list[str]) -> int | None:
             resp = await client.head(url, follow_redirects=True)
             cl = resp.headers.get("content-length")
             return int(cl) if cl else None
-        except Exception:
+        except (httpx.HTTPError, ValueError, TypeError):
             return None
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
@@ -177,7 +177,7 @@ def _stream_cache_keys(q_enum: AudioQuality) -> tuple[str, ...]:
     return (q_enum.name,)
 
 
-def _find_merged_dash_file(cache_dir: Path, track_id: str, q_enum: AudioQuality) -> Path | None:
+def find_merged_dash_file(cache_dir: Path, track_id: str, q_enum: AudioQuality) -> Path | None:
     """Return remuxed audio only — never intermediate .fmp4 (causes play-then-restart)."""
     for cache_key in _stream_cache_keys(q_enum):
         for ext in _DASH_MEDIA_EXTS:
@@ -187,13 +187,13 @@ def _find_merged_dash_file(cache_dir: Path, track_id: str, q_enum: AudioQuality)
     return None
 
 
-def _dash_file_media_type(path: Path) -> str:
+def dash_file_media_type(path: Path) -> str:
     if path.suffix.lower() == ".flac":
         return "audio/flac"
     return "audio/mp4"
 
 
-async def _resolve_dash_stream_cached(
+async def resolve_dash_stream_cached(
     p,
     track_id: str,
     q_enum: AudioQuality,
@@ -211,7 +211,7 @@ async def _resolve_dash_stream_cached(
         hit = _dash_resolve_cache.get(key)
         if hit is not None:
             return hit
-        res = await asyncio.to_thread(_resolve_tidal_stream, p, track_id, q_enum, plan)
+        res = await asyncio.to_thread(resolve_tidal_stream, p, track_id, q_enum, plan)
         if res["type"] == "dash_stream":
             aq = res.get("actual_quality")
             urls, tmp_path, fmp4_path, final_path, file_media_type = _dash_paths_from_manifest(
@@ -238,7 +238,7 @@ _DASH_PARALLEL_SEGMENTS = 16
 _DASH_MEDIA_EXTS = (".flac", ".m4a", ".mp4", ".eac3")
 
 
-def _quality_to_enum(quality: str) -> AudioQuality:
+def quality_to_enum(quality: str) -> AudioQuality:
     try:
         if quality.upper() == "HI_RES":
             return getattr(AudioQuality, "HI_RES_LOSSLESS", AudioQuality.LOSSLESS)
@@ -261,18 +261,18 @@ def _dash_paths_from_manifest(
     )
 
     decoded = _decode_manifest(manifest)
-    urls, codecs = _stream_urls_from_dash(decoded)
+    urls, codecs = _stream_urls_from_dash(decoded)  # type: ignore[arg-type]
     ext = extension_for(codecs, manifest.manifest_mime_type)
-    # Use requested tier for paths so _find_merged_dash_file hits on every Range request.
+    # Use requested tier for paths so find_merged_dash_file hits on every Range request.
     cache_key = q_enum.name
     fmp4_path = cache_dir / f"{track_id}_{cache_key}.fmp4"
     tmp_path = Path(str(fmp4_path) + ".part")
     final_path = cache_dir / f"{track_id}_{cache_key}{ext}"
-    file_media_type = _dash_file_media_type(final_path)
+    file_media_type = dash_file_media_type(final_path)
     return urls, tmp_path, fmp4_path, final_path, file_media_type
 
 
-def _schedule_dash_warm(
+def schedule_dash_warm(
     urls: list[str],
     tmp_path: Path,
     fmp4_path: Path,
@@ -290,7 +290,7 @@ def _schedule_dash_warm(
 
     async def _warm() -> None:
         try:
-            await _ensure_dash_cache(urls, tmp_path, fmp4_path, final_path, target)
+            await ensure_dash_cache(urls, tmp_path, fmp4_path, final_path, target)
         except HTTPException:
             pass
         except Exception as exc:
@@ -401,11 +401,11 @@ async def _write_total_meta(urls: list[str], meta_path: Path) -> None:
         estimated = await asyncio.wait_for(_estimate_dash_total_bytes(urls), timeout=15.0)
         if estimated:
             meta_path.write_text(str(estimated), encoding="utf-8")
-    except Exception:
+    except (asyncio.TimeoutError, httpx.HTTPError, OSError, ValueError):
         pass
 
 
-async def _ensure_dash_cache(
+async def ensure_dash_cache(
     urls: list[str],
     tmp_path: Path,
     fmp4_path: Path,
@@ -494,16 +494,16 @@ async def _ensure_dash_cache(
         return tmp_path
     raise HTTPException(
         status_code=504,
-        detail=_api_detail("stream_timeout", "Stream cache timeout"),
+        detail=api_detail("stream_timeout", "Stream cache timeout"),
     )
 
 
-def _dash_stream_bytes_needed(request: Request) -> int:
+def dash_stream_bytes_needed(request: Request) -> int:
     """LOSSLESS/HI_RES DASH — wait for full remux; no partial .part streaming."""
     return 0
 
 
-def _range_bytes_needed(request: Request) -> int:
+def range_bytes_needed(request: Request) -> int:
     """Bytes cached before respond; 0 means wait for the complete merged file."""
     rh = request.headers.get("range")
     if not rh or not rh.lower().startswith("bytes="):
@@ -530,7 +530,7 @@ def _range_bytes_needed(request: Request) -> int:
     return max(_FAST_START_BYTES, _MIN_RANGE_RESPONSE)
 
 
-def _cap_bts_range(range_header: str | None) -> str:
+def cap_bts_range(range_header: str | None) -> str:
     """Limit open-ended byte=0- probes so playback can start before the full AAC file."""
     if not range_header or not range_header.lower().startswith("bytes="):
         return f"bytes=0-{_BTS_INITIAL_RANGE_BYTES - 1}"
@@ -545,7 +545,7 @@ def _cap_bts_range(range_header: str | None) -> str:
     return range_header
 
 
-def _requires_full_file_before_play(q_enum: AudioQuality) -> bool:
+def requires_full_file_before_play(q_enum: AudioQuality) -> bool:
     """LOSSLESS/HI_RES must be cached completely; HIGH stays progressive BTS."""
     return q_enum != AudioQuality.HIGH
 
@@ -559,7 +559,7 @@ def _bts_cache_ext(url: str) -> str:
     return ".flac"
 
 
-def _bts_cache_path(cache_dir: Path, track_id: str, q_enum: AudioQuality, url: str) -> Path:
+def bts_cache_path(cache_dir: Path, track_id: str, q_enum: AudioQuality, url: str) -> Path:
     return cache_dir / f"{track_id}_{q_enum.name}{_bts_cache_ext(url)}"
 
 
@@ -585,7 +585,7 @@ async def _head_bts_total_bytes(url: str) -> int | None:
             resp.raise_for_status()
             cl = resp.headers.get("content-length")
             return int(cl) if cl else None
-    except Exception:
+    except (httpx.HTTPError, ValueError, TypeError):
         return None
 
 
@@ -630,7 +630,7 @@ async def _download_bts_to_path_with_lock(lock: FileLock, url: str, dest: Path) 
             lock.release()
 
 
-async def _ensure_bts_cache(url: str, dest: Path) -> Path:
+async def ensure_bts_cache(url: str, dest: Path) -> Path:
     if dest.is_file() and dest.stat().st_size > 0:
         return dest
     key = str(dest)
@@ -659,11 +659,11 @@ async def _ensure_bts_cache(url: str, dest: Path) -> Path:
         await asyncio.sleep(0.05)
     raise HTTPException(
         status_code=504,
-        detail=_api_detail("stream_timeout", "Stream cache timeout"),
+        detail=api_detail("stream_timeout", "Stream cache timeout"),
     )
 
 
-def _schedule_bts_warm(url: str, dest: Path) -> None:
+def schedule_bts_warm(url: str, dest: Path) -> None:
     if dest.is_file() and dest.stat().st_size > 0:
         return
     key = str(dest)
@@ -677,7 +677,7 @@ def _schedule_bts_warm(url: str, dest: Path) -> None:
                 total = await _head_bts_total_bytes(url)
                 if total:
                     _bts_size_meta_path(dest).write_text(str(total), encoding="utf-8")
-            await _ensure_bts_cache(url, dest)
+            await ensure_bts_cache(url, dest)
         except HTTPException:
             pass
         except Exception as exc:
@@ -686,32 +686,32 @@ def _schedule_bts_warm(url: str, dest: Path) -> None:
     asyncio.create_task(_warm())
 
 
-async def _serve_bts_progressive(
+async def serve_bts_progressive(
     url: str,
     cache_path: Path,
     request: Request,
     extra_headers: dict,
 ) -> Response | FileResponse | StreamingResponse:
     """Serve 320k BTS from local cache when possible — instant seek within buffered bytes."""
-    _schedule_bts_warm(url, cache_path)
+    schedule_bts_warm(url, cache_path)
     if cache_path.is_file() and cache_path.stat().st_size > 0:
         return ranged_file_response(
             cache_path,
             request,
-            _dash_file_media_type(cache_path),
+            dash_file_media_type(cache_path),
             extra_headers,
         )
 
     part_path = Path(str(cache_path) + ".part")
     range_start = _range_start_from_request(request)
-    bytes_needed = max(_range_bytes_needed(request), range_start + _MIN_RANGE_RESPONSE)
+    bytes_needed = max(range_bytes_needed(request), range_start + _MIN_RANGE_RESPONSE)
     if part_path.is_file() and part_path.stat().st_size >= bytes_needed:
         total = _read_bts_size_meta(cache_path)
         return await streaming_part_response(
             part_path,
             cache_path,
             request,
-            _dash_file_media_type(cache_path),
+            dash_file_media_type(cache_path),
             extra_headers,
             resource_total=total,
         )
@@ -733,13 +733,15 @@ def _bts_proxy_http() -> httpx.AsyncClient:
 
 
 async def _proxy_bts_stream(url: str, request: Request, extra_headers: dict) -> StreamingResponse:
-    req_headers: dict[str, str] = {"Range": _cap_bts_range(request.headers.get("range"))}
+    req_headers: dict[str, str] = {"Range": cap_bts_range(request.headers.get("range"))}
 
     client = _bts_proxy_http()
     upstream = await client.send(client.build_request("GET", url, headers=req_headers), stream=True)
 
     headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_HEADERS}
     headers["Accept-Ranges"] = "bytes"
+    # Stream auth uses a short-lived ?mt= media token (not cookies), so a
+    # wildcard origin is safe. Revisit if cookie-based stream auth is added.
     headers["Access-Control-Allow-Origin"] = "*"
     headers["Access-Control-Expose-Headers"] = (
         "Content-Range, Accept-Ranges, X-Actual-Quality, "
@@ -765,7 +767,7 @@ async def _proxy_bts_stream(url: str, request: Request, extra_headers: dict) -> 
     )
 
 
-def _stream_quality_candidates(q_enum: AudioQuality) -> list[AudioQuality]:
+def stream_quality_candidates(q_enum: AudioQuality) -> list[AudioQuality]:
     """Tiers to try for streaming — LOSSLESS may escalate to HI_RES for real FLAC."""
     hi = getattr(AudioQuality, "HI_RES_LOSSLESS", None)
     if hi is not None and q_enum == hi:
@@ -783,7 +785,7 @@ def _manifest_delivers_lossless(manifest, plan: str | None) -> bool:
 
     try:
         info = manifest_inspect(manifest)
-    except Exception:
+    except (ValueError, KeyError, TypeError):
         return False
     codecs = (info.get("codecs") or "").lower()
     if "flac" not in codecs:
@@ -801,7 +803,7 @@ def _manifest_acceptable_for_request(
     return _manifest_delivers_lossless(manifest, plan)
 
 
-def _resolve_tidal_stream(
+def resolve_tidal_stream(
     p,
     track_id: str,
     q_enum: AudioQuality,
@@ -810,7 +812,7 @@ def _resolve_tidal_stream(
     import base64
     import json
 
-    candidates = _stream_quality_candidates(q_enum)
+    candidates = stream_quality_candidates(q_enum)
     dash_manifest = None
     dash_quality = None
     saw_rate_limit = False
@@ -841,7 +843,7 @@ def _resolve_tidal_stream(
     if dash_manifest is not None:
         return {"type": "dash_stream", "manifest": dash_manifest, "actual_quality": dash_quality}
 
-    cache_dir = _stream_cache_dir()
+    cache_dir = stream_cache_dir()
     with p._client() as c:
         for q in reversed(candidates):
             manifest, rate_limited = fetch_playback_manifest(track_id, q)
@@ -857,7 +859,7 @@ def _resolve_tidal_stream(
                 tmp_dest = cache_dir / f"{track_id}_{q.name}"
                 final_path = download_track(c._http, manifest, tmp_dest)
                 return {"type": "file", "path": final_path, "actual_quality": manifest.audio_quality}
-            except Exception as exc:
+            except (httpx.HTTPError, OSError, ValueError, RuntimeError) as exc:
                 logger.debug("Download failed for quality %s: %s", q, exc)
                 continue
 
@@ -869,7 +871,7 @@ def _resolve_tidal_stream(
     raise TidalStreamUnavailable("No playable stream for requested quality")
 
 
-def _delivered_stream_meta(
+def delivered_stream_meta(
     track_id: str,
     ui_quality: str,
     plan: str | None = None,
@@ -881,11 +883,11 @@ def _delivered_stream_meta(
     when omitted, fetches rotate through the shared account pool.
     """
     try:
-        q_enum = _quality_to_enum(ui_quality)
-    except Exception:
+        q_enum = quality_to_enum(ui_quality)
+    except (KeyError, ValueError, AttributeError):
         q_enum = AudioQuality.HIGH
 
-    for q in _stream_quality_candidates(q_enum):
+    for q in stream_quality_candidates(q_enum):
         manifest, _ = fetch_playback_manifest(track_id, q, client=client)
         if manifest is None:
             continue
@@ -897,7 +899,7 @@ def _delivered_stream_meta(
 
         try:
             info = manifest_inspect(manifest)
-        except Exception:
+        except (ValueError, KeyError, TypeError):
             info = {}
         codecs = (info.get("codecs") or "").lower()
         aq = manifest.audio_quality

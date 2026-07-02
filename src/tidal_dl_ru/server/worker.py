@@ -117,13 +117,13 @@ def _download_sync(
             from tidal_dl_ru.core.translate import translate_lrc_to_file
             try:
                 _asyncio.run(translate_lrc_to_file(lrc, path))
-            except Exception:
+            except (httpx.HTTPError, OSError, ValueError, RuntimeError):
                 pass
         if dj_analyze:
             from tidal_dl_ru.core.dj import analyze_and_tag
             try:
                 analyze_and_tag(path)
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 pass
     finally:
         http.close()
@@ -231,11 +231,11 @@ async def download_url(
 
             # Split it
             try:
-                res = await split_audio_demucs(str(path), str(job_dir))
+                split_res = await split_audio_demucs(str(path), str(job_dir))
 
                 # Sign and register files
-                v_path = Path(res.vocals_path)
-                i_path = Path(res.instrumental_path)
+                v_path = Path(split_res.vocals_path)
+                i_path = Path(split_res.instrumental_path)
 
                 v_token = sign_file(job_id, str(v_path.relative_to(job_dir)).replace("\\", "/"))
                 i_token = sign_file(job_id, str(i_path.relative_to(job_dir)).replace("\\", "/"))
@@ -317,7 +317,7 @@ class WorkerSettings:
 
     functions = [download_url, analyze_set, subscription_expiry_notify, subscription_expire_due]
     cron_jobs = [
-        cron(disk_cleanup_task, hour={3, 15}, minute=0),
+        cron(disk_cleanup_task, hour={3, 15}, minute=0),  # type: ignore[arg-type]
         cron(subscription_expiry_notify, hour={10}, minute=0),
         cron(subscription_expire_due, hour={4}, minute=30),
     ]

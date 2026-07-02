@@ -17,6 +17,7 @@ from tidal_dl_ru.database.refresh_tokens import revoke_all_refresh_sessions_for_
 
 def delete_user_account(session: Session, user: User) -> None:
     """Delete playlists, library, sets, rules, refresh sessions, then the user."""
+    assert user.id is not None
     playlists = session.exec(select(Playlist).where(Playlist.user_id == user.id)).all()
     for playlist in playlists:
         rows = session.exec(

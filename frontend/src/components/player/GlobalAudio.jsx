@@ -194,8 +194,12 @@ export default function GlobalAudio({
     if (!currentAudioSrc) return undefined;
     const el = resolveMainEl();
     if (!el) return undefined;
-    const elSrc = el.currentSrc || el.src || '';
-    if (elSrc && sameStreamResource(elSrc, currentAudioSrc)) return undefined;
+    // Check the src attribute and currentSrc separately: right after React
+    // commits the new src attribute, currentSrc still reports the previous
+    // track (resource selection is async) — re-assigning here would abort
+    // and restart the load React already kicked off.
+    if (sameStreamResource(el.src || '', currentAudioSrc)
+      || sameStreamResource(el.currentSrc || '', currentAudioSrc)) return undefined;
     try {
       el.src = currentAudioSrc;
       // load() after createMediaElementSource breaks seek — src assignment alone reloads.

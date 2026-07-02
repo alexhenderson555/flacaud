@@ -105,8 +105,10 @@ export default function UpgradeModal({ onClose, lang, onPlanUpdated }) {
                   return (
                     <div
                       key={p.id}
-                      role={selectable ? 'button' : undefined}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => selectable && setSelectedPlan(p.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectable && setSelectedPlan(p.id); }}
                       style={{
                         flex: '1 1 220px', maxWidth: '260px',
                         background: selectedPlan === p.id ? `${color}18` : 'rgba(255,255,255,0.02)',

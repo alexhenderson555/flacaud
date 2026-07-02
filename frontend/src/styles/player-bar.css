@@ -143,3 +143,27 @@
   display: block;
   flex-shrink: 0;
 }
+
+/* Like heart in the collapsed mobile mini bar. */
+.player-bar__mini-like {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+
+.player-bar__mini-like:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.player-bar__mini-like:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

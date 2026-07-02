@@ -30,6 +30,10 @@ import {
   Disc3,
   HardDrive,
   Palette,
+  AudioLines,
+  Gem,
+  Check,
+  Lock,
 } from 'lucide-react';
 import UpgradeModal from '../components/UpgradeModal';
 import DownloadHistory from '../components/account/DownloadHistory';
@@ -133,8 +137,8 @@ const dict = {
 };
 
 const QUALITY_TIERS = [
-  { id: 'HIGH', label: '320k', spec: 'AAC 320 kbps' },
-  { id: 'LOSSLESS', label: 'Lossless', spec: 'FLAC (CD on Basic, Hi-Res on Pro)' },
+  { id: 'HIGH', label: '320k', spec: 'AAC 320 kbps', Icon: AudioLines },
+  { id: 'LOSSLESS', label: 'Lossless', spec: 'FLAC (CD on Basic, Hi-Res on Pro)', Icon: Gem },
 ];
 
 function formatBytes(bytes) {
@@ -166,6 +170,11 @@ export default function Account() {
     setDjAnalysisEnabled,
     djFeaturesAvailable,
   } = useOutletContext();
+
+  const visualSensitivity = usePlayer(s => s.visualSensitivity) ?? 1.0;
+  const setVisualSensitivity = usePlayer(s => s.setVisualSensitivity);
+  const visualSmoothing = usePlayer(s => s.visualSmoothing) ?? 0.5;
+  const setVisualSmoothing = usePlayer(s => s.setVisualSmoothing);
 
 
   const t = (key) => dict[lang][key] || key;
@@ -515,7 +524,10 @@ export default function Account() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
                   <div
+                    role="button"
+                    tabIndex={0}
                     onClick={cycleAvatar}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') cycleAvatar(); }}
                     style={{
                       width: '80px',
                       height: '80px',
@@ -796,7 +808,10 @@ export default function Account() {
                 )}
 
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setIsRegistering(!isRegistering)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsRegistering(!isRegistering); }}
                   style={{
                     color: 'var(--text-secondary)',
                     fontSize: '0.9rem',
@@ -880,11 +895,13 @@ export default function Account() {
                 <div className="quality-tier-grid">
                   {QUALITY_TIERS.map((q) => {
                     const allowed = isQualityAllowedForPlan(q.id, plan);
+                    const active = defaultPlaybackQuality === q.id;
+                    const TierIcon = q.Icon;
                     return (
                       <button
                         key={q.id}
                         type="button"
-                        className={`quality-tier-card${defaultPlaybackQuality === q.id ? ' quality-tier-card--active' : ''}${allowed ? '' : ' quality-tier-card--disabled'}`}
+                        className={`quality-tier-card${active ? ' quality-tier-card--active' : ''}${allowed ? '' : ' quality-tier-card--disabled'}`}
                         disabled={!allowed}
                         onClick={() => {
                           if (!allowed) {
@@ -899,6 +916,14 @@ export default function Account() {
                           setDefaultPlaybackQuality(q.id);
                         }}
                       >
+                        <span className="quality-tier-card__top">
+                          <span className={`quality-tier-card__icon${active ? ' quality-tier-card__icon--active' : ''}`}>
+                            <TierIcon size={18} />
+                          </span>
+                          <span className={`quality-tier-card__check${active ? ' quality-tier-card__check--on' : ''}`} aria-hidden>
+                            {allowed ? <Check size={13} strokeWidth={3} /> : <Lock size={12} />}
+                          </span>
+                        </span>
                         <span className="quality-tier-card__name">{q.label}</span>
                         <span className="quality-tier-card__spec">{q.spec}</span>
                       </button>

@@ -18,6 +18,12 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=True)
 
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
+
 import paramiko
 from repair_servers import DEPLOY_PATH, TIDAL_HOST, TIDAL_USER, _password
 from scp import SCPClient

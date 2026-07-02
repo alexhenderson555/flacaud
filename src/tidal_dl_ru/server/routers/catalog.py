@@ -4,7 +4,7 @@ import logging
 import os
 import random
 import re
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -296,7 +296,7 @@ async def search(req: SearchRequest) -> SearchResponse:
                         lambda q, limit, offset: p.search_page(q, limit, offset),
                     )
                 trimmed = await asyncio.to_thread(_do_trim)
-                
+
                 if trimmed and trimmed.strip().lower() != req.query.strip().lower():
                     suggested = trimmed
                     kind = "typo"
@@ -750,8 +750,8 @@ async def _artist_focus_playlist(artist_name: str, limit: int) -> list:
             artists = client.search_artists(artist_name, limit=12)
             picked = _pick_artist_match(artists, artist_name)
             if picked:
-                for t in client.get_artist_top_tracks(picked.id):
-                    uni = to_universal_enriched(client, t)
+                for tt in client.get_artist_top_tracks(picked.id):
+                    uni = to_universal_enriched(client, tt)
                     if uni.provider_id not in seen:
                         tracks.append(uni)
                         seen.add(uni.provider_id)
@@ -944,8 +944,8 @@ async def _tidal_fallback_playlist(query: str, limit: int) -> list:
         return tracks[:limit]
 
     if _looks_like_vibe_prompt(query):
-        tracks: list = []
-        seen: set[str] = set()
+        tracks = []
+        seen = set()
         for term in _vibe_fallback_search_terms(query):
             if len(tracks) >= limit:
                 break
@@ -1079,7 +1079,7 @@ Format:
   ...
 ]"""
 
-        parts = [{"text": prompt}]
+        parts: list[dict[str, Any]] = [{"text": prompt}]
         if req.imageBase64:
             try:
                 mime_type = req.imageBase64.split(";")[0].split(":")[1]

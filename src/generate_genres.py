@@ -137,9 +137,9 @@ async def generate():
 
             time.sleep(0.5)
 
-    with open("src/tidal_dl_ru/server/genres_db.json", "w", encoding="utf-8") as f:
+    with open("src/tidal_dl_ru/data/genres_db.json", "w", encoding="utf-8") as f:
         json.dump(genres_db, f, ensure_ascii=False, indent=2)
-    print("Done! Generated src/tidal_dl_ru/server/genres_db.json")
+    print("Done! Generated src/tidal_dl_ru/data/genres_db.json")
 
 if __name__ == "__main__":
     asyncio.run(generate())

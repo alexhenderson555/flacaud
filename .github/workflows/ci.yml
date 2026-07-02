@@ -23,12 +23,14 @@ jobs:
       - name: Ruff
         run: uv run ruff check src scripts
 
+      - name: Mypy
+        run: uv run mypy src/tidal_dl_ru/server src/tidal_dl_ru/providers --ignore-missing-imports
+
       - name: Pip audit
         run: uv run pip-audit
-        continue-on-error: true
 
       - name: Pytest
-        run: uv run pytest tests/ -q --tb=short -k "not remote_flow_live" --cov=tidal_dl_ru.server --cov=tidal_dl_ru.providers --cov=tidal_dl_ru.core --cov-report=term-missing --cov-fail-under=55
+        run: uv run pytest tests/ -q --tb=short -k "not remote_flow_live" --cov=tidal_dl_ru.server --cov=tidal_dl_ru.providers --cov=tidal_dl_ru.core --cov-report=term-missing --cov-fail-under=66
 
   backend-postgres:
     runs-on: ubuntu-latest
@@ -57,6 +59,20 @@ jobs:
         run: |
           uv run alembic upgrade head
           uv run pytest tests/test_alembic_migrations.py tests/test_match_rules.py -q --tb=short
+
+  backend-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install deps
+        run: uv sync --dev --extra worker
+      - name: Alembic on SQLite
+        run: |
+          uv run alembic upgrade head
+          uv run pytest tests/test_alembic_migrations.py -q --tb=short
 
   frontend:
     runs-on: ubuntu-latest

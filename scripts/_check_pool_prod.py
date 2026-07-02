@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
+
+if (ROOT / ".env.local").is_file():
+
+
+    load_dotenv(ROOT / ".env.local", override=True)
+
 from scripts.repair_servers import TIDAL_HOST, TIDAL_USER, _password, _ssh_run
 
 pw = _password("TIDAL_SSH_PASSWORD")

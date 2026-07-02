@@ -13,6 +13,7 @@ downloads/
 *.m4a
 *.mp3
 .env
+.env.local
 
 # Databases & secrets — NEVER commit (hold tokens / PII / the pool Fernet key)
 *.db
@@ -43,6 +44,7 @@ _device_flow.json
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
+frontend/e2e-results.json
 frontend/dist-before-jun18-exact/
 frontend/dist-jun18/
 frontend/dist-jun18-exact/

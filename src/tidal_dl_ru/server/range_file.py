@@ -54,6 +54,11 @@ def parse_byte_range(
 def _stream_headers(extra_headers: dict | None = None) -> dict[str, str]:
     return {
         "Accept-Ranges": "bytes",
+        # Streams authenticate via a short-lived ?mt= media token in the URL
+        # (or Authorization header), not cookies — so a wildcard origin is safe:
+        # a cross-origin page cannot read another user's token, and credentials
+        # are not required. Keep `*` only as long as get_media_user stays
+        # cookie-free; switch to an origin allowlist if cookie auth is added.
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Expose-Headers": (
             "Content-Range, Accept-Ranges, X-Actual-Quality, "

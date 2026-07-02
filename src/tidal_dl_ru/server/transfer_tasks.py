@@ -95,7 +95,7 @@ def load_task(task_id: str) -> Optional[TransferTask]:
     raw = _client().get(_key(task_id))
     if not raw:
         return None
-    return TransferTask.model_validate(json.loads(raw))
+    return TransferTask.model_validate(json.loads(raw))  # type: ignore[arg-type]
 
 
 def _save(task: TransferTask) -> None:
@@ -203,7 +203,7 @@ def load_import_result(task_id: str) -> Optional[dict[str, Any]]:
     raw = _client().get(_import_result_key(task_id.strip()))
     if not raw:
         return None
-    return json.loads(raw)
+    return json.loads(raw)  # type: ignore[arg-type, return-value]
 
 
 def save_import_result(task_id: str, payload: dict[str, Any]) -> None:

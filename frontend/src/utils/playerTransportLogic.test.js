@@ -91,7 +91,9 @@ describe('resumePausedPlayback', () => {
 });
 
 describe('prepareMainAudioForTrackSwitch', () => {
-  it('pauses and clears Web Audio element src for a fresh load', () => {
+  it('pauses a Web Audio element but keeps its media alive', () => {
+    // Keeping src/position preserves the OS media notification through the
+    // switch and avoids the blip-on-play state of an emptied wired element.
     const el = {
       _sourceNode: {},
       src: 'blob:track-a',
@@ -100,8 +102,8 @@ describe('prepareMainAudioForTrackSwitch', () => {
       paused: false,
     };
     prepareMainAudioForTrackSwitch(el);
-    expect(el.src).toBe('');
-    expect(el.currentTime).toBe(0);
+    expect(el.src).toBe('blob:track-a');
+    expect(el.currentTime).toBe(42);
     expect(el.paused).toBe(true);
   });
 

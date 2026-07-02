@@ -1,6 +1,10 @@
 import json
+import os
 
-with open("subgenres.json", "r", encoding="utf-8") as f:
+_SUBGENRES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "src", "tidal_dl_ru", "data", "subgenres.json"
+)
+with open(_SUBGENRES_PATH, "r", encoding="utf-8") as f:
     subs = json.load(f)
 
 genre_icons = {

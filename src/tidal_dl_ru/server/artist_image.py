@@ -206,7 +206,8 @@ def resolve_artist_picture_url(
         cached = artist_image_cache_get(artist_id)
         if cached is not False:
             if cached:
-                return cached, _guess_picture_source(cached)
+                cached_str: str = str(cached)
+                return cached_str, _guess_picture_source(cached_str)
             if tidal_picture_id and tidal_cover_url_fn:
                 return tidal_cover_url_fn(tidal_picture_id, size=640), "tidal"
             return None, "none"
