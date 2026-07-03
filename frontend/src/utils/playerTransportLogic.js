@@ -2,6 +2,7 @@ import { tracksMatch } from './trackNormalize';
 import { isPausedMidPlayback, sameStreamResource } from './qualityPrefs';
 import { CROSSFADE_SEC } from './playerConfig';
 import { effectivePlaybackDuration } from './effectivePlaybackDuration';
+import { setGraphGain } from './audioEngine';
 
 /** Seconds before catalog end when we auto-advance (rAF + native ended guard). */
 export const END_THRESHOLD_SEC = 0.35;
@@ -294,6 +295,10 @@ export function prepareMainAudioForTrackSwitch(audioEl) {
   // Mark the element as holding stale media so the watchdog won't play() it until
   // its currentSrc has actually advanced to the new track (prevents old-audio leak).
   if (audioEl.dataset) audioEl.dataset.staleSrc = 'true';
+  // Hard-mute the Web Audio graph: silences both any lingering old buffer and the
+  // new track's pre-load blip, on audio AND on the visualizer, until playback of the
+  // new resource is confirmed (setGraphGain(el, 1) in the play path).
+  setGraphGain(audioEl, 0);
   pauseAudioForTrackSwitch(audioEl);
   if (!audioEl._sourceNode) {
     clearAudioElementSrc(audioEl);
@@ -321,6 +326,7 @@ export function resumeMainPlaybackAfterHandoff(audioEl, {
 } = {}) {
   if (!audioEl) return;
   audioEl.volume = volume;
+  setGraphGain(audioEl, 1); // handed-off element is the confirmed new track — make it audible
   onEngineInit?.();
 
   const markPlaying = () => {

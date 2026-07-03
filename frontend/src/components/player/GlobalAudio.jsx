@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { initAudioEngine, resumeAudioContext } from '../../utils/audioEngine';
+import { initAudioEngine, resumeAudioContext, setGraphGain } from '../../utils/audioEngine';
 import { PRELOAD_ENABLED } from '../../utils/playerConfig';
 import { sameStreamResource } from '../../utils/qualityPrefs';
 import {
@@ -80,6 +80,9 @@ export default function GlobalAudio({
     })) return;
     skipEndedRef.current = false;
     el.volume = volume;
+    // currentSrc is now confirmed to be the new track (shouldStartPlayback gates on it)
+    // and staleSrc is cleared — safe to lift the switch mute.
+    setGraphGain(el, 1);
     el
       .play()
       .then(() => {
