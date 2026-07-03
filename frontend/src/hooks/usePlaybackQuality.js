@@ -31,7 +31,7 @@ import {
 } from '../utils/qualityPrefs';
 import { readQualityProbeCache, writeQualityProbeCache } from '../utils/qualityProbeCache';
 import { waitForLosslessStreamReady } from '../utils/streamReady';
-import { shouldPreservePausedStream, shouldIgnoreStreamError } from '../utils/playerTransportLogic';
+import { shouldPreservePausedStream, shouldIgnoreStreamError, urlTargetsTrack } from '../utils/playerTransportLogic';
 
 const LOSSLESS_TIERS = new Set(['LOSSLESS', 'HI_RES']);
 
@@ -563,12 +563,19 @@ export function usePlaybackQuality({
       setCurrentAudioSrc((prev) => {
         if (sameStreamResource(prev, url)) return prev;
         const playingSrc = mainEl?.currentSrc || mainEl?.src || '';
-        if (activelyPlaying) {
+        // Only preserve the element's current src if it belongs to THIS track (a
+        // mid-playback quality re-resolve). On a track switch the element may still
+        // briefly read as "playing" the previous track — never keep that, or every
+        // next-press replays the same track. This was reproducible on 320, where the
+        // cache path resolves before the switch settles (lossless's warm-up delay hid it).
+        const playingIsCurrentTrack = urlTargetsTrack(playingSrc, currentTrack?.provider_id);
+        if (activelyPlaying && playingIsCurrentTrack) {
           if (playingSrc) return playingSrc;
           if (prev) return prev;
         }
         if (
-          isActivelyPlayingAudio(isPlayingRef.current, mainEl)
+          playingIsCurrentTrack
+          && isActivelyPlayingAudio(isPlayingRef.current, mainEl)
           && sameStreamResource(playingSrc, url)
         ) {
           return playingSrc || url;
