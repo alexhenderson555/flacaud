@@ -377,6 +377,7 @@ export default function PlayerLogic({ children }) {
     audioRef,
     playNext: transport.playNext,
     playPrevious: transport.playPrevious,
+    toggleLike,
   });
 
   useEffect(() => {

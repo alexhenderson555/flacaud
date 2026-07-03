@@ -25,6 +25,7 @@ export function useMediaSession({
   audioRef,
   playNext,
   playPrevious,
+  toggleLike,
 }) {
   useEffect(() => {
     if (!enabled || !('mediaSession' in navigator)) return undefined;
@@ -35,6 +36,16 @@ export function useMediaSession({
     setActionHandlerSafe('pause', () => { audioRef.current?.pause(); });
     setActionHandlerSafe('previoustrack', () => playPrevious?.());
     setActionHandlerSafe('nexttrack', () => playNext?.());
+    
+    if (toggleLike) {
+      setActionHandlerSafe('thumbsup', () => {
+        if (currentTrack) toggleLike(currentTrack);
+      });
+      setActionHandlerSafe('thumbsdown', () => {
+        if (currentTrack) toggleLike(currentTrack);
+      });
+    }
+
     setActionHandlerSafe('seekto', (details) => {
       const el = audioRef.current;
       if (!el || details.seekTime == null) return;

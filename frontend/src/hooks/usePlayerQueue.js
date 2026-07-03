@@ -460,9 +460,11 @@ export function usePlayerQueue({
     try {
       crossfadingRef.current = false;
       crossfadeStartedForRef.current = null;
-      pendingPlayRef.current = true;
       setIsLoading(true);
-      setIsPlaying(true);
+      const el = getMainAudioEl?.();
+      if (el) {
+        prepareMainAudioForTrackSwitch(el);
+      }
       const pl = playlistRef.current || [];
       if (pl[0]?.__queue_origin && queueOriginRef) {
         queueOriginRef.current = pl[0].__queue_origin;

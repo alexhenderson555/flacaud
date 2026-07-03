@@ -24,6 +24,8 @@ export default function ArtistCardHost() {
           key={artistId}
           lang={lang}
           onPlayTrack={playTrack}
+          onStartRadio={transport?.startArtistRadio}
+          radioLoadingId={transport?.radioLoadingTrackId}
         />
       ) : null}
     </AnimatePresence>

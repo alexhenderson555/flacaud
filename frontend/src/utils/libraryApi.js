@@ -93,7 +93,7 @@ export async function ensureTrackPlaybackReady(track, lang = 'en') {
   if (!normalized?.provider_id) return null;
   if (!trackNeedsPlaybackEnrich(normalized)) return normalized;
   try {
-    const meta = await fetchTracksMetaBatch(normalized.provider, [normalized.provider_id], lang);
+    const meta = await fetchTracksMetaBatch(normalized.provider, [normalized.provider_id], lang, { timeoutMs: 3000 });
     const [merged] = enrichTracksFromMeta([normalized], meta);
     return normalizeTrack(merged) || normalized;
   } catch {
@@ -101,13 +101,13 @@ export async function ensureTrackPlaybackReady(track, lang = 'en') {
   }
 }
 
-export async function fetchTracksMetaBatch(provider, ids, lang = 'en') {
+export async function fetchTracksMetaBatch(provider, ids, lang = 'en', options = {}) {
   const unique = [...new Set((ids || []).map((id) => String(id).trim()).filter(Boolean))];
   if (!unique.length) return [];
   const data = await apiPostJson(
     '/api/tracks/meta',
     { provider: provider || 'tidal', ids: unique.slice(0, 40) },
-    { lang },
+    { lang, ...options },
   );
   return Array.isArray(data?.tracks) ? data.tracks : [];
 }

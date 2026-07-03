@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Disc, Loader2, X } from 'lucide-react';
+import { Disc, Loader2, X, Radio } from 'lucide-react';
 import { apiGetJson } from '../../utils/apiClient';
 import { coverImgSrc } from '../../utils/coverUrl';
 import { emojiAvatarForId } from '../../utils/profileAvatars';
@@ -15,6 +15,8 @@ const TRACKS_PAGE = 5;
 export default function ArtistCardPanel({
   lang = 'en',
   onPlayTrack,
+  onStartRadio,
+  radioLoadingId,
 }) {
   const artistId = useArtistCardStore((s) => s.artistId);
   const fallbackName = useArtistCardStore((s) => s.artistName);
@@ -84,7 +86,7 @@ export default function ArtistCardPanel({
   const dedupeTracks = (tracks) => {
     const seen = new Set();
     return tracks.filter((tr) => {
-      const key = String(tr.provider_id || tr.title || '');
+      const key = String(tr.title || '').toLowerCase().trim();
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -196,6 +198,38 @@ export default function ArtistCardPanel({
                 ) : (
                   <p>{bio}</p>
                 )}
+              </div>
+            )}
+
+            {onStartRadio && artist && (
+              <div className="artist-card-panel__actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '12px', marginBottom: '16px' }}>
+                <button
+                  type="button"
+                  className="artist-radio-btn"
+                  onClick={() => onStartRadio(artist)}
+                  disabled={radioLoadingId === `artist_${artist.id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    background: 'var(--bg-glass-heavy)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '24px',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {radioLoadingId === `artist_${artist.id}` ? (
+                    <Loader2 size={16} className="spin" />
+                  ) : (
+                    <Radio size={16} />
+                  )}
+                  {lang === 'ru' ? 'Радио по артисту' : 'Artist Radio'}
+                </button>
               </div>
             )}
 

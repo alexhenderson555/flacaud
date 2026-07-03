@@ -460,10 +460,12 @@ async def get_artist_bio_api(
 {tracks_block}
 
 Правила:
-- 2–3 предложения на русском
+- 2–4 предложения на русском
 - ТОЛЬКО музыкальная карьера, жанр, звучание, сцена
+- Добавь 1 классный, уникальный и неочевидный факт об артисте или истории создания его главного хита
 - НЕ путай с актёрами, спортсменами, однофамильцами (пример: NTO — электронный продюсер, не актёр)
-- Без Wikipedia-штампов и дат рождения
+- Избегай скучных энциклопедических штампов и дат рождения
+- Пиши живо, интересно и профессионально, без ИИ-штампов вроде "этот артист известен тем, что"
 - Если мало данных — опиши жанр осторожно, без выдуманных фактов
 - Только plain text, без markdown"""
         else:
@@ -474,11 +476,10 @@ Known tracks in catalog:
 {tracks_block}
 
 Rules:
-- 2–3 sentences in English
+- 2–4 sentences in English
 - ONLY music career, genre, sound, scene — no film/TV/other homonyms
+- Include 1 cool, unique and non-obvious fact about the artist or the backstory of their biggest hit
 - Do NOT confuse with actors or athletes (e.g. NTO = electronic producer, not an actor)
-- No Wikipedia clichés or birth dates
-- If unsure, describe genre cautiously without invented facts
 - Plain text only, no markdown"""
 
         bio = await gemini_generate_text(prompt, temperature=0.35)

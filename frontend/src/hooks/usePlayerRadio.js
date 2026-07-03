@@ -102,9 +102,60 @@ export function usePlayerRadio({
     }
   }, [lang, playQueue, t, suppressQualityToastsRef]);
 
+  const startArtistRadio = useCallback(async (artist) => {
+    const aid = String(artist?.id || '');
+    if (!aid) return false;
+    setRadioLoadingTrackId(`artist_${aid}`);
+    if (suppressQualityToastsRef) suppressQualityToastsRef.current = true;
+    try {
+      let topTracks = [];
+      try {
+        const artistData = await apiGetJson(`/api/artist/${aid}`, { lang });
+        topTracks = artistData.top_tracks || [];
+      } catch {
+        // ignore
+      }
+
+      const vibeQuery = lang === 'ru'
+        ? `Сыграй треки, похожие на ${artist.name}`
+        : `Play tracks similar to ${artist.name}`;
+
+      let aiTracks = [];
+      try {
+        const data = await apiPostJson('/api/ai-playlist', { query: vibeQuery, limit: 15 }, { lang });
+        aiTracks = data.tracks || [];
+      } catch {
+        // ignore
+      }
+
+      const combined = [...topTracks, ...aiTracks];
+      if (combined.length === 0) {
+        showToast(t('radioFailed'));
+        return false;
+      }
+      const queue = buildRadioQueue(combined[0], combined);
+      if (queue.length > 0) {
+        playQueue(queue[0], queue);
+        showToast(t('artistRadioStarted'));
+        return true;
+      }
+      return false;
+    } catch (err) {
+      showToast(messageForApiError(err, lang));
+      return false;
+    } finally {
+      setRadioLoadingTrackId(null);
+      if (suppressQualityToastsRef) {
+        window.setTimeout(() => {
+          suppressQualityToastsRef.current = false;
+        }, 6000);
+      }
+    }
+  }, [lang, playQueue, t, suppressQualityToastsRef]);
+
   useEffect(() => {
     if (startTrackRadioRef) startTrackRadioRef.current = startTrackRadio;
   }, [startTrackRadio, startTrackRadioRef]);
 
-  return { startTrackRadio, radioLoadingTrackId };
+  return { startTrackRadio, startArtistRadio, radioLoadingTrackId };
 }
