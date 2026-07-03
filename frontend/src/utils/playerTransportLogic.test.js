@@ -98,6 +98,7 @@ describe('prepareMainAudioForTrackSwitch', () => {
       _sourceNode: {},
       src: 'blob:track-a',
       currentTime: 42,
+      dataset: {},
       pause: () => { el.paused = true; },
       paused: false,
     };
@@ -105,6 +106,7 @@ describe('prepareMainAudioForTrackSwitch', () => {
     expect(el.src).toBe('blob:track-a');
     expect(el.currentTime).toBe(42);
     expect(el.paused).toBe(true);
+    expect(el.dataset.staleSrc).toBe('true'); // gates the watchdog until currentSrc advances
   });
 
   it('clears src on plain audio elements', () => {
@@ -113,6 +115,7 @@ describe('prepareMainAudioForTrackSwitch', () => {
       removeAttribute: () => { el.src = ''; },
       load: () => { loaded = true; },
       pause: () => {},
+      dataset: {},
       src: 'blob:track-a',
     };
     prepareMainAudioForTrackSwitch(el);
@@ -460,9 +463,11 @@ describe('shouldStartPlayback', () => {
     elCurrentSrc: WANT,
   };
 
-  it('starts when the assigned src matches even if currentSrc is still the previous track', () => {
-    // The regression: after a Web Audio clear, currentSrc lags on the old URL.
-    expect(shouldStartPlayback({ ...base, elSrc: WANT, elCurrentSrc: OLD_TRACK })).toBe(true);
+  it('does NOT start while currentSrc is still the previous track (prevents old-audio leak)', () => {
+    // After el.src = newUrl, currentSrc lags on the OLD track for a beat. Playing then
+    // would emit the previous track's still-buffered audio for ~1-2s until the new
+    // resource loads. Gate on currentSrc so we only play once it's actually the new track.
+    expect(shouldStartPlayback({ ...base, elSrc: WANT, elCurrentSrc: OLD_TRACK })).toBe(false);
   });
 
   it('starts when only currentSrc matches (src already advanced)', () => {

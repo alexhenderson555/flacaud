@@ -67,7 +67,7 @@ export default function GlobalAudio({
 
   const tryStartPlayback = useCallback(() => {
     const el = resolveMainEl();
-    if (!el) return;
+    if (!el || el.dataset.staleSrc === 'true') return;
     if (!shouldStartPlayback({
       pendingPlay: pendingPlayRef.current,
       pendingSeek: pendingSeekRef.current,
@@ -199,8 +199,15 @@ export default function GlobalAudio({
     // track (resource selection is async) — re-assigning here would abort
     // and restart the load React already kicked off.
     if (sameStreamResource(el.src || '', currentAudioSrc)
-      || sameStreamResource(el.currentSrc || '', currentAudioSrc)) return undefined;
+      || sameStreamResource(el.currentSrc || '', currentAudioSrc)) {
+      delete el.dataset.staleSrc;
+      return undefined;
+    }
     try {
+      if (!el.paused) {
+        el.pause();
+      }
+      delete el.dataset.staleSrc;
       el.src = currentAudioSrc;
       // load() after createMediaElementSource breaks seek — src assignment alone reloads.
     } catch {
@@ -224,8 +231,12 @@ export default function GlobalAudio({
   const onMediaReady = useCallback(() => {
     if (holdUntilLosslessReady()) return;
     const el = resolveMainEl();
+    if (!el) return;
+    const isReadyForNewTrack = sameStreamResource(el.currentSrc || '', currentAudioSrc);
+    if (!isReadyForNewTrack && el.currentSrc) return;
+
     const waitingToPlay = pendingPlayRef.current;
-    if (waitingToPlay && el && el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (waitingToPlay && el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       setIsLoading(true);
       return;
     }
@@ -329,7 +340,11 @@ export default function GlobalAudio({
     onPlaying: () => {
       resumeAudioContext();
       const el = resolveMainEl();
-      if (el) el.volume = volume;
+      if (!el) return;
+      const isReadyForNewTrack = sameStreamResource(el.currentSrc || '', currentAudioSrc);
+      if (!isReadyForNewTrack && el.currentSrc) return;
+
+      el.volume = volume;
       if (holdUntilLosslessReady()) return;
       setIsLoading(false);
       setIsPlaying(true);
@@ -337,6 +352,9 @@ export default function GlobalAudio({
     onTimeUpdate: () => {
       const el = resolveMainEl();
       if (!el || el.paused) return;
+      const isReadyForNewTrack = sameStreamResource(el.currentSrc || '', currentAudioSrc);
+      if (!isReadyForNewTrack && el.currentSrc) return;
+
       if ((el.currentTime || 0) > 0.05) {
         setIsLoading(false);
       }

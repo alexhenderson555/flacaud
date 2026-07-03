@@ -151,15 +151,6 @@ export function shouldIgnoreStreamError({
   return false;
 }
 
-/**
- * Decide whether to call play() on the main element right now.
- *
- * Matches the wanted stream against EITHER the freshly-assigned `src` or the
- * live `currentSrc`: after a Web Audio clear (`src = ''` without load()) the
- * element keeps the previous track's `currentSrc` for a beat, so gating only on
- * `currentSrc` would skip the play() and leave a freshly selected track paused
- * until a second click.
- */
 export function shouldStartPlayback({
   pendingPlay,
   pendingSeek = null,
@@ -175,7 +166,13 @@ export function shouldStartPlayback({
   if (deferUntilReady && !losslessReady) return false;
   if (hasError) return false;
   if (!wantSrc) return false;
-  return sameStreamResource(elSrc, wantSrc) || sameStreamResource(elCurrentSrc, wantSrc);
+  
+  // We only check `elCurrentSrc` to avoid playing the old audio buffer. When `src` is 
+  // assigned, the browser takes a moment to run the media load algorithm and update 
+  // `currentSrc`. During this async gap, the old buffer is still intact, and calling 
+  // play() would emit a blip of stale audio. The GlobalAudio watchdog will continually 
+  // check until `currentSrc` updates.
+  return sameStreamResource(elCurrentSrc, wantSrc);
 }
 
 /** Seconds of media buffered ahead of currentTime. */
@@ -276,6 +273,7 @@ export function resumePausedPlayback(audioEl, {
 export function pauseAudioForTrackSwitch(audioEl) {
   if (!audioEl) return;
   try {
+    audioEl.volume = 0;
     audioEl.pause();
   } catch {
     /* ignore */
@@ -293,6 +291,9 @@ export function pauseAudioForTrackSwitch(audioEl) {
  */
 export function prepareMainAudioForTrackSwitch(audioEl) {
   if (!audioEl) return;
+  // Mark the element as holding stale media so the watchdog won't play() it until
+  // its currentSrc has actually advanced to the new track (prevents old-audio leak).
+  if (audioEl.dataset) audioEl.dataset.staleSrc = 'true';
   pauseAudioForTrackSwitch(audioEl);
   if (!audioEl._sourceNode) {
     clearAudioElementSrc(audioEl);
