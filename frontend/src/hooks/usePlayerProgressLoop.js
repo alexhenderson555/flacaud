@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { effectivePlaybackDuration } from '../utils/effectivePlaybackDuration';
 import { markSeekActivity } from '../utils/playbackPriority';
 import { PRELOAD_ENABLED, CROSSFADE_ENABLED } from '../utils/playerConfig';
@@ -10,7 +10,13 @@ import {
   clearIdleAudioSlot,
   resumeMainPlaybackAfterHandoff,
   isAtTrackEnd,
+  bufferedSecondsAhead,
 } from '../utils/playerTransportLogic';
+
+/** After a seek, wait until this many seconds are buffered ahead before resuming. */
+const SEEK_PREBUFFER_SEC = 10;
+/** Never hold longer than this waiting for the buffer (slow-network fallback). */
+const SEEK_PREBUFFER_TIMEOUT_MS = 8000;
 import { initAudioEngine as setupAudioEngine } from '../utils/audioEngine';
 
 /** rAF progress sync, auto-advance, crossfade, and seek scrubbing. */
@@ -268,6 +274,52 @@ export function usePlayerProgressLoop({
     getPreloadAudioEl, initAudioEngine, endedGuardRef, seekCooldownUntilRef, seekScrubbingRef,
   ]);
 
+  const seekBufferWaitRef = useRef(null);
+
+  const clearSeekBufferWait = useCallback(() => {
+    if (seekBufferWaitRef.current) {
+      clearInterval(seekBufferWaitRef.current);
+      seekBufferWaitRef.current = null;
+    }
+  }, []);
+
+  // Resume after a seek only once enough audio is buffered ahead, so a lossless
+  // stream doesn't play ~1s then stall to re-buffer. Plays instantly when already
+  // buffered (cached blobs / near track end) and falls back to playing after a
+  // timeout on slow networks. Cancelled by a new seek, track change or pause.
+  const playAfterSeekBuffered = useCallback((el) => {
+    clearSeekBufferWait();
+    const dur = effectivePlaybackDuration(trackDuration, el.duration);
+    const enough = () => {
+      const remaining = dur && dur > 0 ? dur - (el.currentTime || 0) : Infinity;
+      return bufferedSecondsAhead(el) >= SEEK_PREBUFFER_SEC || remaining <= SEEK_PREBUFFER_SEC + 1;
+    };
+    const go = () => {
+      clearSeekBufferWait();
+      setIsLoading(false);
+      el.play().catch(() => {
+        if (pendingPlayAfterSeekRef) pendingPlayAfterSeekRef.current = true;
+      });
+    };
+    if (enough()) { go(); return; }
+    setIsLoading(true);
+    const startedAt = performance.now();
+    seekBufferWaitRef.current = setInterval(() => {
+      const cur = getMainAudioEl?.() ?? audioRef.current;
+      if (cur !== el || el.error) { clearSeekBufferWait(); setIsLoading(false); return; }
+      if (enough() || performance.now() - startedAt >= SEEK_PREBUFFER_TIMEOUT_MS) go();
+    }, 200);
+  }, [trackDuration, setIsLoading, getMainAudioEl, audioRef, pendingPlayAfterSeekRef, clearSeekBufferWait]);
+
+  // Cancel a pending post-seek buffer wait when playback is paused or the track changes.
+  useEffect(() => {
+    if (!isPlaying) clearSeekBufferWait();
+  }, [isPlaying, clearSeekBufferWait]);
+  useEffect(() => {
+    clearSeekBufferWait();
+    return clearSeekBufferWait;
+  }, [currentTrack?.provider_id, clearSeekBufferWait]);
+
   const handleSeekPreview = useCallback((time) => {
     if (!Number.isFinite(time)) return;
     const el = getMainAudioEl?.() ?? audioRef.current;
@@ -279,6 +331,7 @@ export function usePlayerProgressLoop({
 
   const handleSeekCommit = useCallback((time) => {
     markSeekActivity();
+    clearSeekBufferWait();
     seekScrubbingRef.current = false;
     skipEndedRef.current = false;
 
@@ -315,13 +368,12 @@ export function usePlayerProgressLoop({
     }
     setProgress(applied ? (el.currentTime || newTime) : newTime);
     if (isPlaying) {
-      el.play().catch(() => {
-        if (pendingPlayAfterSeekRef) pendingPlayAfterSeekRef.current = true;
-      });
+      playAfterSeekBuffered(el);
     }
   }, [
     trackDuration, audioRef, getMainAudioEl, setProgress, resetEndDetection, skipEndedRef,
     pendingSeekRef, pendingPlayAfterSeekRef, isPlaying, seekScrubbingRef,
+    clearSeekBufferWait, playAfterSeekBuffered,
   ]);
 
   const beginSeekScrub = useCallback(() => {
