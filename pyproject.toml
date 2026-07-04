@@ -103,4 +103,6 @@ dev = [
     "pytest-cov>=6.0",
     "ruff>=0.5",
     "alembic>=1.13",
+    "mypy>=1.10",
+    "pip-audit>=2.7",
 ]

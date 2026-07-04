@@ -159,7 +159,8 @@ export function shouldStartPlayback({
   losslessReady = false,
   hasError = false,
   wantSrc = '',
-  elSrc = '',
+  // elSrc is intentionally ignored — see below (gate on currentSrc only). Callers may
+  // still pass it; extra keys are harmlessly dropped by destructuring.
   elCurrentSrc = '',
 }) {
   if (!pendingPlay) return false;
