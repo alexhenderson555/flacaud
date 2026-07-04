@@ -462,11 +462,11 @@ async def get_artist_bio_api(
 Правила:
 - 2–4 предложения на русском
 - ТОЛЬКО музыкальная карьера, жанр, звучание, сцена
-- Добавь 1 классный, уникальный и неочевидный факт об артисте или истории создания его главного хита
+- Если ТОЧНО знаешь реальный, проверяемый факт об артисте — можешь добавить один. НИКОГДА не выдумывай факты, истории, сны или «источники вдохновения». Нет достоверного факта — просто не добавляй его
 - НЕ путай с актёрами, спортсменами, однофамильцами (пример: NTO — электронный продюсер, не актёр)
 - Избегай скучных энциклопедических штампов и дат рождения
-- Пиши живо, интересно и профессионально, без ИИ-штампов вроде "этот артист известен тем, что"
-- Если мало данных — опиши жанр осторожно, без выдуманных фактов
+- Пиши живо и профессионально, без ИИ-штампов вроде "этот артист известен тем, что"
+- Мало данных — опиши жанр осторожно, без выдуманных фактов. Точность важнее «интересности»
 - Только plain text, без markdown"""
         else:
             prompt = f"""You write short artist bios for a music streaming app.
@@ -478,8 +478,10 @@ Known tracks in catalog:
 Rules:
 - 2–4 sentences in English
 - ONLY music career, genre, sound, scene — no film/TV/other homonyms
-- Include 1 cool, unique and non-obvious fact about the artist or the backstory of their biggest hit
+- You MAY add one real, verifiable fact ONLY if you genuinely know it. NEVER invent facts, dreams, inspirations or backstories — if you have no reliable fact, simply omit it
 - Do NOT confuse with actors or athletes (e.g. NTO = electronic producer, not an actor)
+- Avoid encyclopedic clichés and birth dates; write lively and professionally
+- If unsure, describe the genre/sound cautiously without inventing anything. Accuracy over interestingness
 - Plain text only, no markdown"""
 
         bio = await gemini_generate_text(prompt, temperature=0.35)
@@ -800,38 +802,78 @@ async def _artist_similar_playlist(artist_name: str, limit: int) -> list:
                 return []
 
             seed_id = str(picked.id)
+            seed_cap = max(2, limit // 5)  # only "a little" of the seed artist (~20%)
 
-            for t in client.get_artist_radio(picked.id, max(limit * 2, 30)):
-                uni = to_universal_enriched(client, t)
+            def enrich_new(track_obj):
+                """Enrich + dedupe; reserve the id immediately so pools never overlap."""
+                uni = to_universal_enriched(client, track_obj)
                 if uni.provider_id in seen:
-                    continue
-                tracks.append(uni)
+                    return None
                 seen.add(uni.provider_id)
-                if len(tracks) >= limit:
-                    return tracks[:limit]
+                return uni
 
-            for sa in client.get_similar_artists(picked.id, limit=10):
-                if str(sa.id) == seed_id:
+            # A little of the seed artist.
+            seed_pool: list = []
+            for t in client.get_artist_top_tracks(picked.id):
+                if len(seed_pool) >= seed_cap:
+                    break
+                uni = enrich_new(t)
+                if uni:
+                    seed_pool.append(uni)
+
+            # A lot of similar artists — round-robin their top tracks so no single
+            # artist dominates the station.
+            similar = [sa for sa in client.get_similar_artists(picked.id, limit=12)
+                       if str(sa.id) != seed_id]
+            per_artist: list = []
+            for sa in similar:
+                try:
+                    per_artist.append(client.get_artist_top_tracks(sa.id)[:6])
+                except Exception:  # noqa: BLE001 - skip an artist that fails to load
                     continue
-                for t in client.get_artist_top_tracks(sa.id)[:4]:
-                    uni = to_universal_enriched(client, t)
-                    if uni.provider_id in seen:
-                        continue
-                    tracks.append(uni)
-                    seen.add(uni.provider_id)
-                    if len(tracks) >= limit:
-                        return tracks[:limit]
+            similar_pool: list = []
+            depth = 0
+            while any(depth < len(lst) for lst in per_artist) and len(similar_pool) < limit:
+                for lst in per_artist:
+                    if depth < len(lst):
+                        uni = enrich_new(lst[depth])
+                        if uni:
+                            similar_pool.append(uni)
+                depth += 1
 
-            tops = client.get_artist_top_tracks(picked.id)
-            if tops and len(tracks) < limit:
-                for t in client.get_track_radio(tops[0].id, limit):
-                    uni = to_universal_enriched(client, t)
-                    if uni.provider_id in seen:
-                        continue
-                    tracks.append(uni)
-                    seen.add(uni.provider_id)
-                    if len(tracks) >= limit:
-                        break
+            # Interleave: mostly similar, with a seed track sprinkled every ~5 slots
+            # (and starting the station with the seed artist so it reads as "theirs").
+            si = seed_i = 0
+            while len(tracks) < limit and (si < len(similar_pool) or seed_i < len(seed_pool)):
+                if len(tracks) % 5 == 0 and seed_i < len(seed_pool):
+                    tracks.append(seed_pool[seed_i])
+                    seed_i += 1
+                elif si < len(similar_pool):
+                    tracks.append(similar_pool[si])
+                    si += 1
+                elif seed_i < len(seed_pool):
+                    tracks.append(seed_pool[seed_i])
+                    seed_i += 1
+                else:
+                    break
+
+            # Fallbacks when similar artists were sparse: Tidal artist radio, then track radio.
+            if len(tracks) < limit:
+                for t in client.get_artist_radio(picked.id, max(limit * 2, 30)):
+                    uni = enrich_new(t)
+                    if uni:
+                        tracks.append(uni)
+                        if len(tracks) >= limit:
+                            break
+            if len(tracks) < limit:
+                tops = client.get_artist_top_tracks(picked.id)
+                if tops:
+                    for t in client.get_track_radio(tops[0].id, limit):
+                        uni = enrich_new(t)
+                        if uni:
+                            tracks.append(uni)
+                            if len(tracks) >= limit:
+                                break
 
             return tracks[:limit]
         finally:
