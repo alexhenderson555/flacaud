@@ -191,8 +191,17 @@ export function usePlaybackQuality({
       : pickQualityForPlan(wantedQ, streamable, effectivePlan);
 
     const mainEl = resolveMainEl();
-    const activelyPlaying = isActivelyPlayingAudio(isPlayingRef.current, mainEl)
-      || (isPlayingRef.current && mainEl && !mainEl.paused);
+    const playingSrc = mainEl?.currentSrc || mainEl?.src || '';
+    // "Mid-track" only counts if the element is actually playing THIS track. During a
+    // track switch the element still briefly reports the previous track as playing —
+    // if we treat that as mid-track we skip setStreamQuality, the stream-resolve effect
+    // (keyed on streamQuality) never re-runs, and the new track never loads until the
+    // user pokes quality manually. This only bit when adjacent tracks resolved to
+    // different tiers (e.g. Automatic 320 → lossless); same-tier switches were unaffected.
+    const playingCurrentTrack = urlTargetsTrack(playingSrc, trackKeyRef.current.split(':').pop());
+    const activelyPlaying = playingCurrentTrack
+      && (isActivelyPlayingAudio(isPlayingRef.current, mainEl)
+        || (isPlayingRef.current && mainEl && !mainEl.paused));
 
     if (!force && useAuto && activelyPlaying && effective !== streamQualityRef.current) {
       // Auto won't switch the stream mid-track, so the badge must reflect what's
