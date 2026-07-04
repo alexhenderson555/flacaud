@@ -154,10 +154,25 @@ def run_disk_cleanup() -> dict:
         max_bytes=cache_cap,
     )
 
+    # Set-audio cache: large full-mix downloads kept only for re-analysis. Expire by
+    # age, then enforce a size cap (LRU) so it can't grow without bound.
+    set_removed, set_freed = _prune_old_files(
+        settings.set_audio_cache_dir,
+        max_age_sec=settings.set_audio_cache_ttl_seconds,
+        label="set_audio_cache",
+    )
+    set_cap_removed, set_cap_freed = _enforce_stream_cache_cap(
+        settings.set_audio_cache_dir,
+        max_bytes=settings.set_audio_cache_max_bytes,
+    )
+
     stats = {
         "jobs_dirs_removed": jobs_removed,
         "stream_files_removed": cache_removed + cap_removed,
-        "bytes_freed": jobs_freed + cache_freed + cap_freed,
+        "set_audio_files_removed": set_removed + set_cap_removed,
+        "bytes_freed": (
+            jobs_freed + cache_freed + cap_freed + set_freed + set_cap_freed
+        ),
     }
     logger.info("disk_cleanup done %s", stats)
     return stats

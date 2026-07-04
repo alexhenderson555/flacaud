@@ -81,6 +81,14 @@ class Settings:
             )) / "set_audio_cache"),
         )
     )
+    # Downloaded DJ-set audio is large (full mixes) and only needed while analyzing.
+    # Expire it after a week and cap total size so the cache can't grow unbounded.
+    set_audio_cache_ttl_seconds: int = int(
+        os.environ.get("TIDALDLRU_SET_AUDIO_TTL", str(7 * 86400))
+    )
+    set_audio_cache_max_bytes: int = int(
+        os.environ.get("TIDALDLRU_SET_AUDIO_CACHE_MAX_BYTES", str(4 * 1024 * 1024 * 1024))
+    )
 
 
 settings = Settings()
