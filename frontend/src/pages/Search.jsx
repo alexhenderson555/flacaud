@@ -89,6 +89,14 @@ function Search() {
   const isSearchingRef = useRef(isSearching);
   const queryRef = useRef(query);
   const loadingMoreRef = useRef(false);
+  const micStreamRef = useRef(null);
+
+  // Safety net: if the page unmounts mid-recording, release the microphone so the
+  // browser doesn't keep the mic-active indicator on.
+  useEffect(() => () => {
+    micStreamRef.current?.getTracks().forEach((track) => track.stop());
+    micStreamRef.current = null;
+  }, []);
   const PAGE_SIZE = 50;
 
   useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
@@ -250,8 +258,9 @@ function Search() {
   const handleListen = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
       setIsListening(true);
-      
+
       const mediaRecorder = new MediaRecorder(stream);
       const audioChunks = [];
 
@@ -282,17 +291,28 @@ function Search() {
               setQuery(`${primaryArtist} - ${data.tracks[0].title}`);
               setRealResults(data.tracks);
             } else {
-              showToast('Song not recognized');
+              showToast(lang === 'ru' ? 'Трек не распознан' : 'Song not recognized');
             }
+          } else if (res.status === 401 || res.status === 403) {
+            showToast(lang === 'ru' ? 'Войдите, чтобы распознавать треки' : 'Log in to recognize tracks');
+          } else if (res.status === 429 || res.status === 503) {
+            showToast(lang === 'ru'
+              ? 'Сервис распознавания занят — попробуйте ещё раз'
+              : 'Recognition service is busy — try again');
           } else {
-            showToast('Recognition failed (Backend error)');
+            showToast(lang === 'ru' ? 'Не удалось распознать трек' : 'Recognition failed');
           }
         } catch (err) {
-          console.error('Backend fetch failed:', err);
-          showToast('Backend not running');
+          // A thrown error here is a network/transport failure (the request never
+          // completed), distinct from a backend error response handled above.
+          console.error('Recognition request failed:', err);
+          showToast(lang === 'ru'
+            ? 'Нет связи с сервером — проверьте соединение'
+            : 'Could not reach the server — check your connection');
         } finally {
           setIsSearching(false);
           stream.getTracks().forEach(track => track.stop());
+          micStreamRef.current = null;
         }
       };
 

@@ -2,12 +2,42 @@ import asyncio
 import io
 import logging
 import os
+import re
 import tempfile
 
 from tidal_dl_ru.core.router import get_provider_by_name
 from tidal_dl_ru.server import jobs as job_state
 
 logger = logging.getLogger(__name__)
+
+# How many segments to recognize concurrently. Shazam calls are network-bound, so
+# batching them cuts scan wall-time ~N× while a modest cap avoids hammering the API.
+SHAZAM_CONCURRENCY = 6
+
+# Version qualifiers that denote the same recording (kept in sync with the frontend
+# dedupeSetTracks). Stripped only for the Tidal *search query* so "Kidz (Extended
+# Mix)" resolves to the canonical release; the displayed title is left untouched.
+# "Remix" is deliberately NOT stripped — a remix is a different track.
+_VERSION_TAG_RE = re.compile(
+    r"\s*[([]\s*(?:extended(?:\s+mix|\s+version)?|radio(?:\s+edit|\s+version)?|"
+    r"original(?:\s+mix|\s+version)?|club\s+mix|mixed|instrumental)\s*[)\]]\s*",
+    re.IGNORECASE,
+)
+_VERSION_SUFFIX_RE = re.compile(
+    r"\s*[-–]\s*(?:extended(?:\s+mix|\s+version)?|radio\s+edit|"
+    r"original(?:\s+mix|\s+version)?|club\s+mix|mixed)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_title_for_query(title: str) -> str:
+    cleaned = _VERSION_TAG_RE.sub(" ", title or "")
+    cleaned = _VERSION_SUFFIX_RE.sub("", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _dedupe_key(artist: str, title: str) -> str:
+    return f"{(artist or '').lower().strip()}|{_clean_title_for_query(title).lower()}"
 
 
 def _download_progress_hook(job_id: str):
@@ -163,100 +193,95 @@ async def analyze_set_task(
             segments_total=total_segments,
         )
 
-        for i in range(total_segments):
+        def _shazam_segment(seg):
+            buffer = io.BytesIO()
+            seg.export(buffer, format='wav')
+            wav_bytes = buffer.getvalue()
+            shazam = Shazam(wav_bytes)
+            try:
+                res = next(shazam.recognizeSong(), None)
+                if res and len(res) > 1 and 'track' in res[1]:
+                    track = res[1]['track']
+                    artist = track.get('subtitle', 'Unknown')
+                    title = track.get('title', 'Unknown')
+                    return f"{artist} - {title}", artist, title
+            except Exception:
+                logger.debug("set_analyzer: Shazam recognition failed for segment", exc_info=True)
+            return None, None, None
+
+        async def _match_on_tidal(artist: str, title: str):
+            if not provider:
+                return None
+            query = f"{artist} {_clean_title_for_query(title)}".strip()
+            try:
+                tidal_tracks = await asyncio.to_thread(provider.search, query, 1)
+                if tidal_tracks:
+                    return tidal_tracks[0].model_dump()
+            except Exception:
+                logger.debug("set_analyzer: Tidal match lookup failed", exc_info=True)
+            return None
+
+        async def _confirm(artist, title, timestamp):
+            """Append a confirmed track (deduping the same recording seen back-to-back)."""
+            nonlocal last_confirmed
+            info = {
+                "artist": artist or "Unknown",
+                "title": title or "Unknown",
+                "timestamp": timestamp,
+                "matched_track": await _match_on_tidal(artist or "", title or ""),
+            }
+            if results and _dedupe_key(results[-1]["artist"], results[-1]["title"]) == _dedupe_key(info["artist"], info["title"]):
+                # Same recording as the previous confirmed row (e.g. Extended Mix
+                # right after the original) — keep the earlier one, upgrade its match.
+                if not results[-1].get("matched_track") and info["matched_track"]:
+                    results[-1]["matched_track"] = info["matched_track"]
+                return
+            results.append(info)
+            job_state.update_set_tracks(job_id, results)
+
+        # Recognize segments in ordered batches: Shazam calls within a batch run
+        # concurrently (network-bound), but confirmation stays sequential so the
+        # 2-consecutive-detection rule and progressive result list are preserved.
+        for batch_start in range(0, total_segments, SHAZAM_CONCURRENCY):
             if job_state.is_cancelled(job_id):
                 return {"ok": False, "error": "cancelled", "count": len(results)}
 
-            pct = int((i / max(total_segments, 1)) * 100)
-            scan_percent = 20 + int(pct * 0.75)
+            batch = list(range(batch_start, min(batch_start + SHAZAM_CONCURRENCY, total_segments)))
+            segments = [audio[j * interval * 1000: j * interval * 1000 + 10000] for j in batch]
+            detections = await asyncio.gather(
+                *[asyncio.to_thread(_shazam_segment, seg) for seg in segments]
+            )
+
+            for j, (current_track, current_artist, current_title) in zip(batch, detections):
+                start_ms = j * interval * 1000
+                timestamp = f"{start_ms // 60000}:{(start_ms // 1000) % 60:02d}"
+                if current_track:
+                    if current_track == last_confirmed:
+                        pass
+                    elif current_track == pending_track:
+                        await _confirm(current_artist, current_title or pending_track, pending_timestamp)
+                        last_confirmed = current_track
+                        pending_track = None
+                    else:
+                        pending_track = current_track
+                        pending_timestamp = timestamp
+                else:
+                    pending_track = None
+
+            done = min(batch_start + SHAZAM_CONCURRENCY, total_segments)
+            pct = int((done / max(total_segments, 1)) * 100)
             job_state.update_analysis(
                 job_id,
                 phase="scan",
-                percent=scan_percent,
+                percent=20 + int(pct * 0.75),
                 label=f"Analyzing… {pct}%",
-                segments_done=i + 1,
+                segments_done=done,
                 segments_total=total_segments,
                 tracks_found=len(results),
             )
-            start_ms = i * interval * 1000
-            end_ms = start_ms + 10000
-            segment = audio[start_ms:end_ms]
-
-            def _shazam_segment(seg):
-                buffer = io.BytesIO()
-                seg.export(buffer, format='wav')
-                wav_bytes = buffer.getvalue()
-                shazam = Shazam(wav_bytes)
-                try:
-                    res = next(shazam.recognizeSong(), None)
-                    if res and len(res) > 1 and 'track' in res[1]:
-                        track = res[1]['track']
-                        artist = track.get('subtitle', 'Unknown')
-                        title = track.get('title', 'Unknown')
-                        return f"{artist} - {title}", artist, title
-                except Exception:
-                    logger.debug("set_analyzer: Shazam recognition failed for segment", exc_info=True)
-                return None, None, None
-
-            current_track, current_artist, current_title = await asyncio.to_thread(_shazam_segment, segment)
-            timestamp = f"{start_ms // 60000}:{(start_ms // 1000) % 60:02d}"
-
-            if current_track:
-                if current_track == last_confirmed:
-                    pass
-                elif current_track == pending_track:
-                    track_info = {
-                        "artist": current_artist or "Unknown",
-                        "title": current_title or pending_track,
-                        "timestamp": pending_timestamp,
-                        "matched_track": None
-                    }
-
-                    if provider:
-                        query = f"{track_info['artist']} {track_info['title']}"
-                        try:
-                            tidal_tracks = await asyncio.to_thread(provider.search, query, 1)
-                            if tidal_tracks:
-                                track_info["matched_track"] = tidal_tracks[0].model_dump()
-                        except Exception:
-                            logger.debug("set_analyzer: Tidal match lookup failed", exc_info=True)
-
-                    results.append(track_info)
-                    job_state.update_set_tracks(job_id, results)
-                    job_state.update_analysis(
-                        job_id,
-                        phase="scan",
-                        percent=scan_percent,
-                        label=f"Analyzing… {pct}%",
-                        segments_done=i + 1,
-                        segments_total=total_segments,
-                        tracks_found=len(results),
-                    )
-
-                    last_confirmed = current_track
-                    pending_track = None
-                else:
-                    pending_track = current_track
-                    pending_timestamp = timestamp
-            else:
-                pending_track = None
 
         if pending_track and pending_track != last_confirmed:
-            track_info = {
-                "artist": "Unknown",
-                "title": pending_track,
-                "timestamp": pending_timestamp,
-                "matched_track": None,
-            }
-            if provider:
-                try:
-                    tidal_tracks = await asyncio.to_thread(provider.search, pending_track, 1)
-                    if tidal_tracks:
-                        track_info["matched_track"] = tidal_tracks[0].model_dump()
-                except Exception:
-                    logger.debug("set_analyzer: Tidal match lookup failed", exc_info=True)
-            results.append(track_info)
-            job_state.update_set_tracks(job_id, results)
+            await _confirm("Unknown", pending_track, pending_timestamp)
 
         job_state.update_analysis(
             job_id,

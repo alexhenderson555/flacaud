@@ -217,6 +217,7 @@ export function usePlayerHotkeys({
     cycleRepeat,
     toggleLike,
     startTrackRadio,
+    cycleVisualMode,
     audioRef,
     getMainAudioEl,
   ]);
