@@ -482,7 +482,14 @@ export function usePlaybackQuality({
       const forceQualitySwitch = qualitySwitchRef.current;
       if (forceQualitySwitch) qualitySwitchRef.current = false;
 
-      const pausedMidTrack = !forceQualitySwitch && shouldPreservePausedStream(
+      // Only preserve a paused stream if the element's LOADED stream actually belongs to
+      // the current track. On a track switch the element is briefly paused on the previous
+      // track's src; for a blob src, shouldPreservePausedStream's blob branch would compare
+      // the src to itself (activeStreamUrl = the element's own src) and always match, wrongly
+      // preserving the OLD blob → the previous track keeps playing. (Server-URL srcs dodged
+      // this via urlTargetsTrack, which is why clearing the audio cache "fixed" it.)
+      const loadedIsCurrentTrack = Boolean(trackKey) && loadedSrcKeyRef.current.startsWith(`${trackKey}:`);
+      const pausedMidTrack = !forceQualitySwitch && loadedIsCurrentTrack && shouldPreservePausedStream(
         mainEl,
         currentTrack?.provider_id,
         trackDur,
