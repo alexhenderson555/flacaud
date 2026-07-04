@@ -31,6 +31,17 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
   const scWidgetRef = useRef(null);
   const readyRef = useRef(false);
 
+  // Keep the latest callbacks in refs so the (re)mount effect below does NOT depend
+  // on their identity. Otherwise a parent re-render with fresh inline callbacks
+  // (e.g. the analyzer polling once a second) would tear down and recreate the
+  // YouTube player, flashing the embed black mid-analysis.
+  const onReadyRef = useRef(onReady);
+  const onPlayRef = useRef(onPlay);
+  const onPauseRef = useRef(onPause);
+  onReadyRef.current = onReady;
+  onPlayRef.current = onPlay;
+  onPauseRef.current = onPause;
+
   useImperativeHandle(ref, () => ({
     seekTo(seconds) {
       const s = Number(seconds);
@@ -72,7 +83,7 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
     const markReady = () => {
       if (cancelled || readyRef.current) return;
       readyRef.current = true;
-      onReady?.();
+      onReadyRef.current?.();
     };
 
     if (kind === 'youtube') {
@@ -94,8 +105,8 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
           events: {
             onReady: () => markReady(),
             onStateChange: (ev) => {
-              if (ev.data === window.YT.PlayerState.PLAYING) onPlay?.();
-              if (ev.data === window.YT.PlayerState.PAUSED) onPause?.();
+              if (ev.data === window.YT.PlayerState.PLAYING) onPlayRef.current?.();
+              if (ev.data === window.YT.PlayerState.PAUSED) onPauseRef.current?.();
             },
           },
         });
@@ -118,8 +129,8 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
         const widget = window.SC.Widget(scIframeRef.current);
         scWidgetRef.current = widget;
         widget.bind(window.SC.Widget.Events.READY, () => markReady());
-        widget.bind(window.SC.Widget.Events.PLAY, () => onPlay?.());
-        widget.bind(window.SC.Widget.Events.PAUSE, () => onPause?.());
+        widget.bind(window.SC.Widget.Events.PLAY, () => onPlayRef.current?.());
+        widget.bind(window.SC.Widget.Events.PAUSE, () => onPauseRef.current?.());
       }).catch(() => {});
 
       return () => {
@@ -129,7 +140,9 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
     }
 
     return undefined;
-  }, [mediaSrc, kind, ytMountId, onReady, onPlay, onPause]);
+    // Intentionally excludes onReady/onPlay/onPause — they're read via refs so the
+    // player is only rebuilt when the actual media source changes.
+  }, [mediaSrc, kind, ytMountId]);
 
   useEffect(() => {
     if (!readyRef.current) return;
