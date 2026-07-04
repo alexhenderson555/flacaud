@@ -56,6 +56,47 @@ export function markJobSaved(jobId) {
   }
 }
 
+const LOCAL_DL_KEY = 'tidal-local-downloads';
+const LOCAL_DL_CAP = 500;
+
+function readMap(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const map = raw ? JSON.parse(raw) : {};
+    return map && typeof map === 'object' ? map : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Record an instant (from-cache) save locally, keyed by track id → epoch ms. Instant
+ * saves never hit the server download registry, so this is what the "downloaded < 1h
+ * ago" guard consults for them.
+ */
+export function markTrackDownloadedLocally(trackId) {
+  if (!trackId) return;
+  try {
+    const map = readMap(LOCAL_DL_KEY);
+    map[String(trackId)] = Date.now();
+    const keys = Object.keys(map);
+    if (keys.length > LOCAL_DL_CAP) {
+      keys.sort((a, b) => map[a] - map[b])
+        .slice(0, keys.length - LOCAL_DL_CAP)
+        .forEach((k) => delete map[k]);
+    }
+    localStorage.setItem(LOCAL_DL_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/** Epoch ms of the last local instant save for this track, or 0. */
+export function getLocalDownloadTime(trackId) {
+  if (!trackId) return 0;
+  return readMap(LOCAL_DL_KEY)[String(trackId)] || 0;
+}
+
 export function notifyDownloadJobStarted(jobId, { title = null, quality = null, replaces = null } = {}) {
   if (!jobId || typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(DOWNLOAD_JOB_STARTED_EVENT, {

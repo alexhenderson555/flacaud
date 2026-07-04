@@ -18,7 +18,9 @@ import {
   qualityBadgeLabel,
   shouldNotifyDownloadTierFallback,
 } from '../../utils/qualityPrefs';
-import { startDownloadJob, notifyDownloadJobStarted } from '../../utils/downloadJobs';
+import {
+  startDownloadJob, notifyDownloadJobStarted, markTrackDownloadedLocally, getLocalDownloadTime,
+} from '../../utils/downloadJobs';
 import { downloadCachedTrack, isCacheCompleteForDownload } from '../../utils/cache';
 import {
   resolveDownloadQualityForTrack,
@@ -417,22 +419,34 @@ export default function PlayerLogic({ children }) {
           effectivePlan,
           lang,
         });
+      const trackId = String(track.provider_id);
+
+      // "Downloaded < 1h ago" guard — gate BOTH paths. Server downloads live in
+      // downloadedRegistryRef; instant cache saves are only recorded locally (they
+      // never hit the server), so consult both.
+      const registryEntry = downloadedRegistryRef.current[trackId];
+      const serverAtMs = registryEntry?.at ? registryEntry.at * 1000 : 0;
+      const lastDownloadMs = Math.max(serverAtMs, getLocalDownloadTime(trackId));
+      if (lastDownloadMs && Date.now() - lastDownloadMs < 60 * 60 * 1000) {
+        const msg = lang === 'ru'
+          ? 'Вы уже скачивали этот трек менее часа назад. Точно хотите скачать снова?'
+          : 'You downloaded this track less than an hour ago. Download again?';
+        if (!window.confirm(msg)) return;
+      }
+
+      // Instant save straight from cache — if it works we're done. Crucially we do NOT
+      // also start a server job, so the track isn't downloaded (and saved) a second time.
       const cached = await isCacheCompleteForDownload(track, quality);
       if (cached) {
         const saved = await downloadCachedTrack(track, quality);
-        if (saved) showToast(t('quickCacheSave'));
-      }
-      const trackId = String(track.provider_id);
-      const registryEntry = downloadedRegistryRef.current[trackId];
-      if (registryEntry && registryEntry.at) {
-        const downloadedAt = registryEntry.at * 1000;
-        if (Date.now() - downloadedAt < 60 * 60 * 1000) {
-          const msg = lang === 'ru' 
-            ? 'Вы уже скачивали этот трек менее часа назад. Точно хотите скачать снова?' 
-            : 'You downloaded this track less than an hour ago. Download again?';
-          if (!window.confirm(msg)) return;
+        if (saved) {
+          markTrackDownloadedLocally(trackId);
+          showToast(t('quickCacheSave'));
+          return;
         }
       }
+
+      // Not cached (or the instant save failed): fall back to the server download job.
       const url = track.source_url || `https://tidal.com/track/${track.provider_id}`;
       const isPlayingCurrent = isCurrentTrack && isPlaying;
       const optimisticId = `opt-${String(track.provider_id)}-${Date.now()}`;
@@ -444,17 +458,15 @@ export default function PlayerLogic({ children }) {
         optimisticId,
         prefetch: !isPlayingCurrent,
       });
-      if (!cached) {
-        const streamTier = fromPlayer && isCurrentTrack && qualitiesReady ? streamQuality : null;
-        if (shouldNotifyDownloadTierFallback(streamTier, quality)) {
-          const asked = qualityBadgeLabel(streamTier);
-          const got = qualityBadgeLabel(quality);
-          showToast(
-            lang === 'ru'
-              ? `${asked} недоступен для скачивания — загружаем ${got}`
-              : `${asked} not available for download — fetching ${got}`,
-          );
-        }
+      const streamTier = fromPlayer && isCurrentTrack && qualitiesReady ? streamQuality : null;
+      if (shouldNotifyDownloadTierFallback(streamTier, quality)) {
+        const asked = qualityBadgeLabel(streamTier);
+        const got = qualityBadgeLabel(quality);
+        showToast(
+          lang === 'ru'
+            ? `${asked} недоступен для скачивания — загружаем ${got}`
+            : `${asked} not available for download — fetching ${got}`,
+        );
       }
     } catch (err) {
       console.error(err);
