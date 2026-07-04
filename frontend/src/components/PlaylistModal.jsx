@@ -4,11 +4,26 @@ import { motion } from 'framer-motion';
 import { apiGetJson, apiPostJson, apiPutJson } from '../utils/apiClient';
 import { getAccessToken } from '../utils/tokenStorage';
 
-export default function PlaylistModal({ track, onClose, onUpdated }) {
+export default function PlaylistModal({ track, tracks, onClose, onUpdated }) {
   const [playlists, setPlaylists] = useState([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
+  // Bulk mode when `tracks` is passed (e.g. "add all set matches"); single-track
+  // mode otherwise. `items` is the unified list both paths add to the playlist.
+  const items = tracks?.length ? tracks.filter(Boolean) : (track ? [track] : []);
+  const hasItems = items.length > 0;
+
   const isLoggedIn = () => Boolean(getAccessToken());
+
+  const mergeTracks = (existing) => {
+    const seen = new Set(existing.map((t) => String(t.provider_id)));
+    const merged = [...existing];
+    for (const it of items) {
+      const id = String(it.provider_id);
+      if (!seen.has(id)) { seen.add(id); merged.push(it); }
+    }
+    return merged;
+  };
 
   useEffect(() => {
     const fetchPlaylists = async () => {
@@ -35,15 +50,15 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
   const createPlaylist = async () => {
     if (!newPlaylistName.trim()) return;
 
-    let newPlaylist = { id: Date.now().toString(), name: newPlaylistName, tracks: track ? [track] : [] };
+    const seedTracks = mergeTracks([]);
+    let newPlaylist = { id: Date.now().toString(), name: newPlaylistName, tracks: seedTracks };
 
     if (isLoggedIn()) {
       try {
         const dbData = await apiPostJson('/api/playlists', { name: newPlaylistName }, { auth: true });
-        const tracks = track ? [track] : [];
-        newPlaylist = { ...dbData, tracks };
-        if (track) {
-          await apiPutJson(`/api/playlists/${newPlaylist.id}`, { tracks }, { auth: true });
+        newPlaylist = { ...dbData, tracks: seedTracks };
+        if (seedTracks.length) {
+          await apiPutJson(`/api/playlists/${newPlaylist.id}`, { tracks: seedTracks }, { auth: true });
         }
       } catch (e) { console.error(e); }
     }
@@ -52,17 +67,18 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
     savePlaylists(newList);
     setNewPlaylistName('');
     onUpdated?.();
-    if (track) onClose();
+    if (hasItems) onClose();
   };
 
   const addToPlaylist = async (playlistId) => {
-    if (!track) return;
+    if (!hasItems) return;
 
     let updatedPlaylist = null;
     const newPlaylists = playlists.map(p => {
       if (p.id === playlistId) {
-        if (!p.tracks.find(t => String(t.provider_id) === String(track.provider_id))) {
-          updatedPlaylist = { ...p, tracks: [...p.tracks, track] };
+        const merged = mergeTracks(p.tracks);
+        if (merged.length !== p.tracks.length) {
+          updatedPlaylist = { ...p, tracks: merged };
           return updatedPlaylist;
         }
       }
@@ -100,7 +116,7 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 id="playlist-modal-title" style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
-            {track ? 'Add to Playlist' : 'Create Playlist'}
+            {tracks?.length ? `Add ${items.length} tracks to Playlist` : (track ? 'Add to Playlist' : 'Create Playlist')}
           </h3>
           <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
             <X size={24} aria-hidden />
@@ -134,11 +150,11 @@ export default function PlaylistModal({ track, onClose, onUpdated }) {
             className="btn-primary"
             style={{ height: '48px', padding: '0 20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '8px', cursor: !newPlaylistName.trim() ? 'not-allowed' : 'pointer' }}
           >
-            <Plus size={20} /> {track ? 'Create & Add' : 'Create'}
+            <Plus size={20} /> {hasItems ? 'Create & Add' : 'Create'}
           </button>
         </div>
 
-        {track && playlists.length > 0 && (
+        {hasItems && playlists.length > 0 && (
           <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
             <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Existing Playlists</div>
             {playlists.map(p => (

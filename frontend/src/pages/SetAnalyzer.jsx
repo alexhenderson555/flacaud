@@ -3,7 +3,7 @@ import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { showToast } from '../utils/toast';
 import {
   Search, ListMusic, Link as LinkIcon, Loader2, List,
-  DownloadCloud, Radio, ExternalLink, Library,
+  DownloadCloud, Radio, ExternalLink, Library, Heart,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../store/usePlayerStore';
@@ -14,7 +14,8 @@ import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
 import SetDjInsights from '../components/setanalyzer/SetDjInsights';
 import PlaylistModal from '../components/PlaylistModal';
 import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
-import { normalizeTrack } from '../utils/trackNormalize';
+import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
+import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
 import { startDownloadJob, cancelJob } from '../utils/downloadJobs';
 import { enableDjAnalysisPreference } from '../utils/enableDjAnalysis';
 import { apiPostJson } from '../utils/apiClient';
@@ -37,12 +38,15 @@ import {
   normalizeSetMatchedTrack,
   parseSetTimestamp,
   resolveAnalyzerJobOutcome,
+  dedupeSetTracks,
 } from '../utils/setAnalyzerUtils';
 
 export default function SetAnalyzer() {
   const {
     togglePlay,
     playQueue,
+    appendToQueue,
+    playlist,
     currentTrackId,
     isPlaying,
     downloadedTracks,
@@ -74,6 +78,7 @@ export default function SetAnalyzer() {
   const [lastPollAt, setLastPollAt] = useState(null);
   const [error, setError] = useState(null);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
+  const [bulkPlaylistOpen, setBulkPlaylistOpen] = useState(false);
   const [djAnalyzeRequested, setDjAnalyzeRequested] = useState(false);
   const setPlayerSectionRef = useRef(null);
   const resumeToastShown = useRef(false);
@@ -86,6 +91,18 @@ export default function SetAnalyzer() {
     () => setTracks.map((row) => normalizeSetMatchedTrack(row)).filter(Boolean),
     [setTracks],
   );
+
+  // While a set track from THIS analyzer session is playing, feed newly-recognized
+  // matches (arriving via polling) into the live queue so playback rolls into them
+  // instead of stopping at the last match known when the user hit play.
+  const prevPlayableCountRef = useRef(0);
+  useEffect(() => {
+    const activeSetQueue = playlist?.[0]?.__queue_origin === SET_ANALYZER_ORIGIN;
+    if (activeSetQueue && appendToQueue && playableTracks.length > prevPlayableCountRef.current) {
+      appendToQueue(playableTracks);
+    }
+    prevPlayableCountRef.current = playableTracks.length;
+  }, [playableTracks, playlist, appendToQueue]);
 
   const isAnalyzing = status === 'running' || status === 'queued';
 
@@ -113,7 +130,7 @@ export default function SetAnalyzer() {
         (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(decoded),
       );
       if (saved?.setTracks?.length) {
-        setSetTracks(saved.setTracks);
+        setSetTracks(dedupeSetTracks(saved.setTracks));
         setStatus('done');
       }
     }
@@ -191,8 +208,14 @@ export default function SetAnalyzer() {
     const queue = (list?.length ? list : playableTracks).filter(Boolean);
     const normalized = normalizeTrack(track);
     if (!normalized) return;
+    // Tag the queue as a finite set tracklist so it stops at the end instead of
+    // rolling into track-radio (see usePlayerQueue playNext).
+    const finalQueue = queue.length ? queue : [normalized];
+    const taggedQueue = finalQueue.map((tr, i) => (
+      i === 0 ? { ...tr, __queue_origin: SET_ANALYZER_ORIGIN } : tr
+    ));
     const play = playQueue || togglePlay;
-    play(normalized, queue.length ? queue : [normalized]);
+    play(normalized, taggedQueue);
   }, [pauseSetEmbed, playQueue, togglePlay, playableTracks]);
 
   const startAnalysis = async () => {
@@ -258,7 +281,7 @@ export default function SetAnalyzer() {
         const data = await fetchJobStatus(jobId);
         if (!data) return;
         const outcome = resolveAnalyzerJobOutcome(data, t);
-        const tracks = data.set_tracks || [];
+        const tracks = dedupeSetTracks(data.set_tracks || []);
 
         setStatus(outcome.status);
         setSetTracks(tracks);
@@ -325,6 +348,28 @@ export default function SetAnalyzer() {
   const copyTracklist = () => {
     const text = setTracks.map((row) => `${row.timestamp} - ${row.artist} - ${row.title}`).join('\n');
     navigator.clipboard.writeText(text);
+  };
+
+  const addAllToLibrary = () => {
+    if (!playableTracks.length) {
+      showToast(t('noMatchesYet'));
+      return;
+    }
+    const toLike = playableTracks.filter((tr) => !isTrackLiked(likedTracks, tr));
+    if (!toLike.length) {
+      showToast(t('alreadyAllLiked'));
+      return;
+    }
+    toLike.forEach((tr) => toggleLike(tr));
+    showToast(t('addedToLibrary').replace('{n}', String(toLike.length)));
+  };
+
+  const openBulkPlaylist = () => {
+    if (!playableTracks.length) {
+      showToast(t('noMatchesYet'));
+      return;
+    }
+    setBulkPlaylistOpen(true);
   };
 
   const pageStyle = {
@@ -505,6 +550,16 @@ export default function SetAnalyzer() {
                 {' '}
                 {t('copyText')}
               </button>
+              <button type="button" className="btn-secondary" onClick={addAllToLibrary} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 20px' }}>
+                <Heart size={16} />
+                {' '}
+                {t('addAllToLibrary')}
+              </button>
+              <button type="button" className="btn-secondary" onClick={openBulkPlaylist} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 20px' }}>
+                <ListMusic size={16} />
+                {' '}
+                {t('addAllToPlaylist')}
+              </button>
               <button type="button" className="btn-primary" onClick={downloadAll} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 20px' }}>
                 <DownloadCloud size={16} />
                 {' '}
@@ -543,6 +598,13 @@ export default function SetAnalyzer() {
         <PlaylistModal
           track={playlistModalTrack}
           onClose={() => setPlaylistModalTrack(null)}
+        />
+      )}
+
+      {bulkPlaylistOpen && (
+        <PlaylistModal
+          tracks={playableTracks}
+          onClose={() => setBulkPlaylistOpen(false)}
         />
       )}
 

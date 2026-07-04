@@ -191,8 +191,16 @@ export function usePlayerHotkeys({
       }
     };
 
+    // Bridge for UI buttons (e.g. sidebar) that want to open the palette with one
+    // click without threading the overlay setter down through the layout.
+    const openPalette = () => setIsCommandPaletteOpen((prev) => !prev);
+
     window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('flacaud:command-palette', openPalette);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('flacaud:command-palette', openPalette);
+    };
   }, [
     enabled,
     currentTrack,

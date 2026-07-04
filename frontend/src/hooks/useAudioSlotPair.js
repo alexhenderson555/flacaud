@@ -35,6 +35,12 @@ export function useAudioSlotPair() {
   }, [syncPairRefs]);
 
   const swapAudioSlots = useCallback(() => {
+    // Before swapping, ensure the current main slot is paused so it doesn't leak old audio
+    const oldMain = mainOnSlotARef.current ? slotARef.current : slotBRef.current;
+    if (oldMain && !oldMain.paused) {
+      oldMain.pause();
+    }
+    
     mainOnSlotARef.current = !mainOnSlotARef.current;
     syncPairRefs(mainOnSlotARef.current);
     setMainOnSlotA(mainOnSlotARef.current);

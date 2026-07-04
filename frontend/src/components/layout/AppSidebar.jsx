@@ -1,8 +1,12 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ListMusic, User, Repeat, Radio, Flame, Disc, Library, Menu, X, Heart,
+  Search, ListMusic, User, Repeat, Radio, Flame, Disc, Library, Menu, X, Heart, Command,
 } from 'lucide-react';
+
+function openCommandPalette() {
+  window.dispatchEvent(new CustomEvent('flacaud:command-palette'));
+}
 import { BRAND_LOGO_SRC, BRAND_NAME } from '../../brand';
 
 function navClass(isActive, extra = '') {
@@ -50,6 +54,15 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             <Search size={20} />
             <span>{t('search')}</span>
           </NavLink>
+          <button
+            type="button"
+            className="nav-item nav-item-command hide-on-mobile"
+            onClick={openCommandPalette}
+            title="Ctrl+K"
+          >
+            <Command size={20} />
+            <span>{t('commands')}</span>
+          </button>
           <NavLink to="/recommendations" className={navClass('', 'hide-on-mobile')}>
             <Flame size={20} />
             <span>{t('recommendations')}</span>

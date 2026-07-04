@@ -26,6 +26,51 @@ export function normalizeSetMatchedTrack(row) {
   return track;
 }
 
+// Strip only *version* qualifiers that denote the same recording (Extended Mix,
+// Radio Edit, Original Mix, "Mixed", …). Deliberately keeps "Remix" and named
+// remixes — those are genuinely different tracks and must not be merged.
+const VERSION_TAG_RE = /\s*[([]\s*(?:extended(?:\s+mix|\s+version)?|radio(?:\s+edit|\s+version)?|original(?:\s+mix|\s+version)?|club\s+mix|mixed|instrumental)\s*[)\]]\s*/gi;
+const VERSION_SUFFIX_RE = /\s*[-–]\s*(?:extended(?:\s+mix|\s+version)?|radio\s+edit|original(?:\s+mix|\s+version)?|club\s+mix|mixed)\s*$/i;
+
+function baseTitleKey(title) {
+  return String(title || '')
+    .replace(VERSION_TAG_RE, ' ')
+    .replace(VERSION_SUFFIX_RE, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function setRowDedupeKey(row) {
+  const artist = String(row?.artist || row?.matched_track?.artist || '').toLowerCase().trim();
+  return `${artist}|${baseTitleKey(row?.title)}`;
+}
+
+/**
+ * Collapse consecutive tracklist rows that are the same recording in different
+ * versions (e.g. original followed by Extended Mix). Only adjacent duplicates are
+ * merged so a track legitimately replayed later in the mix is preserved. When a
+ * kept row lacks a Tidal match but its duplicate has one, the match is carried over.
+ */
+export function dedupeSetTracks(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return rows || [];
+  const out = [];
+  let prevKey = null;
+  for (const row of rows) {
+    const key = setRowDedupeKey(row);
+    if (key && key === prevKey && out.length) {
+      const kept = out[out.length - 1];
+      if (!kept.matched_track && row.matched_track) {
+        out[out.length - 1] = { ...kept, matched_track: row.matched_track };
+      }
+      continue;
+    }
+    out.push(row);
+    prevKey = key;
+  }
+  return out;
+}
+
 export function parseSetTimestamp(ts) {
   const parts = String(ts || '').split(':').map(Number);
   if (parts.length === 2) return parts[0] * 60 + parts[1];

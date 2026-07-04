@@ -1185,6 +1185,15 @@ input:focus-visible,
   background: var(--bg-surface);
   transform: translate(4px);
 }
+/* Button rendered as a nav item (command palette opener): strip native chrome. */
+button.nav-item {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
 .nav-item.active {
   color: var(--text-primary);
   background: var(--bg-surface-hover);

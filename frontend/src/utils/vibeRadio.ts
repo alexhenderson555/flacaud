@@ -2,6 +2,10 @@ import { normalizeTrack } from './trackNormalize';
 
 export const VIBE_RADIO_ORIGIN = 'vibe-radio';
 
+// A finite, curated queue (e.g. an analyzed DJ-set tracklist). When it ends the
+// player should stop, NOT roll into track-radio the way an open-ended queue does.
+export const SET_ANALYZER_ORIGIN = 'set-analyzer';
+
 export type VibeTrack = ReturnType<typeof normalizeTrack> & {
   __queue_origin?: string;
 };

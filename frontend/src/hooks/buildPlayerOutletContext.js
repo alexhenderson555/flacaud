@@ -38,6 +38,7 @@ export function buildPlayerOutletContext({
     togglePlay: transport.togglePlay,
     playQueue: transport.playQueue,
     playShuffledQueue: transport.playShuffledQueue,
+    appendToQueue: transport.appendToQueue,
     currentTrackId,
     playingTrackId,
     isPlaying,

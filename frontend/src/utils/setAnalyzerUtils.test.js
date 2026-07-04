@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyzerJobSucceededDespiteFailedStatus,
+  dedupeSetTracks,
   formatAnalyzerErrorMessage,
   normalizeSetMatchedTrack,
   parseSetTimestamp,
@@ -102,6 +103,54 @@ describe('normalizeSetMatchedTrack', () => {
       artist: 'A',
       matched_track: { title: 'X' },
     })).toBeNull();
+  });
+});
+
+describe('dedupeSetTracks', () => {
+  const row = (timestamp, artist, title, matched = null) => ({
+    timestamp, artist, title, matched_track: matched,
+  });
+
+  it('merges an original followed by its Extended Mix', () => {
+    const out = dedupeSetTracks([
+      row('78:30', 'Arodes', 'Kidz'),
+      row('81:30', 'Arodes', 'Kidz (Extended Mix)'),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe('Kidz');
+  });
+
+  it('keeps a Remix as a distinct track', () => {
+    const out = dedupeSetTracks([
+      row('0:00', 'The Weeknd', 'Timeless'),
+      row('4:00', 'The Weeknd', 'Timeless (Arodes Remix)'),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('does not merge non-adjacent replays of the same track', () => {
+    const out = dedupeSetTracks([
+      row('0:00', 'A', 'Song'),
+      row('3:00', 'B', 'Other'),
+      row('6:00', 'A', 'Song'),
+    ]);
+    expect(out).toHaveLength(3);
+  });
+
+  it('carries a Tidal match onto the kept row when the first lacks one', () => {
+    const matched = { provider_id: '123', title: 'Kidz' };
+    const out = dedupeSetTracks([
+      row('78:30', 'Arodes', 'Kidz', null),
+      row('81:30', 'Arodes', 'Kidz (Extended Mix)', matched),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].matched_track).toBe(matched);
+  });
+
+  it('handles empty / single-item input', () => {
+    expect(dedupeSetTracks([])).toEqual([]);
+    const single = [row('0:00', 'A', 'B')];
+    expect(dedupeSetTracks(single)).toEqual(single);
   });
 });
 

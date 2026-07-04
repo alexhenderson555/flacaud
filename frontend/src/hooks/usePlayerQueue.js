@@ -35,6 +35,7 @@ import {
   fetchVibeRadioBatch,
   mergeVibeRadioTracks,
   VIBE_RADIO_ORIGIN,
+  SET_ANALYZER_ORIGIN,
 } from '../utils/vibeRadio';
 import { ensureTrackPlaybackReady, trackNeedsPlaybackEnrich } from '../utils/libraryApi';
 import { mergePlaybackTracks, normalizeTrack } from '../utils/trackNormalize';
@@ -397,12 +398,17 @@ export function usePlayerQueue({
     const idle = getPreloadAudioEl?.() ?? preloadAudioRef.current;
     clearIdleAudioSlot(idle);
     if (!playing) return false;
-    if (resumeAt > 0.05) {
-      try {
-        playing.currentTime = resumeAt;
-      } catch {
-        /* ignore */
+    // Always pin the start position. Web-Audio-routed slots keep their src and
+    // currentTime across a swap (clearIdleAudioSlot skips _sourceNode elements), so
+    // a reused slot could otherwise resume mid-track. resumeAt handles genuine
+    // resume; 0 guarantees a fresh track begins at the start.
+    const startAt = resumeAt > 0.05 ? resumeAt : 0;
+    try {
+      if (Math.abs((playing.currentTime || 0) - startAt) > 0.05) {
+        playing.currentTime = startAt;
       }
+    } catch {
+      /* ignore */
     }
     resumeMainPlaybackAfterHandoff(playing, {
       pendingPlayRef,
@@ -486,8 +492,13 @@ export function usePlayerQueue({
             }
           }
           const cur = pl[safeIdx] || currentTrackRef.current;
+          // A finite curated queue (analyzed set tracklist) should stop at the end,
+          // not roll into track-radio — otherwise seeking to the end of the last set
+          // track spins up radio the user never asked for.
+          const isFiniteQueue = queueOriginRef?.current === SET_ANALYZER_ORIGIN;
           if (
-            modes.repeat === REPEAT_OFF
+            !isFiniteQueue
+            && modes.repeat === REPEAT_OFF
             && cur?.provider_id
             && startTrackRadioRef?.current
           ) {
@@ -623,6 +634,30 @@ export function usePlayerQueue({
     }
   }, [resolveQueueIndex, beginPlayback, audioRef, getMainAudioEl, currentTrackRef, playlistRef, modesRef, shuffleEnabled, repeatMode]);
 
+  // Append tracks to the live queue without disturbing the current track/index or
+  // playback position. Used e.g. by the Set Analyzer to feed newly-recognized
+  // matches into the queue while an earlier match is still playing. Dedupes by
+  // provider_id and returns how many were actually added.
+  const appendToQueue = useCallback((tracks) => {
+    const incoming = (Array.isArray(tracks) ? tracks : [tracks]).filter(Boolean);
+    if (!incoming.length) return 0;
+    const pl = playlistRef.current || [];
+    const seen = new Set(pl.map((tr) => String(tr.provider_id)));
+    const fresh = [];
+    for (const tr of incoming) {
+      const norm = normalizeTrack(tr);
+      const id = norm && String(norm.provider_id);
+      if (!id || id === 'undefined' || id === 'null' || seen.has(id)) continue;
+      seen.add(id);
+      fresh.push(norm);
+    }
+    if (!fresh.length) return 0;
+    const newPl = [...pl, ...fresh];
+    syncPlaylistRef(playlistRef, newPl);
+    setPlaylist(newPl);
+    return fresh.length;
+  }, [playlistRef, setPlaylist]);
+
   const nextTrack = useMemo(() => {
     if (!playlist?.length) return null;
     let idx = currentTrackIndex;
@@ -652,6 +687,7 @@ export function usePlayerQueue({
     playNext,
     playPrevious,
     nextTrack,
+    appendToQueue,
     initAudioEngine,
   };
 }
