@@ -72,7 +72,9 @@ export function useMediaSession({
     });
 
     return undefined;
-  }, [enabled, audioRef, playNext, playPrevious]);
+    // currentTrack + toggleLike are dependencies: the thumbs-up/down handlers close over
+    // the current track, so without them the lock-screen like acted on a stale track.
+  }, [enabled, audioRef, playNext, playPrevious, toggleLike, currentTrack]);
 
   useEffect(() => {
     if (!enabled || !('mediaSession' in navigator) || !currentTrack) return;

@@ -33,15 +33,22 @@ export function usePlayerMediaEffects({
   isPlaying = false,
 }) {
   const prevLyricsKeyRef = useRef('');
+  const volumePersistRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem('tidal-volume', volume.toString());
+    // Apply to the elements immediately (responsive), but debounce the localStorage
+    // write — a slider drag fires this many times a second and setItem is synchronous.
     const main = getMainAudioEl?.() ?? audioRef.current;
     const slots = [main, audioRef.current, preloadAudioRef.current].filter(Boolean);
     const unique = [...new Set(slots)];
     if (!fadeInPendingRef.current && !crossfadingRef.current) {
       unique.forEach((el) => { el.volume = volume; });
     }
+    clearTimeout(volumePersistRef.current);
+    volumePersistRef.current = setTimeout(() => {
+      localStorage.setItem('tidal-volume', volume.toString());
+    }, 400);
+    return () => clearTimeout(volumePersistRef.current);
   }, [volume, audioRef, preloadAudioRef, getMainAudioEl, fadeInPendingRef, crossfadingRef]);
 
   useEffect(() => {

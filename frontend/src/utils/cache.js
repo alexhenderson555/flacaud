@@ -114,6 +114,21 @@ export async function prefetchAudioToCache(track, quality = 'HIGH') {
   return job;
 }
 
+// Bounded history of object URLs created from cached blobs. createObjectURL leaks
+// until revoked; we keep the most recent few (main + preload + a little history) and
+// revoke the rest so a long listening session doesn't accumulate URL references.
+const recentObjectUrls = [];
+const OBJECT_URL_CAP = 8;
+
+function trackObjectUrl(url) {
+  recentObjectUrls.push(url);
+  while (recentObjectUrls.length > OBJECT_URL_CAP) {
+    const stale = recentObjectUrls.shift();
+    try { URL.revokeObjectURL(stale); } catch { /* already revoked */ }
+  }
+  return url;
+}
+
 export const getCachedAudioUrl = async (track, quality = 'HIGH') => {
   const cacheKey = cacheKeyFor(track, quality);
   try {
@@ -123,7 +138,7 @@ export const getCachedAudioUrl = async (track, quality = 'HIGH') => {
         await localforage.removeItem(cacheKey);
         return null;
       }
-      return URL.createObjectURL(blob);
+      return trackObjectUrl(URL.createObjectURL(blob));
     }
   } catch (error) {
     console.error('Failed to get cached audio track', error);
