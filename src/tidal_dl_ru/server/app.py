@@ -65,6 +65,7 @@ def _arq(app: FastAPI) -> ArqRedis:
     return app.state.arq
 
 from tidal_dl_ru.server.routers.auth import router as auth_router
+from tidal_dl_ru.server.routers.connected_accounts import router as connected_accounts_router
 from tidal_dl_ru.server.routers.jobs import router as jobs_router
 from tidal_dl_ru.server.routers.library import router as library_router
 from tidal_dl_ru.server.routers.match_rules import router as match_rules_router
@@ -79,6 +80,7 @@ app.include_router(jobs_router)
 app.include_router(sets_router)
 app.include_router(share_router)
 app.include_router(transfer_router)
+app.include_router(connected_accounts_router)
 app.include_router(match_rules_router)
 app.include_router(subscription_router)
 

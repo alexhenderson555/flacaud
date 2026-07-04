@@ -90,6 +90,13 @@ class Settings:
         os.environ.get("TIDALDLRU_SET_AUDIO_CACHE_MAX_BYTES", str(4 * 1024 * 1024 * 1024))
     )
 
+    # Public origin of the site, used to build OAuth redirect URIs for connected
+    # accounts (must match what's registered in each provider's app console).
+    public_base_url: str = os.environ.get("TIDALDLRU_PUBLIC_URL", "https://flacaud.ru").rstrip("/")
+    # Google OAuth client (YouTube Music connector). Spotify reuses SPOTIPY_CLIENT_ID/SECRET.
+    google_oauth_client_id: str = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+    google_oauth_client_secret: str = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
 
 settings = Settings()
 settings.jobs_dir.mkdir(parents=True, exist_ok=True)

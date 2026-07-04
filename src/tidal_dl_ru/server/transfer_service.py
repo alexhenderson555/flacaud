@@ -354,6 +354,45 @@ async def resolve_transfer(
     return result
 
 
+def resolve_from_source_tracks(
+    *,
+    source_tracks: list[Track],
+    source_kind: str,
+    source_title: Optional[str],
+    source_platform: str,
+    user_id: Optional[int] = None,
+) -> TransferResolveResult:
+    """Match already-fetched source tracks (e.g. from a connected account's Liked
+    Songs) to Tidal, reusing the same matching + saved-library recovery as URL imports."""
+    if not source_tracks:
+        raise ProviderError("No tracks found")
+    if len(source_tracks) > MAX_TRANSFER_TRACKS:
+        raise ProviderError(f"Too many tracks ({len(source_tracks)}). Max {MAX_TRANSFER_TRACKS} per import.")
+
+    user_rules = _load_user_rules(user_id)
+    matched, unmatched, details = _match_with_progress(source_tracks, None, user_rules)
+    matched, details, recovered = _recover_unmatched_from_saved_library(
+        user_id=user_id,
+        source_tracks=source_tracks,
+        details=details or [],
+        already_matched=matched,
+    )
+    if recovered:
+        unmatched = max(0, unmatched - recovered)
+
+    return TransferResolveResult(
+        source_kind=source_kind,
+        source_title=source_title,
+        source_platform=source_platform,
+        tracks=matched,
+        source_total=len(source_tracks),
+        unmatched_count=unmatched,
+        skipped_unavailable=0,
+        match_details=details,
+        source_tracks=source_tracks,
+    )
+
+
 def get_cached_resolve(url: str) -> Optional[TransferResolveResult]:
     return _cache_get(url.strip())
 

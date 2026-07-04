@@ -143,6 +143,26 @@ class TransferMatchRule(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
+class ConnectedAccount(SQLModel, table=True):
+    """A user's linked external music account (Spotify, YouTube Music, …).
+
+    Tokens are Fernet-encrypted (server/oauth_crypto.py); this table never holds
+    plaintext credentials. One row per (user, provider).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    provider: str = Field(max_length=32)
+    provider_account_id: Optional[str] = Field(default=None, max_length=256)
+    display_name: Optional[str] = Field(default=None, max_length=256)
+    access_token_enc: Optional[str] = Field(default=None)
+    refresh_token_enc: Optional[str] = Field(default=None)
+    expires_at: Optional[datetime] = Field(default=None)
+    scopes: Optional[str] = Field(default=None)  # JSON list of granted scopes
+    connected_at: datetime = Field(default_factory=_utcnow)
+    last_used_at: Optional[datetime] = Field(default=None)
+
+
 class SavedSetBase(SQLModel):
     url: str = Field(max_length=2048)
     title: str = Field(default="DJ set", max_length=512)

@@ -12,6 +12,8 @@ CONFIG_DIR = Path(user_config_dir("tidal-dl-ru"))
 TOKENS_FILE = CONFIG_DIR / "tokens.json"
 POOL_DB_FILE = CONFIG_DIR / "pool.db"
 POOL_KEY_FILE = CONFIG_DIR / "pool.key"
+# Fernet key for encrypting per-user connected-account OAuth tokens at rest.
+OAUTH_KEY_FILE = CONFIG_DIR / "oauth.key"
 
 DEFAULT_DOWNLOAD_DIR = Path(user_downloads_dir()) / "FlacAud"
 

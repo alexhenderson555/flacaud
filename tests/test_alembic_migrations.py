@@ -40,7 +40,7 @@ def test_fresh_db_upgrade_creates_core_tables(alembic_db_file):
         assert "transfermatchrule" in tables
         assert "playlisttrack" in tables
         row = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert row == "4bd92e6c393a"
+        assert row == "005_connected_accounts"
 
 
 def test_legacy_db_gets_stamped_not_recreated(alembic_db_file):
@@ -55,4 +55,4 @@ def test_legacy_db_gets_stamped_not_recreated(alembic_db_file):
 
     with alembic_db_file.engine.connect() as conn:
         row = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert row == "4bd92e6c393a"
+        assert row == "005_connected_accounts"

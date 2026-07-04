@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from tidal_dl_ru.database.models import (
+    ConnectedAccount,
     Playlist,
     PlaylistTrack,
     SavedSet,
@@ -37,6 +38,11 @@ def delete_user_account(session: Session, user: User) -> None:
         select(TransferMatchRule).where(TransferMatchRule.user_id == user.id)
     ).all():
         session.delete(rule)
+
+    for account in session.exec(
+        select(ConnectedAccount).where(ConnectedAccount.user_id == user.id)
+    ).all():
+        session.delete(account)
 
     revoke_all_refresh_sessions_for_user(session, user.id)
     session.delete(user)
