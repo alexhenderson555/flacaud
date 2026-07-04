@@ -1,4 +1,4 @@
-import { apiFetch, apiPostJson, parseJsonSafe, ApiError } from './apiClient';
+import { apiFetch, apiGetJson, apiPostJson, parseJsonSafe, ApiError } from './apiClient';
 
 /** yt-dlp + Tidal matching can take a while on large playlists */
 const TRANSFER_TIMEOUT_MS = 180_000;
@@ -52,6 +52,56 @@ export async function previewTransfer(url, lang = 'en', { onProgress, signal } =
   }
   onProgress?.({ phase: 'queued', done: 0, total: 0, matched: 0, percent: 2, label: '' });
   return pollTransferTask(taskId, accessToken, { lang, onProgress, signal });
+}
+
+// --- Connected accounts (per-user OAuth) ---
+
+export async function getConnectedAccounts(lang = 'en') {
+  const data = await apiGetJson('/api/connected-accounts', { auth: true, lang });
+  return data?.accounts || [];
+}
+
+export async function authorizeAccount(provider, lang = 'en') {
+  return apiPostJson(`/api/connected-accounts/${provider}/authorize`, {}, { auth: true, lang });
+}
+
+export async function pollDeviceAuth(provider, deviceCode, lang = 'en') {
+  return apiPostJson(
+    `/api/connected-accounts/${provider}/poll`,
+    { device_code: deviceCode },
+    { auth: true, lang },
+  );
+}
+
+export async function disconnectAccount(provider, lang = 'en') {
+  const res = await apiFetch(`/api/connected-accounts/${provider}`, {
+    method: 'DELETE',
+    auth: true,
+    lang,
+  });
+  return parseJsonSafe(res);
+}
+
+export async function getAccountPlaylists(provider, lang = 'en') {
+  const data = await apiGetJson(`/api/connected-accounts/${provider}/playlists`, { auth: true, lang });
+  return data?.playlists || [];
+}
+
+export async function importFromAccount(
+  provider,
+  { playlistId, addToLibrary = true, createPlaylist = true, playlistName = null },
+  lang = 'en',
+) {
+  return apiPostJson(
+    `/api/connected-accounts/${provider}/import`,
+    {
+      playlist_id: playlistId,
+      add_to_library: addToLibrary,
+      create_playlist: createPlaylist,
+      playlist_name: playlistName,
+    },
+    { auth: true, lang, timeoutMs: TRANSFER_TIMEOUT_MS, retries: 1 },
+  );
 }
 
 export async function importTransfer(
