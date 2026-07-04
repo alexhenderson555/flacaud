@@ -65,10 +65,12 @@
   cursor: pointer;
 }
 
+/* Compact action-sheet list: icon + label rows that all fit without scrolling,
+   instead of oversized two-column cards. */
 .mobile-menu-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
@@ -77,19 +79,23 @@
 
 .mobile-menu-grid__item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 10px;
-  padding: 18px 16px;
-  border-radius: 16px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 500;
-  min-height: 88px;
+  min-height: 52px;
+}
+
+.mobile-menu-grid__item svg {
+  flex-shrink: 0;
 }
 
 .mobile-menu-grid__item:active {
@@ -240,25 +246,21 @@
   }
 
   .mobile-menu-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: 1fr;
-    gap: 12px;
+    gap: 8px;
     flex: 1;
-    align-content: stretch;
     min-height: 0;
   }
 
   .mobile-menu-grid__item {
-    min-height: 108px;
-    height: 100%;
-    padding: 20px 16px;
+    min-height: 54px;
+    padding: 12px 16px;
     font-size: 1rem;
-    gap: 12px;
-    border-radius: 18px;
+    gap: 14px;
+    border-radius: 14px;
   }
 
   .mobile-menu-grid__item svg {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
   }
 }

@@ -51,7 +51,11 @@ export async function fetchLyricsForTrack(track) {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // The backend races several lyric providers (LRCLIB + NetEase/Musixmatch/Genius/…)
+  // and can legitimately take up to ~20s. Give it headroom past that so a slow-but-
+  // successful lookup isn't cut off and wrongly remembered as "no lyrics".
+  let aborted = false;
+  const timeoutId = setTimeout(() => { aborted = true; controller.abort(); }, 22000);
 
   const promise = fetch(buildLyricsUrl(track), { signal: controller.signal })
     .then(async (res) => {
@@ -59,7 +63,10 @@ export async function fetchLyricsForTrack(track) {
       const data = await res.json();
       return data.lyrics || [];
     })
-    .catch(() => [])
+    .catch((err) => {
+      if (err?.name === 'AbortError') aborted = true;
+      return [];
+    })
     .finally(() => {
       clearTimeout(timeoutId);
       inflight.delete(key);
@@ -70,7 +77,9 @@ export async function fetchLyricsForTrack(track) {
   if (lines.length > 0) {
     lyricsCache.set(key, lines);
     emptyCacheUntil.delete(key);
-  } else {
+  } else if (!aborted) {
+    // Only remember "no lyrics" for a genuine empty result — not for a timeout,
+    // so the next attempt can retry the slow providers.
     emptyCacheUntil.set(key, Date.now() + EMPTY_CACHE_MS);
   }
   return lines;
