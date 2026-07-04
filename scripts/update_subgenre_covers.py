@@ -17,6 +17,63 @@ load_dotenv()
 from tidal_dl_ru.core.router import get_provider_by_name
 
 
+async def _artist_picture_url(c, artist_id):
+    """Resolve an artist's picture URL, or None if the artist has no picture."""
+    artist_data = await asyncio.to_thread(c._get, f"/artists/{artist_id}", countryCode="US")
+    pic_id = artist_data.get('picture')
+    name = artist_data.get('name')
+    if pic_id:
+        return f"https://resources.tidal.com/images/{pic_id.replace('-', '/')}/320x320.jpg", name
+    return None, name
+
+
+async def resolve_subgenre_cover(tidal_p, artists):
+    """
+    Find a cover for a subgenre by walking its artist list.
+
+    Tries each artist in turn (not just the first): searches a track by that
+    artist, resolves the primary artist id, and takes the artist picture. If no
+    artist in the list has a picture, falls back to the first track's album cover
+    so every subgenre with at least one findable track gets an image.
+    """
+    album_fallback = None
+    for artist_name in artists:
+        try:
+            tracks = await asyncio.to_thread(tidal_p.search, artist_name, 1)
+        except Exception as e:
+            print(f"    Error searching for {artist_name}: {e}")
+            continue
+
+        if not tracks:
+            print(f"    Track for {artist_name} not found on Tidal.")
+            await asyncio.sleep(0.4)
+            continue
+
+        track = tracks[0]
+        if album_fallback is None and getattr(track, 'cover_url', None):
+            album_fallback = track.cover_url
+
+        artist_id = track.artist_ids[0] if track.artist_ids else None
+        if artist_id:
+            try:
+                with tidal_p._client() as c:
+                    pic_url, name = await _artist_picture_url(c, artist_id)
+                if pic_url:
+                    print(f"    Found picture for {name}: {pic_url}")
+                    return pic_url
+                print(f"    No picture for {name}, trying next artist...")
+            except Exception as e:
+                print(f"    Error fetching artist {artist_id}: {e}")
+        else:
+            print(f"    Track found but no artist IDs for {artist_name}")
+        await asyncio.sleep(0.4)
+
+    if album_fallback:
+        print(f"    Using album cover fallback: {album_fallback}")
+        return album_fallback
+    return None
+
+
 async def update_subgenres():
     db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src', 'tidal_dl_ru', 'data', 'genres_db.json'))
     with open(db_path, 'r', encoding='utf-8') as f:
@@ -41,40 +98,13 @@ async def update_subgenres():
             if subgenre.get('image'):
                 continue
 
-            top_artist = artists[0]
-            print(f"  Searching for top artist: {top_artist} (subgenre: {subgenre['name']})")
-
-            try:
-                # Use track search to bypass 403 on artist search
-                tracks = await asyncio.to_thread(tidal_p.search, top_artist, 1)
-
-                if tracks and len(tracks) > 0:
-                    track = tracks[0]
-                    # Get the primary artist ID
-                    artist_id = None
-                    if track.artist_ids and len(track.artist_ids) > 0:
-                        artist_id = track.artist_ids[0]
-
-                    if artist_id:
-                        with tidal_p._client() as c:
-                            artist_data = await asyncio.to_thread(c._get, f"/artists/{artist_id}", countryCode="US")
-
-                        pic_id = artist_data.get('picture')
-                        if pic_id:
-                            pic_url = f"https://resources.tidal.com/images/{pic_id.replace('-', '/')}/320x320.jpg"
-                            subgenre['image'] = pic_url
-                            updated_count += 1
-                            print(f"    Found picture for {artist_data.get('name')}: {pic_url}")
-                        else:
-                            print(f"    No picture for {artist_data.get('name')}")
-                    else:
-                        print(f"    Track found but no artist IDs for {top_artist}")
-                else:
-                    print(f"    Track for {top_artist} not found on Tidal.")
-
-                await asyncio.sleep(0.5)
-            except Exception as e:
-                print(f"    Error searching for {top_artist}: {e}")
+            print(f"  Resolving cover for subgenre: {subgenre['name']} ({len(artists)} artists)")
+            cover = await resolve_subgenre_cover(tidal_p, artists)
+            if cover:
+                subgenre['image'] = cover
+                updated_count += 1
+            else:
+                print(f"    No cover found for {subgenre['name']} after trying all artists.")
 
     if updated_count > 0:
         with open(db_path, 'w', encoding='utf-8') as f:
