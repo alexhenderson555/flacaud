@@ -7,6 +7,7 @@ import json
 import logging
 import random
 from collections import defaultdict
+from typing import Protocol, runtime_checkable
 
 from sqlmodel import Session, select
 
@@ -20,6 +21,24 @@ from tidal_dl_ru.providers.tidal.provider import _to_universal
 from tidal_dl_ru.server.rec_cache import cache_get, cache_invalidate, cache_set
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class RadioClient(Protocol):
+    """Minimal provider client surface for radio/recommendation building.
+
+    Decouples recommendations.py from the concrete TidalClient so a second
+    streaming provider can be wired in by returning its own client from
+    `_with_client` — no other change needed in this module.
+    """
+
+    def get_track(self, track_id: str | int) -> TidalTrack: ...
+    def get_track_radio(self, track_id: str | int, limit: int = 25) -> list: ...
+    def get_similar_tracks(self, track_id: str | int, limit: int = 25) -> list: ...
+    def get_track_mix_tracks(self, track_id: str | int, limit: int = 25) -> list: ...
+    def get_artist_radio(self, artist_id: str | int, limit: int = 25) -> list: ...
+    def search_artists(self, query: str, limit: int = 10, offset: int = 0) -> list: ...
+    def get_artist_top_tracks(self, artist_id: str | int) -> list: ...
 
 _SEED_ARTISTS = (
     "The Weeknd", "Radiohead", "Daft Punk", "Kendrick Lamar", "Arctic Monkeys",
@@ -40,6 +59,46 @@ _JUNK_TITLE_FRAGMENTS = (
     "sleep sounds",
 )
 
+# Content-farm / aggregator "artist" names that pollute genre seed lists.
+# These come from the genres_db.json generator (which collected primary artists
+# from a track search per subgenre) and are mostly compilation/playlist channels,
+# cover bands, and ambient-noise products — not real artists worth radioing from.
+_JUNK_ARTIST_FRAGMENTS = (
+    "royalty free",
+    "study music",
+    "study fruits",
+    "study sounds",
+    "sleep sounds",
+    "sleep music",
+    "deep sleep",
+    "white noise",
+    "nature sounds",
+    "binaural",
+    "asmr",
+    "lofi hip hop nation",
+    "lofi cat",
+    "lofi girl",
+    "guitar heroes",
+    "tribute band",
+    "karaoke",
+    "top 20",
+    "top 40",
+    "atltop20",
+    "various artists",
+)
+
+
+def _artist_name_ok(name: str | None) -> bool:
+    if not name:
+        return False
+    n = name.lower().strip()
+    if any(frag in n for frag in _JUNK_ARTIST_FRAGMENTS):
+        return False
+    # " DJs" / " dj's" suffix usually marks content-farm compilation channels
+    if n.endswith(" djs") or n.endswith(" dj's"):
+        return False
+    return True
+
 import os
 
 _GENRES_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "genres_db.json")
@@ -58,7 +117,7 @@ def _get_seeds_for_genre(genre_name: str) -> list[str]:
     for cat in db.values():
         for sub in cat.get("subgenres", []):
             if sub["name"].lower() == genre_name.lower():
-                return sub.get("artists", [])
+                return [a for a in sub.get("artists", []) if _artist_name_ok(a)]
     return []
 
 def _track_ok(track: Track) -> bool:
@@ -136,7 +195,7 @@ def _merge_full_track_meta(base: Track, full: Track) -> Track:
     return base.model_copy(update=patch) if patch else base
 
 
-async def _finalize_track_covers(client: TidalClient | None, tracks: list[Track]) -> list[Track]:
+async def _finalize_track_covers(client: RadioClient | None, tracks: list[Track]) -> list[Track]:
     """Resolve per-track album art — radio/similar list items often share a stub cover UUID."""
     if not client or not tracks:
         return tracks
@@ -165,7 +224,7 @@ async def _finalize_track_covers(client: TidalClient | None, tracks: list[Track]
     return out
 
 
-def _enrich_tidal_uni(client: TidalClient | None, uni: Track) -> Track:
+def _enrich_tidal_uni(client: RadioClient | None, uni: Track) -> Track:
     if not client:
         return uni
     if uni.cover_url and (uni.duration_s or 0) > 0 and uni.album_id:
@@ -186,7 +245,7 @@ def _append_unique(
     *,
     exclude_artist_ids: set[str] | None = None,
     limit: int,
-    client: TidalClient | None = None,
+    client: RadioClient | None = None,
     max_per_artist: int = _MAX_PER_ARTIST,
 ) -> None:
     exclude_artist_ids = exclude_artist_ids or set()
@@ -326,7 +385,7 @@ async def _with_client():
 
 
 async def _fetch_track_neighbourhood(
-    client: TidalClient,
+    client: RadioClient,
     track_id: str,
     per_source: int = 40,
 ) -> tuple[list, list, list]:
@@ -350,7 +409,7 @@ async def _fetch_track_neighbourhood(
 
 
 async def _collect_track_neighbourhood(
-    client: TidalClient,
+    client: RadioClient,
     track_id: str,
     tracks: list[Track],
     seen: set[str],
@@ -371,7 +430,7 @@ async def _collect_track_neighbourhood(
 
 
 async def _expand_similar_graph(
-    client: TidalClient,
+    client: RadioClient,
     anchor_track_ids: list[str],
     tracks: list[Track],
     seen: set[str],
@@ -406,7 +465,7 @@ async def _expand_similar_graph(
 
 
 async def _sparse_artist_radio_fallback(
-    client: TidalClient,
+    client: RadioClient,
     artist_ids: list[str],
     tracks: list[Track],
     seen: set[str],
@@ -548,6 +607,53 @@ async def build_track_radio(
     return out
 
 
+async def _fetch_genre_seed_tracks(
+    client: RadioClient,
+    artist_names: list[str],
+    seen: set[str],
+    *,
+    per_artist: int = 3,
+    max_artists: int = 5,
+) -> list[Track]:
+    """Resolve real artist entities via /search (type=ARTISTS) and pull their top
+    tracks. Searching tracks by artist name surfaces content titled with that
+    name (covers, tributes, samples) rather than the artist's own work, which is
+    why genre stations drifted toward obscure/misattributed tracks.
+    """
+    chosen = artist_names[:max_artists]
+    sem = asyncio.Semaphore(4)
+
+    async def _resolve(name: str) -> list[Track]:
+        async with sem:
+            try:
+                artists = await asyncio.to_thread(client.search_artists, name, 3)
+            except Exception as e:
+                logger.debug("search_artists '%s' failed: %s", name, e)
+                return []
+            if not artists:
+                return []
+            # Pick the first matching artist entity (Tidal ranks by relevance).
+            artist = artists[0]
+            try:
+                top = await asyncio.to_thread(client.get_artist_top_tracks, artist.id)
+            except Exception as e:
+                logger.debug("top tracks %s failed: %s", artist.id, e)
+                return []
+            return [_to_universal(t) for t in (top or [])[:per_artist]]
+
+    results = await asyncio.gather(*[_resolve(n) for n in chosen])
+    flat: list[Track] = []
+    for group in results:
+        for u in group:
+            pid = str(u.provider_id)
+            if pid in seen or not _track_ok(u):
+                continue
+            flat.append(u)
+            seen.add(pid)
+    random.shuffle(flat)
+    return flat
+
+
 async def build_recommendations(
     limit: int,
     user: User | None,
@@ -583,24 +689,20 @@ async def build_recommendations(
     try:
         seed_tids: list[str] = []
         if genre:
-            genre_tracks = []
             seed_artists = _get_seeds_for_genre(genre)
             if not seed_artists:
                 # Fallback to general generic if subgenre is perfectly unknown
                 logger.warning(f"No seeds found for genre '{genre}', falling back to general list")
                 seed_artists = _get_seeds_for_genre("Pop")
 
-            # Pick 2-3 random seed artists to generate infinite variety for the radio
-            chosen_artists = random.sample(seed_artists, min(3, len(seed_artists)))
+            # Pick 5 random seed artists (was 3 — too few caused repetitive radio
+            # pulled from whatever 2-3 names the dice landed on). Resolving real
+            # artist entities + top tracks in parallel keeps latency flat.
+            chosen_artists = random.sample(seed_artists, min(5, len(seed_artists)))
 
-            try:
-                for artist_name in chosen_artists:
-                    # search for top tracks by this artist
-                    art_tracks = await asyncio.to_thread(p.search, artist_name, 3)
-                    genre_tracks.extend(art_tracks)
-                random.shuffle(genre_tracks)
-            except Exception as e:
-                logger.error(f"Failed to search for genre artists: {e}")
+            genre_tracks = await _fetch_genre_seed_tracks(
+                client, chosen_artists, seen, per_artist=3, max_artists=5,
+            )
 
             genre_tids: list[str] = []
             for t in genre_tracks[:6]:

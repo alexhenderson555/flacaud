@@ -3,7 +3,8 @@
 import pytest
 from fastapi import HTTPException
 
-from tidal_dl_ru.server.routers.catalog import (
+from tidal_dl_ru.server.routers.catalog import _parse_exclude_ids
+from tidal_dl_ru.server.routers.ai_playlist import (
     _artist_name_matches,
     _clean_artist_query_name,
     _extract_artist_focus,
@@ -11,7 +12,6 @@ from tidal_dl_ru.server.routers.catalog import (
     _library_seed_titles_from_query,
     _looks_like_vibe_prompt,
     _normalize_ai_query,
-    _parse_exclude_ids,
     _strip_artist_focus_filler,
     _vibe_fallback_search_terms,
 )

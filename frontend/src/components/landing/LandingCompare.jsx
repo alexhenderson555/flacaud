@@ -3,7 +3,7 @@ import { Check, Minus } from 'lucide-react';
 function Cell({ value, partialLabel }) {
   if (value === true) {
     return (
-      <span className="landing-compare__yes" aria-label="Yes">
+      <span className="landing-compare__yes" role="img" aria-label="Yes">
         <Check size={18} strokeWidth={2.5} />
       </span>
     );
@@ -12,7 +12,7 @@ function Cell({ value, partialLabel }) {
     return <span className="landing-compare__partial">{partialLabel}</span>;
   }
   return (
-    <span className="landing-compare__no" aria-label="No">
+    <span className="landing-compare__no" role="img" aria-label="No">
       <Minus size={18} />
     </span>
   );

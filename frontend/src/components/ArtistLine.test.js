@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { stemSplitterDict } from '../locales/stemSplitterDict';
+import { transitionFinderDict } from '../locales/transitionFinderDict';
 
 describe('ArtistLine accessibility pattern', () => {
-  it('stem splitter dict covers UI labels used on page', () => {
+  it('transition finder dict covers UI labels used on page', () => {
     const required = [
-      'title', 'titleBold', 'desc', 'placeholder', 'splitTrack', 'splitting',
-      'vocals', 'instrumental', 'downloadFlac',
+      'title', 'titleBold', 'desc', 'seedPlaceholder', 'results',
+      'bpmTolerance', 'refresh',
     ];
     for (const key of required) {
-      expect(stemSplitterDict.en[key], key).toBeTruthy();
-      expect(stemSplitterDict.ru[key], key).toBeTruthy();
+      expect(transitionFinderDict.en[key], key).toBeTruthy();
+      expect(transitionFinderDict.ru[key], key).toBeTruthy();
     }
   });
 });

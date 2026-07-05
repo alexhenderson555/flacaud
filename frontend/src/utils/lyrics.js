@@ -51,11 +51,8 @@ export async function fetchLyricsForTrack(track) {
   }
 
   const controller = new AbortController();
-  // The backend races several lyric providers (LRCLIB + NetEase/Musixmatch/Genius/…)
-  // and can legitimately take up to ~20s. Give it headroom past that so a slow-but-
-  // successful lookup isn't cut off and wrongly remembered as "no lyrics".
   let aborted = false;
-  const timeoutId = setTimeout(() => { aborted = true; controller.abort(); }, 22000);
+  const timeoutId = setTimeout(() => { aborted = true; controller.abort(); }, 10000);
 
   const promise = fetch(buildLyricsUrl(track), { signal: controller.signal })
     .then(async (res) => {

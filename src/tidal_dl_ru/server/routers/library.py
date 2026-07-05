@@ -147,6 +147,40 @@ def remove_from_library(
     return {"ok": True}
 
 
+@router.get("/transitions/{provider}/{provider_id}")
+def find_track_transitions(
+    provider: str,
+    provider_id: str,
+    bpm_tolerance: int = 6,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Rank the user's library by DJ transition compatibility with a seed track.
+
+    Returns compatible tracks (those with bpm + camelot_key populated) scored
+    by harmonic + BPM fit. Tracks without DJ analysis are skipped — the
+    Transition Finder is most useful after the library has been analyzed.
+    """
+    from tidal_dl_ru.server.transitions import find_transitions
+
+    if provider != "tidal":
+        raise HTTPException(status_code=400, detail="Only tidal provider supported")
+    limit = max(1, min(limit, 50))
+    bpm_tolerance = max(0, min(bpm_tolerance, 50))
+
+    saved = list(session.exec(
+        select(SavedTrack).where(SavedTrack.user_id == current_user.id)
+    ).all())
+    return {
+        "seed": str(provider_id),
+        "tracks": find_transitions(
+            saved, str(provider_id),
+            bpm_tolerance=bpm_tolerance, limit=limit,
+        ),
+    }
+
+
 @router.get("/playlists", response_model=List[dict])
 def get_playlists(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     statement = (

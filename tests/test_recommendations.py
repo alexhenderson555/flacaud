@@ -7,7 +7,10 @@ from tidal_dl_ru.providers.tidal.models import Artist as TidalArtist
 from tidal_dl_ru.providers.tidal.models import Track as TidalTrack
 from tidal_dl_ru.server.recommendations import (
     _append_unique,
+    _artist_name_ok,
+    _fetch_genre_seed_tracks,
     _finalize_track_covers,
+    _get_seeds_for_genre,
     _track_ok,
     _tracks_needing_cover_enrich,
     build_recommendations,
@@ -45,6 +48,66 @@ def test_track_ok_allows_missing_cover():
         duration_s=200,
     )
     assert _track_ok(bare)
+
+
+def test_artist_name_ok_filters_content_farm():
+    assert _artist_name_ok("Daft Punk")
+    assert _artist_name_ok("Orbital")
+    assert not _artist_name_ok("Royalty Free Dance Music DJs")
+    assert not _artist_name_ok("Deep Sleep")
+    assert not _artist_name_ok("Study Fruits Music")
+    assert not _artist_name_ok("Lofi Hip Hop Nation")
+    assert not _artist_name_ok("Heavy Metal Guitar Heroes")
+    assert not _artist_name_ok("Various Artists")
+    assert not _artist_name_ok(None)
+    assert not _artist_name_ok("")
+
+
+def test_get_seeds_for_genre_filters_junk_artists(monkeypatch):
+    import tidal_dl_ru.server.recommendations as rec
+
+    monkeypatch.setattr(
+        rec, "_get_genres_db",
+        lambda: {"Electronic": {"subgenres": [
+            {"name": "Techno", "artists": ["Orbital", "Royalty Free Dance Music DJs", "qonran", "Deep Sleep"]},
+        ]}},
+    )
+    seeds = _get_seeds_for_genre("Techno")
+    assert "Orbital" in seeds
+    assert "Royalty Free Dance Music DJs" not in seeds
+    assert "Deep Sleep" not in seeds
+
+
+@pytest.mark.asyncio
+async def test_fetch_genre_seed_tracks_resolves_artists_and_top_tracks():
+    # search_artists returns real artist entities; top tracks come from that ID.
+    artists = [TidalArtist.model_validate({"id": 55, "name": "Orbital"})]
+
+    class FakeClient:
+        def search_artists(self, name, limit=10, offset=0):
+            assert name == "Orbital"
+            return artists
+
+        def get_artist_top_tracks(self, artist_id):
+            assert int(artist_id) == 55
+            return [_tidal_track(700, "Halcyon", artist_id=55)]
+
+    out = await _fetch_genre_seed_tracks(FakeClient(), ["Orbital"], set())
+    assert len(out) == 1
+    assert out[0].provider_id == "700"
+
+
+@pytest.mark.asyncio
+async def test_fetch_genre_seed_tracks_skips_seen():
+    class FakeClient:
+        def search_artists(self, name, limit=10, offset=0):
+            return [TidalArtist.model_validate({"id": 1, "name": name})]
+
+        def get_artist_top_tracks(self, artist_id):
+            return [_tidal_track(800, "Already Played", artist_id=1)]
+
+    out = await _fetch_genre_seed_tracks(FakeClient(), ["X"], seen={"800"})
+    assert out == []
 
 
 def test_track_ok_rejects_daily_mix_titles():

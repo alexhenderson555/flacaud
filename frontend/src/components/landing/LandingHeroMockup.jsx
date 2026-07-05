@@ -42,7 +42,7 @@ export default function LandingHeroMockup({ lang, flat = false }) {
               <span className="landing-hero-preview__dur">
                 {Math.floor(r.duration / 60)}:{String(r.duration % 60).padStart(2, '0')}
               </span>
-              <input type="checkbox" readOnly checked className="landing-hero-preview__check" />
+              <input type="checkbox" readOnly checked tabIndex={-1} className="landing-hero-preview__check" />
             </div>
           ))}
         </div>

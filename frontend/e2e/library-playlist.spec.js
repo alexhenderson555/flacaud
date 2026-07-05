@@ -18,6 +18,10 @@ test('add to library from player updates library page immediately', async ({ pag
   await installE2EAuth(page);
   await installPlayerStubs(page, { searchTracks: [TRACK] });
 
+  // installApiStubs registers a catch-all **/api/library handler that returns
+  // '[]' for ALL methods — it would shadow the test's POST handler below.
+  // Unroute the generic one so our method-aware handler is the only one.
+  await page.unroute('**/api/library');
   await page.route('**/api/library', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(libraryItems) });
@@ -37,13 +41,14 @@ test('add to library from player updates library page immediately', async ({ pag
   await startSearchPlayback(page, { providerId: '777001', query: 'e2e', title: 'E2E Library Track' });
   await expect(page.getByTestId('player-track-title')).toContainText('E2E Library Track', { timeout: 15_000 });
 
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().includes('/api/library') && r.request().method() === 'POST' && r.ok(),
-      { timeout: 20_000 },
-    ),
-    page.getByTestId('player-like-btn').click(),
-  ]);
+  // Set up the POST listener BEFORE the click — the like action can fire the
+  // POST within milliseconds, racing with waitForResponse-after-click.
+  const postResponse = page.waitForResponse(
+    (r) => r.url().includes('/api/library') && r.request().method() === 'POST' && r.ok(),
+    { timeout: 20_000 },
+  );
+  await page.getByTestId('player-like-btn').click();
+  await postResponse;
 
   await page.goto('/library');
   await expect(page.getByRole('main').getByText('E2E Library Track')).toBeVisible({ timeout: 10000 });
@@ -126,6 +131,10 @@ test('sequential playback requests next stream url', async ({ page }) => {
   await installE2EAuth(page);
   await installPlayerStubs(page, { searchTracks: tracks });
 
+  // Replace the default stream mock from installPlayerStubs with a logging one.
+  // page.route runs handlers in registration order — the first fulfill() wins,
+  // so the default routeStream handler would shadow this one without the unroute.
+  await page.unroute('**/api/stream/**');
   await page.route('**/api/stream/**', async (route) => {
     streamLog.push(route.request().url());
     await route.fulfill({
@@ -140,8 +149,16 @@ test('sequential playback requests next stream url', async ({ page }) => {
   await startSearchPlayback(page, { providerId: '9001', query: 'e2e', title: 'Track One' });
 
   await page.waitForResponse((r) => r.url().includes('/api/stream/') && r.url().includes('9001') && r.ok(), { timeout: 20_000 });
+
+  // Set up the next-stream listener BEFORE the click — the player can preload
+  // the next track's stream URL within milliseconds of the next-button click,
+  // and waitForResponse-after-click races with that fetch.
+  const nextStream = page.waitForResponse(
+    (r) => r.url().includes('/api/stream/') && r.url().includes('9002') && r.ok(),
+    { timeout: 20_000 },
+  );
   await page.getByTestId('player-next-btn').click();
-  await page.waitForResponse((r) => r.url().includes('/api/stream/') && r.url().includes('9002') && r.ok(), { timeout: 20_000 });
+  await nextStream;
 
   expect(streamLog.some((u) => u.includes('/9001'))).toBeTruthy();
   expect(streamLog.some((u) => u.includes('/9002'))).toBeTruthy();

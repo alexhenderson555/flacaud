@@ -11,7 +11,6 @@ import json
 from typing import Optional
 
 from tidal_dl_ru.core.models import Track
-from tidal_dl_ru.server.settings import settings
 from tidal_dl_ru.providers.user_library import (
     AccountAuth,
     ConnectorError,
@@ -23,6 +22,7 @@ from tidal_dl_ru.providers.user_library import (
     UserLibraryConnector,
     register_connector,
 )
+from tidal_dl_ru.server.settings import settings
 
 
 def _credentials():

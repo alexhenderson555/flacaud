@@ -1,12 +1,8 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ListMusic, User, Repeat, Radio, Flame, Disc, Library, Menu, X, Heart, Command,
+  Search, ListMusic, User, Repeat, Radio, Flame, ArrowLeftRight, Library, Menu, X, Heart,
 } from 'lucide-react';
-
-function openCommandPalette() {
-  window.dispatchEvent(new CustomEvent('flacaud:command-palette'));
-}
 import { BRAND_LOGO_SRC, BRAND_NAME } from '../../brand';
 
 function navClass(isActive, extra = '') {
@@ -19,7 +15,7 @@ const MOBILE_MORE_LINKS = [
   { to: '/sync', icon: Repeat, labelKey: 'transfer' },
   { to: '/analyzer', icon: ListMusic, labelKey: 'setAnalyzer' },
   { to: '/set-library', icon: Library, labelKey: 'setLibrary' },
-  { to: '/splitter', icon: Disc, labelKey: 'stemSplitter' },
+  { to: '/transitions', icon: ArrowLeftRight, labelKey: 'transitionFinder' },
 ];
 
 export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen }) {
@@ -54,15 +50,6 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             <Search size={20} />
             <span>{t('search')}</span>
           </NavLink>
-          <button
-            type="button"
-            className="nav-item nav-item-command hide-on-mobile"
-            onClick={openCommandPalette}
-            title="Ctrl+K"
-          >
-            <Command size={20} />
-            <span>{t('commands')}</span>
-          </button>
           <NavLink to="/recommendations" className={navClass('', 'hide-on-mobile')}>
             <Flame size={20} />
             <span>{t('recommendations')}</span>
@@ -95,9 +82,9 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             <Library size={20} />
             <span>{t('setLibrary')}</span>
           </NavLink>
-          <NavLink to="/splitter" className={navClass('', 'hide-on-mobile')}>
-            <Disc size={20} />
-            <span>{t('stemSplitter')}</span>
+          <NavLink to="/transitions" className={navClass('', 'hide-on-mobile')}>
+            <ArrowLeftRight size={20} />
+            <span>{t('transitionFinder')}</span>
           </NavLink>
 
           <NavLink to="/account" className={navClass('', 'nav-item-account mobile-only')}>

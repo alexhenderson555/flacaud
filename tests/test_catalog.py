@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from tidal_dl_ru.core.lyrics import _cleanup_lyrics_lines, parse_lrc_lines
 from tidal_dl_ru.core.models import Track
 from tidal_dl_ru.server.app import app
-from tidal_dl_ru.server.routers.catalog import (
+from tidal_dl_ru.server.routers.ai_playlist import (
     _extract_artist_focus,
     _extract_artist_similar,
     _library_seed_titles_from_query,
@@ -34,11 +34,13 @@ SAMPLE = Track(
 
 @pytest.fixture
 def mock_tidal_provider():
-    with patch("tidal_dl_ru.server.routers.catalog.get_provider_by_name") as gp:
+    with patch("tidal_dl_ru.server.routers.catalog.get_provider_by_name") as gp, \
+         patch("tidal_dl_ru.server.routers.ai_playlist.get_provider_by_name") as gp_ai:
         provider = MagicMock()
         provider.search_page.return_value = ([SAMPLE], True)
         provider.search.return_value = [SAMPLE]
         gp.return_value = provider
+        gp_ai.return_value = provider
         yield provider
 
 
@@ -209,7 +211,7 @@ def test_ai_playlist_artist_similar_uses_radio(mock_tidal_provider, monkeypatch)
     neighbour = SAMPLE.model_copy(update={"title": "Drive", "artists": ["&ME"]})
 
     with patch(
-        "tidal_dl_ru.server.routers.catalog._artist_similar_playlist",
+        "tidal_dl_ru.server.routers.ai_playlist._artist_similar_playlist",
         new=AsyncMock(return_value=[neighbour]),
     ) as mock_similar:
         res = client.post(
@@ -226,7 +228,7 @@ def test_ai_playlist_artist_focus_uses_tidal_not_vibe(mock_tidal_provider, monke
     moojo = SAMPLE.model_copy(update={"title": "Dancing", "artists": ["Moojo"]})
 
     with patch(
-        "tidal_dl_ru.server.routers.catalog._artist_focus_playlist",
+        "tidal_dl_ru.server.routers.ai_playlist._artist_focus_playlist",
         new=AsyncMock(return_value=[moojo]),
     ) as mock_focus:
         res = client.post("/api/ai-playlist", json={"query": "moojo tracks", "limit": 5})

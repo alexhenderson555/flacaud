@@ -107,12 +107,14 @@ def healthz() -> dict:
     }
 
 
+from tidal_dl_ru.server.routers.ai_playlist import router as ai_playlist_router
 from tidal_dl_ru.server.routers.api import router as api_router
 from tidal_dl_ru.server.routers.catalog import router as catalog_router
 from tidal_dl_ru.server.routers.client_errors import router as client_errors_router
 from tidal_dl_ru.server.routers.media import router as media_router
 
 app.include_router(api_router)
+app.include_router(ai_playlist_router)
 app.include_router(client_errors_router)
 app.include_router(catalog_router)
 app.include_router(media_router)

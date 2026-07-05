@@ -18,9 +18,9 @@ from tidal_dl_ru.database.models import User
 from tidal_dl_ru.providers.base import ProviderError
 from tidal_dl_ru.providers.user_library import (
     ConnectorNotConfigured,
+    all_connectors,
     ensure_connectors_loaded,
     get_connector,
-    all_connectors,
 )
 from tidal_dl_ru.server import connected_accounts_service as svc
 from tidal_dl_ru.server.oauth_crypto import sign_state, verify_state

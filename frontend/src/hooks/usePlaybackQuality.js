@@ -14,8 +14,6 @@ import {
   resolveStreamBypass,
   sameStreamResource,
   isActivelyPlayingAudio,
-  mergeProbeWithCatalogHint,
-  sanitizeQualitiesForPlayer,
   visibleQualitiesForTrack,
   streamableQualitiesForTrack,
   pickMaxQualityForTrack,
@@ -32,46 +30,9 @@ import {
 import { readQualityProbeCache, writeQualityProbeCache } from '../utils/qualityProbeCache';
 import { waitForLosslessStreamReady } from '../utils/streamReady';
 import { shouldPreservePausedStream, shouldIgnoreStreamError, urlTargetsTrack } from '../utils/playerTransportLogic';
+import { probeLosslessMeta, normalizeProbeResult } from '../utils/qualityProbeHelpers';
 
 const LOSSLESS_TIERS = new Set(['LOSSLESS', 'HI_RES']);
-
-function probeLosslessMeta(probe) {
-  if (!probe?.lossless?.sample_rate) return {};
-  return {
-    sampleRate: probe.lossless.sample_rate,
-    bitDepth: probe.lossless.bit_depth ?? null,
-  };
-}
-
-function normalizeProbeResult(data, trackKey, catalogQuality) {
-  if (!data?.available?.length) {
-    return {
-      available: ['HIGH'],
-      downloadable: ['HIGH'],
-      max: 'HIGH',
-      actual: {},
-      probeData: { available: ['HIGH'], max_quality: 'HIGH', actual: {}, _trackKey: trackKey },
-    };
-  }
-  const raw = sanitizeQualitiesForPlayer(data.available);
-  const probeMax = data.max_quality && data.max_quality !== 'LOW'
-    ? data.max_quality
-    : raw[raw.length - 1] || 'HIGH';
-  const { available: merged, max } = mergeProbeWithCatalogHint(raw, probeMax, catalogQuality);
-  // HIGH is 320k AAC and can never resolve to a lossless codec. A probe that
-  // backfilled actual["HIGH"] from a higher tier makes the picker snap back to
-  // Lossless right after you pick 320k — cap it to the tier the request yields.
-  const actual = { ...(data.actual || {}) };
-  if (actual.HIGH && /LOSSLESS|HI_RES/i.test(String(actual.HIGH))) actual.HIGH = 'HIGH';
-  const probeData = { ...data, actual, _trackKey: trackKey };
-  return {
-    available: merged,
-    downloadable: sanitizeQualitiesForPlayer(data.downloadable?.length ? data.downloadable : merged),
-    max,
-    actual,
-    probeData,
-  };
-}
 
 /**
  * Per-track quality probe, stream URL, auto tier selection, and safe fallback.
