@@ -85,7 +85,6 @@ async def create_job(
         req.karaoke,
         req.dj_analyze,
         req.match_tidal,
-        req.split,
         _job_id=job_id,
     )
 
