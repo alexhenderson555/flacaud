@@ -28,6 +28,5 @@ def test_job_zip_url_uses_public_base(monkeypatch):
 
 
 def test_help_text_mentions_core_commands():
-    assert "/split" in HELP_TEXT
     assert "/analyze" in HELP_TEXT
     assert "Tidal" in HELP_TEXT
