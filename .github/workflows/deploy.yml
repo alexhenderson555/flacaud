@@ -39,13 +39,33 @@ jobs:
           # via a git tag (deploy-<sha>) for auditability.
           script: |
             set -euo pipefail
-            cd /opt/tidal-dl-ru
+            DEPLOY_PATH="/opt/tidal-dl-ru"
+            REPO_URL="https://github.com/alexhenderson555/flacaud.git"
+            REF="${{ steps.meta.outputs.ref }}"
+
+            # Clone the repo if it doesn't exist yet (first CI-based deploy).
+            # Previously the server was deployed via tar+SCP, so /opt/tidal-dl-ru
+            # may exist without a .git directory. In that case, back it up and
+            # clone fresh — .env and jobs/ are preserved.
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              echo "No git repo at $DEPLOY_PATH — cloning fresh"
+              if [ -d "$DEPLOY_PATH" ]; then
+                mv "$DEPLOY_PATH" "${DEPLOY_PATH}.backup.$(date +%s)"
+              fi
+              git clone "$REPO_URL" "$DEPLOY_PATH"
+              # Restore .env from backup if it existed
+              if [ -f "${DEPLOY_PATH}.backup."*/.env ] 2>/dev/null; then
+                cp "${DEPLOY_PATH}.backup."*/.env "$DEPLOY_PATH/.env"
+              fi
+            fi
+
+            cd "$DEPLOY_PATH"
             PREV_HEAD="$(git rev-parse HEAD)"
             SHA="${{ steps.meta.outputs.sha }}"
             echo "Deploying $SHA (was $PREV_HEAD)"
 
             git fetch origin
-            git reset --hard origin/${{ steps.meta.outputs.ref }}
+            git reset --hard "origin/$REF"
 
             cd frontend && npm ci && npm run build && cd ..
 
