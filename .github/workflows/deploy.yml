@@ -76,7 +76,11 @@ jobs:
             git fetch origin
             git reset --hard "origin/$REF"
 
-            cd frontend && npm ci && npm run build && cd ..
+            # Build the frontend inside a Docker container — the server has
+            # Docker but no Node.js. The old tar deploy shipped a pre-built
+            # dist/; now we build it on-server via a throwaway node container.
+            echo "Building frontend via Docker..."
+            docker run --rm -v "$DEPLOY_PATH/frontend:/app" -w /app node:22-alpine sh -c "npm ci && npm run build"
 
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
             if grep -q '^TIDAL_USE_POSTGRES=1' .env 2>/dev/null || grep -q '^DATABASE_URL=postgresql' .env 2>/dev/null; then
@@ -105,7 +109,7 @@ jobs:
             if [ "$HEALTH_OK" != "true" ]; then
               echo "Health check failed after 60s — rolling back to $PREV_HEAD"
               git reset --hard "$PREV_HEAD"
-              cd frontend && npm ci && npm run build && cd ..
+              docker run --rm -v "$DEPLOY_PATH/frontend:/app" -w /app node:22-alpine sh -c "npm ci && npm run build"
               $COMPOSE build api worker bot
               $COMPOSE up -d --remove-orphans
               $COMPOSE restart caddy api bot
