@@ -37,9 +37,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-worker = [
-    "demucs>=4.0.0",
-]
+worker = []
 dj = [
     "aubio>=0.4.9",
 ]

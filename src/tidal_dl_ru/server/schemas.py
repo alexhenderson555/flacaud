@@ -30,7 +30,6 @@ class JobCreate(BaseModel):
     karaoke: bool = False
     dj_analyze: bool = False
     match_tidal: bool = False
-    split: bool = False
 
     @field_validator("url")
     @classmethod

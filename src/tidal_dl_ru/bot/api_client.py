@@ -47,7 +47,6 @@ class APIClient:
         karaoke: bool = False,
         dj_analyze: bool = False,
         match_tidal: bool = False,
-        split: bool = False,
         job_type: str = "download",
         user_id: Optional[int] = None,
     ) -> JobStatus:
@@ -61,7 +60,6 @@ class APIClient:
                 "karaoke": karaoke,
                 "dj_analyze": dj_analyze,
                 "match_tidal": match_tidal,
-                "split": split,
             },
             headers=self._auth_headers(user_id),
         )

@@ -163,14 +163,12 @@ async def download_url(
     karaoke: bool = False,
     dj_analyze: bool = False,
     match_tidal: bool = False,
-    split: bool = False,
 ) -> dict:
     """ARQ task: fetch URL → produce files. Updates job state in Redis as it goes."""
     log.info(
-        "job_start job_id=%s quality=%s split=%s url=%s",
+        "job_start job_id=%s quality=%s url=%s",
         job_id,
         quality,
-        split,
         url[:200],
         extra={"event": "job_start", "job_id": job_id},
     )
@@ -205,67 +203,21 @@ async def download_url(
                 job_state.mark_failed(job_id, "Could not match any tracks on Tidal.")
                 return {"ok": False, "error": "match_failed"}
 
-        if split:
-            track = tracks[0]
-            job_state.mark_running(job_id, 2, [f"Vocals: {track.title}", f"Instrumental: {track.title}"])
-            job_dir = settings.jobs_dir / job_id
-            job_dir.mkdir(parents=True, exist_ok=True)
-            q = Quality(quality)
+        job_state.mark_running(job_id, len(tracks), [t.title for t in tracks])
 
-            from tidal_dl_ru.core.split import split_audio_demucs
+        job_dir = settings.jobs_dir / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
 
-            # Download the track first
-            job_state.update_track(job_id, 0, status="downloading")
-            job_state.update_track(job_id, 1, status="downloading")
+        q = Quality(quality)
+        for idx, track in enumerate(tracks):
+            await asyncio.to_thread(
+                _download_sync, job_id, idx, track, q, lyrics, job_dir,
+                karaoke=karaoke, dj_analyze=dj_analyze,
+            )
 
-            base = job_dir / _filename(track)
-            try:
-                path = await asyncio.to_thread(provider.download, track, base, q)
-                if not path:
-                    raise RuntimeError("Failed to download track for splitting")
-            except (ProviderError, OSError, httpx.HTTPError, ValueError, RuntimeError) as e:
-                job_state.update_track(job_id, 0, status="failed", error=str(e))
-                job_state.update_track(job_id, 1, status="failed", error=str(e))
-                job_state.mark_failed(job_id, str(e))
-                return {"ok": False, "error": str(e)}
-
-            # Split it
-            try:
-                split_res = await split_audio_demucs(str(path), str(job_dir))
-
-                # Sign and register files
-                v_path = Path(split_res.vocals_path)
-                i_path = Path(split_res.instrumental_path)
-
-                v_token = sign_file(job_id, str(v_path.relative_to(job_dir)).replace("\\", "/"))
-                i_token = sign_file(job_id, str(i_path.relative_to(job_dir)).replace("\\", "/"))
-
-                job_state.update_track(job_id, 0, status="done", bytes_written=v_path.stat().st_size, bytes_total=v_path.stat().st_size, file_token=v_token)
-                job_state.update_track(job_id, 1, status="done", bytes_written=i_path.stat().st_size, bytes_total=i_path.stat().st_size, file_token=i_token)
-            except (OSError, ValueError, RuntimeError) as e:
-                job_state.update_track(job_id, 0, status="failed", error=str(e))
-                job_state.update_track(job_id, 1, status="failed", error=str(e))
-                job_state.mark_failed(job_id, str(e))
-                return {"ok": False, "error": str(e)}
-
-            job_state.mark_done(job_id)
-            return {"ok": True, "count": 2}
-        else:
-            job_state.mark_running(job_id, len(tracks), [t.title for t in tracks])
-
-            job_dir = settings.jobs_dir / job_id
-            job_dir.mkdir(parents=True, exist_ok=True)
-
-            q = Quality(quality)
-            for idx, track in enumerate(tracks):
-                await asyncio.to_thread(
-                    _download_sync, job_id, idx, track, q, lyrics, job_dir,
-                    karaoke=karaoke, dj_analyze=dj_analyze,
-                )
-
-            job_state.mark_done(job_id)
-            log.info("job_done job_id=%s tracks=%s", job_id, len(tracks), extra={"event": "job_done", "job_id": job_id})
-            return {"ok": True, "count": len(tracks)}
+        job_state.mark_done(job_id)
+        log.info("job_done job_id=%s tracks=%s", job_id, len(tracks), extra={"event": "job_done", "job_id": job_id})
+        return {"ok": True, "count": len(tracks)}
     except Exception as e:  # noqa: BLE001
         log.exception("job_failed job_id=%s error=%s", job_id, e, extra={"event": "job_failed", "job_id": job_id})
         job_state.mark_failed(job_id, f"{type(e).__name__}: {e}")

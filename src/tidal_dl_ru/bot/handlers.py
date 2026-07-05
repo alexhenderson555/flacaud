@@ -57,7 +57,6 @@ HELP_TEXT = (
     "/subscribe — тарифы\n"
     "/karaoke — вкл/выкл перевод текста на русский\n"
     "/dj — вкл/выкл BPM + тональность\n"
-    "/split <ссылка Tidal> — разделить трек на вокал и музыку\n"
     "/analyze <ссылка YouTube/SoundCloud> — распознать треки в DJ-сете\n"
     "\n🎤 Отправь голосовое — распознаю и скачаю трек!"
 )
@@ -321,75 +320,6 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
     msg = f"✅ Скачано {sent} треков."
     if len(result.tracks) > 1:
         msg += f"\n\n📦 Скачать плейлист целиком (ZIP):\n{_job_zip_url(job.job_id)}"
-    await status_msg.edit_text(msg)
-
-
-@router.message(Command("split"))
-async def cmd_split(message: Message, api: APIClient) -> None:
-    """Split a track into vocals and instrumentals."""
-    tg_user = message.from_user
-    if not tg_user:
-        return
-
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2:
-        await message.answer("Использование: /split <ссылка на трек Tidal>")
-        return
-
-    url = parts[1]
-    url_match = _TIDAL_URL_RE.search(url)
-    if not url_match:
-        await message.answer("Нужна ссылка на трек Tidal.")
-        return
-    url = url_match.group(0)
-
-    user_rec = get_or_create(tg_user.id, username=tg_user.username, first_name=tg_user.first_name)
-    allowed, user = check_and_increment(tg_user.id)
-    if not allowed:
-        await message.answer("⛔ Лимит исчерпан. Попробуйте позже.")
-        return
-
-    status_msg = await message.answer("✂️ Разделяю трек на вокал и музыку (это может занять пару минут)...")
-
-    try:
-        job = await api.create_job(
-            url,
-            karaoke=False,
-            dj_analyze=False,
-            match_tidal=False,
-            split=True,
-            user_id=user_rec.id,
-        )
-    except Exception:
-        logger.exception("bot handler error")
-        await status_msg.edit_text("❌ Произошла ошибка. Попробуйте позже.")
-        return
-
-    try:
-        result = await api.wait_for_job(job.job_id, user_id=user_rec.id)
-    except TimeoutError:
-        await status_msg.edit_text("⏰ Таймаут — операция заняла слишком долго.")
-        return
-
-    if result.status == "failed":
-        await status_msg.edit_text("❌ Не удалось разделить трек.")
-        return
-
-    sent = 0
-    for track in result.tracks:
-        if track.status != "done" or not track.file_token:
-            continue
-        try:
-            content, filename = await api.download_file(track.file_token)
-            if len(content) > bot_settings.tg_max_file_size:
-                continue
-            doc = BufferedInputFile(content, filename=filename)
-            await message.answer_document(doc, caption=f"🎵 {track.title}")
-            sent += 1
-        except Exception:
-            pass
-
-    msg = "✅ Готово!"
     await status_msg.edit_text(msg)
 
 

@@ -87,6 +87,13 @@ jobs:
             echo "Building frontend via Docker..."
             docker run --rm -v "$DEPLOY_PATH/frontend:/app" -w /app node:22-alpine sh -c "npm ci && npm run build"
 
+            # Prune old/dangling Docker images to free disk space before the
+            # build — the worker image (torch + demucs ~2GB) from the previous
+            # Stem Splitter deploy fills the disk. Safe: only removes dangling
+            # images, not running containers.
+            docker system prune -f --filter "until=1h" || true
+            docker image prune -f || true
+
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
             if grep -q '^TIDAL_USE_POSTGRES=1' .env 2>/dev/null || grep -q '^DATABASE_URL=postgresql' .env 2>/dev/null; then
               COMPOSE="$COMPOSE -f docker-compose.postgres.yml"
