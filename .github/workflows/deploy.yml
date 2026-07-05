@@ -37,6 +37,11 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_SSH_PASSWORD }}
           envs: GH_TOKEN
+          # 30 minutes — the build pulls node:22-alpine for frontend, then
+          # docker compose build api worker bot (uv sync + torch/demucs for
+          # worker). On a VPS this takes ~15-20 min on first deploy, ~5 min
+          # on subsequent (cached layers). The default 10m is too tight.
+          command_timeout: 30m
           # Capture the previous HEAD before deploy so we can roll back if the
           # post-deploy health check fails. Tag the deploy with the commit SHA
           # via a git tag (deploy-<sha>) for auditability.
