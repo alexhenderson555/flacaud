@@ -30,23 +30,29 @@ jobs:
 
       - name: Deploy via SSH (with rollback on health failure)
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          envs: GH_TOKEN
           # Capture the previous HEAD before deploy so we can roll back if the
           # post-deploy health check fails. Tag the deploy with the commit SHA
           # via a git tag (deploy-<sha>) for auditability.
           script: |
             set -euo pipefail
             DEPLOY_PATH="/opt/tidal-dl-ru"
-            REPO_URL="https://github.com/alexhenderson555/flacaud.git"
+            # Use the x-access-token user with the GitHub token for authenticated
+            # clone/fetch — the repo is private, so anonymous HTTPS prompts for
+            # credentials and fails in non-interactive SSH.
+            REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/alexhenderson555/flacaud.git"
             REF="${{ steps.meta.outputs.ref }}"
 
             # Clone the repo if it doesn't exist yet (first CI-based deploy).
             # Previously the server was deployed via tar+SCP, so /opt/tidal-dl-ru
             # may exist without a .git directory. In that case, back it up and
-            # clone fresh — .env and jobs/ are preserved.
+            # clone fresh — .env is preserved from the backup.
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               echo "No git repo at $DEPLOY_PATH — cloning fresh"
               if [ -d "$DEPLOY_PATH" ]; then
@@ -54,12 +60,15 @@ jobs:
               fi
               git clone "$REPO_URL" "$DEPLOY_PATH"
               # Restore .env from backup if it existed
-              if [ -f "${DEPLOY_PATH}.backup."*/.env ] 2>/dev/null; then
+              if ls "${DEPLOY_PATH}.backup."*/.env 1>/dev/null 2>&1; then
                 cp "${DEPLOY_PATH}.backup."*/.env "$DEPLOY_PATH/.env"
+                echo "Restored .env from backup"
               fi
             fi
 
             cd "$DEPLOY_PATH"
+            # Update the remote URL with the current token (tokens expire).
+            git remote set-url origin "$REPO_URL"
             PREV_HEAD="$(git rev-parse HEAD)"
             SHA="${{ steps.meta.outputs.sha }}"
             echo "Deploying $SHA (was $PREV_HEAD)"
