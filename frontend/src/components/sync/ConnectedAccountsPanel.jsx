@@ -204,6 +204,7 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
             <a href={device.verification_url} target="_blank" rel="noreferrer" className="ca-modal__link">
               {device.verification_url}
             </a>
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
             <div 
               className="ca-modal__code" 
               title={t('Click to copy', 'Нажмите, чтобы скопировать')}
