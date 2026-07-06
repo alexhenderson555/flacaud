@@ -535,6 +535,9 @@ input {
 .track-row__artist {
   color: var(--text-secondary);
   font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 .track-row__duration {
   color: var(--text-muted);
