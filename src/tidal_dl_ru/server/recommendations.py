@@ -709,13 +709,9 @@ async def build_recommendations(
                 if t.provider_id and str(t.provider_id) not in seen:
                     genre_tids.append(str(t.provider_id))
                     seen.add(str(t.provider_id))
-            # Personalize: blend a few of the listener's own library tracks in as
-            # extra radio seeds so the station reflects their taste, not just the
-            # static genre artists. Genre still leads (interleaved first); with an
-            # empty library it stays pure genre.
-            lib_rows = _pick_seed_tracks(saved, n=min(3, len(saved))) if saved else []
-            lib_tids = [str(r.provider_id) for r in lib_rows]
-            seed_tids = _interleave_round_robin(genre_tids, lib_tids) if lib_tids else genre_tids
+            # We do NOT blend the listener's own random library tracks into a genre station,
+            # because if their library is Indie Rock and they ask for Afro House, they will get Indie Rock mixed in!
+            seed_tids = genre_tids
         else:
             seed_rows = _pick_seed_tracks(saved)
             seed_tids = [str(r.provider_id) for r in seed_rows]
