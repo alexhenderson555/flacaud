@@ -115,6 +115,7 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             exit={{ opacity: 0, y: 40 }}
             onClick={closeMenu}
           >
+            {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
             <div className="mobile-menu-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="mobile-menu-sheet__head">
                 <h2 className="mobile-menu-sheet__title">{t('moreOptions')}</h2>
