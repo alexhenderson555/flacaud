@@ -52,7 +52,7 @@ export async function fetchLyricsForTrack(track) {
 
   const controller = new AbortController();
   let aborted = false;
-  const timeoutId = setTimeout(() => { aborted = true; controller.abort(); }, 10000);
+  const timeoutId = setTimeout(() => { aborted = true; controller.abort(); }, 20000);
 
   const promise = fetch(buildLyricsUrl(track), { signal: controller.signal })
     .then(async (res) => {
