@@ -115,25 +115,27 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             exit={{ opacity: 0, y: 40 }}
             onClick={closeMenu}
           >
-            <div className="mobile-menu-overlay__header" role="button" tabIndex={0} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}>
-              <h2 className="mobile-menu-overlay__title">{t('moreOptions')}</h2>
-              <button type="button" className="mobile-menu-overlay__close" onClick={closeMenu} aria-label="Close">
-                <X size={22} />
-              </button>
+            <div className="mobile-menu-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-menu-sheet__head">
+                <h2 className="mobile-menu-sheet__title">{t('moreOptions')}</h2>
+                <button type="button" className="mobile-menu-sheet__close" onClick={closeMenu} aria-label="Close">
+                  <X size={22} />
+                </button>
+              </div>
+              <nav className="mobile-menu-grid" style={{ padding: '16px' }} aria-label={t('moreOptions')}>
+                {MOBILE_MORE_LINKS.map(({ to, icon: Icon, labelKey }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={({ isActive }) => `mobile-menu-grid__item${isActive ? ' active' : ''}`}
+                    onClick={closeMenu}
+                  >
+                    <Icon size={22} color="var(--accent-solid)" />
+                    <span>{t(labelKey)}</span>
+                  </NavLink>
+                ))}
+              </nav>
             </div>
-            <nav className="mobile-menu-grid" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} aria-label={t('moreOptions')}>
-              {MOBILE_MORE_LINKS.map(({ to, icon: Icon, labelKey }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) => `mobile-menu-grid__item${isActive ? ' active' : ''}`}
-                  onClick={closeMenu}
-                >
-                  <Icon size={22} color="var(--accent-solid)" />
-                  <span>{t(labelKey)}</span>
-                </NavLink>
-              ))}
-            </nav>
           </motion.div>
         )}
       </AnimatePresence>

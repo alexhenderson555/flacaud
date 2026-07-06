@@ -237,9 +237,7 @@
 
 /* ── Mobile “More options” — fill the sheet ── */
 @media (width <= 768px) {
-  .mobile-menu-overlay {
-    padding: max(16px, env(safe-area-inset-top)) 12px max(20px, env(safe-area-inset-bottom));
-  }
+
 
   .mobile-menu-overlay__header {
     margin-bottom: 16px;
