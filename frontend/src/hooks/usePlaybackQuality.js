@@ -863,6 +863,5 @@ export function usePlaybackQuality({
     handleStreamError,
     pendingSeekRef,
     pendingPlayAfterSeekRef,
-    updatePreloadForPlaylist,
   };
 }
