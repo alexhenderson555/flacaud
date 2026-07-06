@@ -104,6 +104,12 @@ export default function KaraokeMode({
         <div className="karaoke-mode__brand">
           <Mic2 size={22} aria-hidden />
           <span>{title}</span>
+          {currentTrack?.title ? (
+            <span className="karaoke-mode__now">
+              {currentTrack.title}
+              {currentTrack.artists?.length ? ` — ${currentTrack.artists.join(', ')}` : ''}
+            </span>
+          ) : null}
         </div>
         <button
           type="button"

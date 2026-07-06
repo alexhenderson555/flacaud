@@ -4321,6 +4321,16 @@ html.karaoke-mode-open body {
   font-size: 1rem;
   font-weight: 600;
   display: flex;
+  flex-wrap: wrap;
+}
+.karaoke-mode__now {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.85rem;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .karaoke-mode__close {
   cursor: pointer;

@@ -211,3 +211,34 @@ def test_lyrics_api_enriches_from_tidal(mock_provider, mock_thread, client):
         assert kwargs["isrc"] == "ISRC1"
         assert kwargs["album"] == "Album"
         assert kwargs["duration"] == 200
+
+
+def test_clean_plain_lyrics_strips_genius_junk():
+    from tidal_dl_ru.core.lyrics import clean_plain_lyrics
+
+    genius = "\n".join([
+        "19 Contributors",
+        "Some Song Lyrics",
+        "[Paroles de \"Some Song\"]",
+        "[Couplet 1 : Artist]",
+        "First real line",
+        "Second real line",
+        "You might also like",
+        "5Embed",
+    ])
+    cleaned = clean_plain_lyrics(genius, "Some Song")
+    assert cleaned == "First real line\nSecond real line"
+    # No leftover Genius scaffolding.
+    for junk in ("Contributors", "Lyrics", "[Couplet", "[Paroles", "Embed", "might also like"):
+        assert junk not in cleaned
+
+
+def test_clean_plain_lyrics_rejects_wrong_song():
+    from tidal_dl_ru.core.lyrics import clean_plain_lyrics
+
+    genius = "Youm wara youm Lyrics\n[Couplet 1 : Zamdane]\nOn m'a dit qu'parler blesse"
+    # Header names a different song than the one playing -> reject rather than
+    # show unrelated lyrics (loose match on a shared featured artist).
+    assert clean_plain_lyrics(genius, "The Rapture Pt.III") is None
+    # Same song -> kept.
+    assert clean_plain_lyrics(genius, "Youm wara youm") == "On m'a dit qu'parler blesse"

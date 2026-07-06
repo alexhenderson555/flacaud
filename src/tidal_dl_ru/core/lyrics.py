@@ -9,6 +9,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeout
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -54,6 +55,62 @@ _SECTION_LINE_RE = re.compile(
     r")\s*(?:\d+|[ivx]+)?\s*\]?\s*[:：]?\s*$",
     re.IGNORECASE,
 )
+
+# --- Genius plain-text scrape artifacts (unsynced lyrics) -------------------
+# "19 Contributors", "Translations", "<Song> Lyrics" header, "[Couplet 1 : X]"
+# / "[Paroles de …]" section markers, and the "…Embed"/"You might also like" tail.
+_GENIUS_CONTRIB_RE = re.compile(r"^\d+\s+contributors?\b", re.IGNORECASE)
+_GENIUS_LYRICS_HEADER_RE = re.compile(r"^(?P<title>.+?)\s+lyrics$", re.IGNORECASE)
+_GENIUS_FOOTER_RE = re.compile(
+    r"(you might also like|^\d*embed$|get tickets as low as|^see .+ live$|^translations?$)",
+    re.IGNORECASE,
+)
+_BRACKET_ONLY_RE = re.compile(r"^\s*[\[(][^\]\)]*[\])]\s*$")
+
+
+def _norm_title_for_match(value: str) -> str:
+    # Drop feat./version parens and punctuation for a lenient title comparison.
+    v = _FEAT_SUFFIX_RE.sub("", value or "")
+    v = re.sub(r"[\(\[].*?[\)\]]", "", v)
+    v = re.sub(r"[^0-9a-zA-Zа-яА-ЯёЁ ]+", " ", v)
+    return " ".join(v.lower().split())
+
+
+def _title_roughly_matches(a: str, b: str) -> bool:
+    na, nb = _norm_title_for_match(a), _norm_title_for_match(b)
+    if not na or not nb:
+        return True  # can't tell — don't reject
+    if na in nb or nb in na:
+        return True
+    return SequenceMatcher(None, na, nb).ratio() >= 0.5
+
+
+def clean_plain_lyrics(text: str, expected_title: Optional[str] = None) -> Optional[str]:
+    """Strip Genius scrape cruft from unsynced lyrics.
+
+    Returns cleaned text, or None when the Genius "<Song> Lyrics" header names a
+    clearly different song than `expected_title` — i.e. a wrong-track hit (a loose
+    match on the artist name), which should show nothing rather than another song.
+    """
+    if not text:
+        return None
+    out: list[str] = []
+    for raw in text.splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        if _GENIUS_CONTRIB_RE.match(s) or _GENIUS_FOOTER_RE.search(s):
+            continue
+        header = _GENIUS_LYRICS_HEADER_RE.match(s)
+        if header and len(s) <= 120:
+            if expected_title and not _title_roughly_matches(header.group("title"), expected_title):
+                return None  # wrong song — reject entirely
+            continue  # drop the "<Song> Lyrics" header line
+        if _BRACKET_ONLY_RE.match(s):
+            continue  # [Couplet 1 : X] / [Paroles de …] / [Chorus] section markers
+        out.append(s)
+    cleaned = "\n".join(out).strip()
+    return cleaned or None
 
 
 def _cleanup_lyrics_lines(lines: list[dict]) -> list[dict]:
@@ -718,9 +775,11 @@ def fetch_lyrics_lines(
             else:
                 return cleaned
         else:
-            plain_from_lrc = _plain_lyrics_to_lines(lrc)
-            if plain_from_lrc:
-                return plain_from_lrc
+            cleaned_plain = clean_plain_lyrics(lrc, track_title)
+            if cleaned_plain:
+                plain_from_lrc = _plain_lyrics_to_lines(cleaned_plain)
+                if plain_from_lrc:
+                    return plain_from_lrc
 
     plain = _plain_lyrics_lookup(
         artist=artist,
@@ -731,9 +790,11 @@ def fetch_lyrics_lines(
         query=query,
     )
     if plain:
-        lines = _plain_lyrics_to_lines(plain)
-        if lines:
-            return lines
+        cleaned_plain = clean_plain_lyrics(plain, track_title)
+        if cleaned_plain:
+            lines = _plain_lyrics_to_lines(cleaned_plain)
+            if lines:
+                return lines
     return []
 
 
