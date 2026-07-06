@@ -204,7 +204,17 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
             <a href={device.verification_url} target="_blank" rel="noreferrer" className="ca-modal__link">
               {device.verification_url}
             </a>
-            <div className="ca-modal__code">{device.user_code}</div>
+            <div 
+              className="ca-modal__code" 
+              title={t('Click to copy', 'Нажмите, чтобы скопировать')}
+              onClick={() => {
+                navigator.clipboard.writeText(device.user_code);
+                showToast(t('Code copied!', 'Код скопирован!'));
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              {device.user_code}
+            </div>
             <p className="ca-modal__waiting"><Loader2 size={14} className="spinner" /> {t('Waiting for authorization…', 'Ожидание авторизации…')}</p>
           </div>
         </div>
