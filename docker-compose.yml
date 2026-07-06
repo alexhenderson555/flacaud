@@ -47,6 +47,8 @@ services:
       TIDALDLRU_SMTP_TLS: ${TIDALDLRU_SMTP_TLS:-true}
       SPOTIPY_CLIENT_ID: ${SPOTIPY_CLIENT_ID:-}
       SPOTIPY_CLIENT_SECRET: ${SPOTIPY_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
     volumes:
       - jobs-data:/var/lib/tidal-dl-ru/jobs
       - stream-cache:/var/lib/tidal-dl-ru/stream-cache
@@ -87,6 +89,8 @@ services:
       TIDALDLRU_DEEPL_KEY: ${TIDALDLRU_DEEPL_KEY:-}
       SPOTIPY_CLIENT_ID: ${SPOTIPY_CLIENT_ID:-}
       SPOTIPY_CLIENT_SECRET: ${SPOTIPY_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
     volumes:
       - jobs-data:/var/lib/tidal-dl-ru/jobs
       - pool-data:/root/.config/tidal-dl-ru
