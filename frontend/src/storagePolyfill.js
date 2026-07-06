@@ -2,7 +2,7 @@ try {
   const _test = '__test__';
   window.localStorage.setItem(_test, _test);
   window.localStorage.removeItem(_test);
-} catch (e) {
+} catch {
   const createMemoryStorage = () => {
     let store = {};
     return {
