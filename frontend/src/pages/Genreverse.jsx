@@ -79,7 +79,11 @@ export default function Genreverse() {
   });
 
   useEffect(() => {
-    if (!playlist?.length || playlist[0]?.__queue_origin !== VIBE_RADIO_ORIGIN) return;
+    if (!playlist?.length) return;
+    if (playlist[0]?.__queue_origin !== VIBE_RADIO_ORIGIN) {
+      if (stationTracks.length > 0) setStationTracks([]);
+      return;
+    }
     
     setStationTracks((prev) => {
       if (prev === playlist) return prev;

@@ -128,7 +128,22 @@ export function usePlayerRadio({
         // ignore
       }
 
-      const combined = [...topTracks, ...aiTracks];
+      const combined = [];
+      if (aiTracks.length === 0) {
+        combined.push(...topTracks);
+      } else {
+        let topIdx = 0;
+        let aiIdx = 0;
+        if (topTracks.length > 0) combined.push(topTracks[topIdx++]);
+        while (aiIdx < aiTracks.length || topIdx < Math.min(topTracks.length, 4)) {
+          for (let i = 0; i < 3 && aiIdx < aiTracks.length; i++) {
+            combined.push(aiTracks[aiIdx++]);
+          }
+          if (topIdx < Math.min(topTracks.length, 4)) {
+            combined.push(topTracks[topIdx++]);
+          }
+        }
+      }
       if (combined.length === 0) {
         showToast(t('radioFailed'));
         return false;

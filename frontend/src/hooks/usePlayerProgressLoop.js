@@ -122,6 +122,7 @@ export function usePlayerProgressLoop({
           seekCooldownActive: seekCooldown,
           endedGuard: endedGuardRef.current,
           crossfading: crossfadingRef.current,
+          skipEnded: skipEndedRef?.current,
         })) {
           endedGuardRef.current = true;
           skipEndedRef.current = true;
@@ -147,6 +148,7 @@ export function usePlayerProgressLoop({
           trackKey,
           crossfadeStartedFor: crossfadeStartedForRef.current,
           remaining,
+          skipEnded: skipEndedRef?.current,
         })) {
           const mainEl = audioRef.current;
           const pre = preloadAudioRef?.current;

@@ -53,7 +53,12 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   const visualSmoothing = usePlayerStore((s) => s.visualSmoothing) ?? 0.5;
   
   const modeRef = useRef(visualMode);
+  const sensitivityRef = useRef(visualSensitivity);
+  const smoothingRef = useRef(visualSmoothing);
+  
   useEffect(() => { modeRef.current = visualMode; }, [visualMode]);
+  useEffect(() => { sensitivityRef.current = visualSensitivity; }, [visualSensitivity]);
+  useEffect(() => { smoothingRef.current = visualSmoothing; }, [visualSmoothing]);
 
   useEffect(() => {
     colorsRef.current = readAccentColors();
@@ -479,7 +484,7 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
         return;
       }
       const zeros = new Uint8Array(prev.length);
-      const decayed = smoothBarLevels(prev, zeros, visualSmoothing);
+      const decayed = smoothBarLevels(prev, zeros, smoothingRef.current);
       smoothLevelsRef.current = decayed;
       ctx.clearRect(0, 0, width, height);
       if (visualizerPeakLevel(decayed) > IDLE_CUTOFF) {
@@ -526,15 +531,15 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       
       // Apply sensitivity to the raw frequency data before any processing
       let scaledData = dataArrayRef.current;
-      if (visualSensitivity !== 1.0) {
+      if (sensitivityRef.current !== 1.0) {
         scaledData = new Uint8Array(dataArrayRef.current.length);
         for (let i = 0; i < scaledData.length; i++) {
-          scaledData[i] = Math.min(255, dataArrayRef.current[i] * visualSensitivity);
+          scaledData[i] = Math.min(255, dataArrayRef.current[i] * sensitivityRef.current);
         }
       }
 
       const targetLevels = computeBarLevels(scaledData, window.innerWidth);
-      const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels, visualSmoothing);
+      const smoothed = smoothBarLevels(smoothLevelsRef.current, targetLevels, smoothingRef.current);
       smoothLevelsRef.current = smoothed;
       const beat = updateBeat(smoothed, time);
       paintMode(modeRef.current, smoothed, beat, time);
