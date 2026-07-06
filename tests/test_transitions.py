@@ -11,8 +11,8 @@ from tidal_dl_ru.database.models import SavedTrack
 from tidal_dl_ru.server.app import app
 from tidal_dl_ru.server.transitions import (
     AVOID,
-    CamelotKey,
     PERFECT,
+    CamelotKey,
     bpm_compatibility,
     camelot_compatibility,
     find_transitions,

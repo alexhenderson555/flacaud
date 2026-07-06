@@ -9,8 +9,8 @@ from tidal_dl_ru.database.models import ConnectedAccount, User, _utcnow
 from tidal_dl_ru.providers.user_library import (
     AccountAuth,
     TokenBundle,
-    ensure_connectors_loaded,
     all_connectors,
+    ensure_connectors_loaded,
     get_connector,
 )
 from tidal_dl_ru.server import connected_accounts_service as svc

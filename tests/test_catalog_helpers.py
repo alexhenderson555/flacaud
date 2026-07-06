@@ -3,7 +3,6 @@
 import pytest
 from fastapi import HTTPException
 
-from tidal_dl_ru.server.routers.catalog import _parse_exclude_ids
 from tidal_dl_ru.server.routers.ai_playlist import (
     _artist_name_matches,
     _clean_artist_query_name,
@@ -15,6 +14,7 @@ from tidal_dl_ru.server.routers.ai_playlist import (
     _strip_artist_focus_filler,
     _vibe_fallback_search_terms,
 )
+from tidal_dl_ru.server.routers.catalog import _parse_exclude_ids
 
 
 class TestParseExcludeIds:
