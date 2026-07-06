@@ -27,14 +27,13 @@ export default function VerifyEmail() {
   const token = params.get('token') || '';
   const lang = (localStorage.getItem('tidal-lang') || 'en').startsWith('ru') ? 'ru' : 'en';
   const t = (k) => dict[lang][k] || dict.en[k];
-  const [status, setStatus] = useState('working');
-  const [message, setMessage] = useState(t('working'));
+  const [status, setStatus] = useState(token ? 'working' : 'error');
+  const [message, setMessage] = useState(token ? dict[lang].working : dict[lang].fail);
   const [hint, setHint] = useState('');
 
   useEffect(() => {
+    const t = (k) => dict[lang][k] || dict.en[k];
     if (!token) {
-      setStatus('error');
-      setMessage(t('fail'));
       return;
     }
     verifyEmailToken(token)
@@ -47,7 +46,7 @@ export default function VerifyEmail() {
         setStatus('error');
         setMessage(messageForApiError(err, lang) || t('fail'));
       });
-  }, [token, lang, t]);
+  }, [token, lang]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
