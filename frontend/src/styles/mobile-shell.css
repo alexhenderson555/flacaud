@@ -24,46 +24,7 @@
   }
 }
 
-/* Mobile sidebar “More options” overlay */
-.mobile-menu-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  padding: max(20px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
-  background: rgba(8, 8, 12, 0.96);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
 
-.mobile-menu-overlay__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  flex-shrink: 0;
-}
-
-.mobile-menu-overlay__title {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.mobile-menu-overlay__close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  cursor: pointer;
-}
 
 /* Compact action-sheet list: icon + label rows that all fit without scrolling,
    instead of oversized two-column cards. */
@@ -239,9 +200,7 @@
 @media (width <= 768px) {
 
 
-  .mobile-menu-overlay__header {
-    margin-bottom: 16px;
-  }
+
 
   .mobile-menu-grid {
     gap: 8px;

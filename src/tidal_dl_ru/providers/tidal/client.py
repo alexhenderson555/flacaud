@@ -93,7 +93,7 @@ class TidalClient:
             self._access = self._tokens.access_token
             self._http.headers["Authorization"] = f"Bearer {self._access}"
             resp = self._http.get(f"{API_BASE}{path}", params=params)
-        if resp.status_code in (401, 403, 429) and self._on_auth_error:
+        if resp.status_code == 429 and self._on_auth_error:
             self._on_auth_error(resp.status_code)
         resp.raise_for_status()
         return resp.json()

@@ -218,6 +218,9 @@ def _ssh_run(host: str, user: str, password: str, command: str, *, timeout: int 
 
 
 def _scp_tar(host: str, user: str, password: str, local_tar: Path) -> None:
+    import math
+    import sys
+
     import paramiko
     from scp import SCPClient
 
@@ -225,10 +228,46 @@ def _scp_tar(host: str, user: str, password: str, local_tar: Path) -> None:
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(host, username=user, password=password, timeout=30)
     try:
+        chunk_size = 5 * 1024 * 1024
+        total_size = local_tar.stat().st_size
+        chunks_count = math.ceil(total_size / chunk_size)
+        
+        print(f"Splitting {total_size} bytes into {chunks_count} chunks to avoid SCP hang...")
+        sys.stdout.flush()
+        
+        _, stdout, _ = ssh.exec_command(f"rm -f {DEPLOY_PATH}/app.tar.gz.part*")
+        stdout.channel.recv_exit_status()
+        
         with SCPClient(ssh.get_transport()) as scp:
-            scp.put(str(local_tar), remote_path=f"{DEPLOY_PATH}/app.tar.gz")
+            with open(local_tar, "rb") as f:
+                for i in range(chunks_count):
+                    data = f.read(chunk_size)
+                    remote_part = f"{DEPLOY_PATH}/app.tar.gz.part{i:03d}"
+                    local_part = ROOT / f"app.tar.gz.part{i:03d}"
+                    with open(local_part, "wb") as lf:
+                        lf.write(data)
+                    
+                    sys.stdout.write(f"Uploading part {i+1}/{chunks_count} ({len(data)} bytes)...\n")
+                    sys.stdout.flush()
+                    
+                    scp.put(str(local_part), remote_part)
+                    local_part.unlink()
+
+        print("Joining chunks on server...")
+        sys.stdout.flush()
+        
+        _, stdout, stderr = ssh.exec_command(f"cat {DEPLOY_PATH}/app.tar.gz.part* > {DEPLOY_PATH}/app.tar.gz && rm {DEPLOY_PATH}/app.tar.gz.part*")
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            raise RuntimeError(f"Joining chunks failed: {stderr.read().decode()}")
+        print("\nUpload completely finished.")
+        sys.stdout.flush()
+    except Exception as e:
+        print("\nException during chunked SCP upload:", e)
+        raise
     finally:
         ssh.close()
+
 
 
 def fix_vpn_server() -> None:
@@ -361,10 +400,11 @@ def deploy_tidal_server() -> None:
         f"(grep -q '^ACME_EMAIL=' .env && sed -i 's|^ACME_EMAIL=.*|ACME_EMAIL={acme_email}|' .env || echo 'ACME_EMAIL={acme_email}' >> .env) && "
         "(grep -q '^API_PORT=' .env && sed -i 's|^API_PORT=.*|API_PORT=8001|' .env || echo 'API_PORT=8001' >> .env) && "
         f"{image_step}"
-        "docker builder prune -f --reserved-space 3gb 2>/dev/null || docker builder prune -f 2>/dev/null || true && "
-        "docker image prune -f 2>/dev/null || true && "
+        "docker builder prune -f --reserved-space 3gb 2>/dev/null || docker builder prune -f 2>/dev/null || true; "
+        "docker image prune -f 2>/dev/null || true; "
+        "if [ -z \"$COMPOSE\" ]; then echo 'Deploy aborted due to earlier errors.'; exit 1; fi; "
         "$COMPOSE up -d --remove-orphans && "
-        "bash ops/prune-frontend-dist.sh frontend/dist 2>/dev/null || true && "
+        "bash ops/prune-frontend-dist.sh frontend/dist 2>/dev/null || true; "
         "$COMPOSE up -d caddy && $COMPOSE restart caddy api bot"
     )
     code = _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=3600)
