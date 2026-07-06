@@ -58,6 +58,7 @@ export function usePlaybackQuality({
   setProgress,
   suppressQualityToastsRef,
 }) {
+  const [trackOverrideQuality, setTrackOverrideQuality] = useState(null);
   const [playbackQuality, setPlaybackQualityState] = useState(() =>
     clampQualityToPlan(getStoredPlaybackQuality(), effectivePlan),
   );
@@ -108,7 +109,12 @@ export function usePlaybackQuality({
   useEffect(() => { trackKeyRef.current = trackKey; }, [trackKey]);
   useEffect(() => { autoQualityRef.current = autoQuality; }, [autoQuality]);
 
-  const setPlaybackQuality = useCallback((q) => {
+  const setPlaybackQuality = useCallback((q, isOverride = false) => {
+    if (isOverride) {
+      setTrackOverrideQuality(q);
+      setStreamQuality(q);
+      return;
+    }
     const capped = clampQualityToPlan(q, effectivePlan);
     setPlaybackQualityState(capped);
     setStreamQuality(capped);
@@ -274,6 +280,7 @@ export function usePlaybackQuality({
     }
 
     let cancelled = false;
+    setTrackOverrideQuality(null);
     trackChangePendingRef.current = true;
     streamErrorSuppressUntilRef.current = performance.now() + 1200;
     streamRetryNonceRef.current = 0;
@@ -637,6 +644,9 @@ export function usePlaybackQuality({
     if (autoQuality) {
       onManualQualityPick?.();
       autoQualityRef.current = false;
+      setPlaybackQuality(newQ);
+    } else {
+      setPlaybackQuality(newQ, true);
     }
     qualitySwitchRef.current = true;
     streamErrorSuppressUntilRef.current = performance.now() + 800;
@@ -647,10 +657,10 @@ export function usePlaybackQuality({
     streamRetryNonceRef.current += 1;
     setStreamRetryNonce((n) => n + 1);
     loadedSrcKeyRef.current = '';
-    setPlaybackQuality(newQ);
     applyStreamQuality(newQ, availableQualities, qualityActualRef.current, {
       force: true,
       probe: probeDataRef.current,
+      override: newQ,
     });
     const actual = qualityActualRef.current[newQ];
     updateDeliveredMeta(actual || newQ, probeDataRef.current);
@@ -831,7 +841,8 @@ export function usePlaybackQuality({
   }, [playbackQuality, streamQuality, qualitiesReady, downloadedTracksRef, buildStreamUrl, streamRetryNonce]);
 
   return {
-    playbackQuality,
+    updatePreloadForPlaylist,
+    playbackQuality: trackOverrideQuality || playbackQuality,
     setPlaybackQuality,
     streamQuality,
     currentAudioSrc,
