@@ -59,33 +59,47 @@ class YTMusicConnector(UserLibraryConnector):
     def oauth_config(self) -> OAuthConfig:
         configured = bool(settings.google_oauth_client_id and settings.google_oauth_client_secret)
         return OAuthConfig(
-            flow="device",
+            flow="redirect",
             configured=configured,
             scopes=["https://www.googleapis.com/auth/youtube"],
-            note="Open the shown URL and enter the code on any device.",
+            note="Authorize securely through Google directly.",
         )
 
-    def begin_device(self) -> DeviceAuth:
-        creds = _credentials()
-        code = creds.get_code()
-        return DeviceAuth(
-            device_code=code["device_code"],
-            user_code=code["user_code"],
-            verification_url=code.get("verification_url") or code.get("verification_uri") or "https://www.google.com/device",
-            interval=int(code.get("interval", 5)),
-            expires_in=int(code.get("expires_in", 600)),
-        )
+    def build_authorize_url(self, *, state: str, redirect_uri: str) -> str:
+        cid = settings.google_oauth_client_id
+        if not cid:
+            raise ConnectorNotConfigured("Google OAuth credentials missing")
+        import urllib.parse
+        params = {
+            "client_id": cid,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": "https://www.googleapis.com/auth/youtube",
+            "state": state,
+            "access_type": "offline",
+            "prompt": "consent",
+        }
+        return "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
 
-    def poll_device(self, device_code: str) -> Optional[TokenBundle]:
-        creds = _credentials()
-        try:
-            token = creds.token_from_code(device_code)
-        except Exception:
-            # Still pending / slow_down — caller polls again.
-            return None
-        raw = token if isinstance(token, dict) else getattr(token, "as_dict", lambda: {})()
+    def exchange_code(self, *, code: str, redirect_uri: str, code_verifier: Optional[str] = None) -> TokenBundle:
+        cid = settings.google_oauth_client_id
+        secret = settings.google_oauth_client_secret
+        if not cid or not secret:
+            raise ConnectorNotConfigured("Google OAuth credentials missing")
+        import httpx
+        data = {
+            "client_id": cid,
+            "client_secret": secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        }
+        resp = httpx.post("https://oauth2.googleapis.com/token", data=data)
+        if resp.status_code != 200:
+            raise ConnectorError(f"Failed to exchange Google OAuth code: {resp.text}")
+        raw = resp.json()
         if not raw or not raw.get("access_token"):
-            return None
+            raise ConnectorError("Google OAuth exchange returned no access token")
         return TokenBundle(
             access_token=raw["access_token"],
             refresh_token=json.dumps(raw),  # full blob; ytmusicapi refreshes from it
