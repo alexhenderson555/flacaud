@@ -15,7 +15,6 @@ from tidal_dl_ru.providers.user_library import (
     AccountAuth,
     ConnectorError,
     ConnectorNotConfigured,
-    DeviceAuth,
     OAuthConfig,
     PlaylistRef,
     TokenBundle,

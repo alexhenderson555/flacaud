@@ -1,6 +1,7 @@
-import paramiko
 import os
 import subprocess
+
+import paramiko
 
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -11,7 +12,7 @@ files = subprocess.check_output(['git', 'ls-files']).decode('utf-8').split('\n')
 for f in files:
     f = f.strip()
     if not f: continue
-    
+
     # We only care about recently modified files
     # Actually let's just upload ytmusic_connector.py, usePlaybackQuality.js, playerStore.js, libraryStore.js
     # and any other files modified in the last 5 commits
