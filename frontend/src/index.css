@@ -2474,6 +2474,7 @@ button.nav-item {
     justify-content: flex-end;
     align-items: center;
     display: flex;
+    flex-direction: column;
     position: fixed;
     inset: 0;
   }
