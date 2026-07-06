@@ -386,7 +386,6 @@ export function shouldTriggerTrackEnd({
   seekCooldownActive,
   endedGuard,
   crossfading,
-  skipEnded,
   thresholdSec = END_THRESHOLD_SEC,
 }) {
   return (
@@ -396,7 +395,6 @@ export function shouldTriggerTrackEnd({
     && !seekCooldownActive
     && !endedGuard
     && !crossfading
-    && !skipEnded
     && currentTime >= effectiveDuration - thresholdSec
   );
 }
@@ -436,14 +434,12 @@ export function canStartCrossfade({
   trackKey,
   crossfadeStartedFor,
   remaining,
-  skipEnded,
   crossfadeSec = CROSSFADE_SEC,
 }) {
   return (
     isPlaying
     && !seeking
     && !seekCooldownActive
-    && !skipEnded
     && !crossfading
     && hasNext
     && preloadReady
