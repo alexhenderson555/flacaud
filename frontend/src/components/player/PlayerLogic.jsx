@@ -119,7 +119,7 @@ export default function PlayerLogic({ children }) {
 
   const hydratePlayerFromStorage = useCallback(() => {
     // validateSession() can finish after the user already started playback.
-    if (currentTrackRef.current?.provider_id || pendingPlayRef.current) return;
+    if (usePlayerStore.getState().currentTrack?.provider_id || currentTrackRef.current?.provider_id || pendingPlayRef.current) return;
     try {
       const savedTrack = localStorage.getItem('tidal-current-track');
       if (!savedTrack) return;

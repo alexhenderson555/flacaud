@@ -1,7 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ListMusic, User, Repeat, Radio, Flame, ArrowLeftRight, Library, Menu, X, Heart,
+  Search, ListMusic, User, Repeat, Radio, Flame, ArrowLeftRight, Library, Menu, X, Heart, Wand2,
 } from 'lucide-react';
 import { BRAND_LOGO_SRC, BRAND_NAME } from '../../brand';
 
@@ -13,7 +13,7 @@ const MOBILE_MORE_LINKS = [
   { to: '/recommendations', icon: Flame, labelKey: 'recommendations' },
   { to: '/playlists', icon: ListMusic, labelKey: 'playlists' },
   { to: '/sync', icon: Repeat, labelKey: 'transfer' },
-  { to: '/analyzer', icon: ListMusic, labelKey: 'setAnalyzer' },
+  { to: '/analyzer', icon: Wand2, labelKey: 'setAnalyzer' },
   { to: '/set-library', icon: Library, labelKey: 'setLibrary' },
   { to: '/transitions', icon: ArrowLeftRight, labelKey: 'transitionFinder' },
 ];
@@ -75,7 +75,7 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
 
           <div className="sidebar-section-label hide-on-mobile">{t('proTools')}</div>
           <NavLink to="/analyzer" className={navClass('', 'hide-on-mobile')}>
-            <ListMusic size={20} />
+            <Wand2 size={20} />
             <span>{t('setAnalyzer')}</span>
           </NavLink>
           <NavLink to="/set-library" className={navClass('', 'hide-on-mobile')}>
