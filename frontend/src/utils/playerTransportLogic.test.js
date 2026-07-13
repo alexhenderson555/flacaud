@@ -385,6 +385,16 @@ describe('shouldAdvanceToNextTrack', () => {
     expect(skipEndedRef.current).toBe(false);
     expect(shouldAdvanceToNextTrack({ crossfading: false, skipEndedRef: { current: false } })).toBe(true);
   });
+
+  it('arms endedGuardRef on approval and blocks a second advance for the same track', () => {
+    const endedGuardRef = { current: false };
+    const skipEndedRef = { current: false };
+    // First (native) end wins the race → advances, arms the guard.
+    expect(shouldAdvanceToNextTrack({ crossfading: false, skipEndedRef, endedGuardRef })).toBe(true);
+    expect(endedGuardRef.current).toBe(true);
+    // Second detector (rAF) for the SAME ended track is now suppressed → no +2 skip.
+    expect(shouldAdvanceToNextTrack({ crossfading: false, skipEndedRef, endedGuardRef })).toBe(false);
+  });
 });
 
 describe('resumeMainPlaybackAfterHandoff', () => {

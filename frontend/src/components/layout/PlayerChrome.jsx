@@ -63,6 +63,7 @@ function PlayerChrome({ playbackEnabled = true }) {
     pendingPlayRef,
     pendingSeekRef,
     skipEndedRef,
+    endedGuardRef,
     crossfadingRef,
     volume,
     handleStreamError,
@@ -105,6 +106,7 @@ function PlayerChrome({ playbackEnabled = true }) {
         pendingPlayRef={pendingPlayRef}
         pendingSeekRef={pendingSeekRef}
         skipEndedRef={skipEndedRef}
+        endedGuardRef={endedGuardRef}
         crossfadingRef={crossfadingRef}
         volume={volume}
         handleStreamError={handleStreamError}

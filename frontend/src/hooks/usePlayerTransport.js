@@ -53,6 +53,7 @@ export function usePlayerTransport(props) {
     handleSeekPreview: progress.handleSeekPreview,
     handleSeekCommit: progress.handleSeekCommit,
     beginSeekScrub: progress.beginSeekScrub,
+    endedGuardRef,
     formatTime,
   };
 }

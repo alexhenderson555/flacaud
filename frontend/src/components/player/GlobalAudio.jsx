@@ -37,6 +37,7 @@ export default function GlobalAudio({
   pendingPlayRef,
   pendingSeekRef,
   skipEndedRef,
+  endedGuardRef,
   crossfadingRef,
   volume,
   handleStreamError,
@@ -312,7 +313,17 @@ export default function GlobalAudio({
       if (el) setProgress(el.currentTime || 0);
     },
     onEnded: () => {
-      if (!shouldAdvanceToNextTrack({ crossfading: crossfadingRef?.current, skipEndedRef })) return;
+      const el = resolveMainEl();
+      // Ignore a spurious 'ended' that fires before the track actually played
+      // (e.g. an empty/errored src on a fresh load) — advancing on it made the
+      // first click jump ahead. Require the element to have reached (near) its end.
+      if (el) {
+        const ct = el.currentTime || 0;
+        const dur = Number.isFinite(el.duration) ? el.duration : 0;
+        const reachedEnd = dur > 0 ? ct >= dur - 2.5 : ct > 1;
+        if (!reachedEnd) return;
+      }
+      if (!shouldAdvanceToNextTrack({ crossfading: crossfadingRef?.current, skipEndedRef, endedGuardRef })) return;
       playNext();
     },
     onWaiting: () => {

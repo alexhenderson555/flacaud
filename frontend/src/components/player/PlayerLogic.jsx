@@ -138,6 +138,7 @@ export default function PlayerLogic({ children }) {
 
   const {
     sessionReady,
+    planReady,
     mediaEnabled,
     authTick,
     effectivePlan,
@@ -184,6 +185,7 @@ export default function PlayerLogic({ children }) {
     skipEndedRef,
     pendingPlayRef,
     enabled: mediaEnabled,
+    planReady,
     currentTrack,
     downloadedTracksRef,
     downloadedRegistryRef,
@@ -718,6 +720,7 @@ export default function PlayerLogic({ children }) {
     pendingPlayRef,
     pendingSeekRef,
     skipEndedRef,
+    endedGuardRef: transport.endedGuardRef,
     crossfadingRef,
     handleStreamError,
     actualQuality,

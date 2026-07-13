@@ -408,13 +408,20 @@ export function isAtTrackEnd(audioEl, trackDurationSec, thresholdSec = END_THRES
   return (audioEl.currentTime || 0) >= effective - thresholdSec;
 }
 
-/** Shared guard for onEnded / onPause-at-end before calling playNext. */
-export function shouldAdvanceToNextTrack({ crossfading, skipEndedRef }) {
+/** Shared guard for onEnded / onPause-at-end before calling playNext.
+ *
+ * Arms endedGuardRef when it approves an advance so the rAF end-detector
+ * (usePlayerProgressLoop) won't fire a SECOND playNext for the same ended track —
+ * without this the native onEnded winning the race caused a double advance (+2).
+ * endedGuardRef auto-clears on the next track change. */
+export function shouldAdvanceToNextTrack({ crossfading, skipEndedRef, endedGuardRef }) {
   if (crossfading) return false;
   if (skipEndedRef?.current) {
     skipEndedRef.current = false;
     return false;
   }
+  if (endedGuardRef?.current) return false;
+  if (endedGuardRef) endedGuardRef.current = true;
   return true;
 }
 
