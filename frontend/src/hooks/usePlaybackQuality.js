@@ -39,6 +39,7 @@ const LOSSLESS_TIERS = new Set(['LOSSLESS', 'HI_RES']);
  */
 export function usePlaybackQuality({
   enabled = true,
+  planReady = true,
   currentTrack,
   downloadedTracksRef,
   downloadedRegistryRef,
@@ -59,9 +60,7 @@ export function usePlaybackQuality({
   suppressQualityToastsRef,
 }) {
   const [trackOverrideQuality, setTrackOverrideQuality] = useState(null);
-  const [playbackQuality, setPlaybackQualityState] = useState(() =>
-    clampQualityToPlan(getStoredPlaybackQuality(), effectivePlan),
-  );
+  const [playbackQuality, setPlaybackQualityState] = useState(() => getStoredPlaybackQuality());
   const [streamQuality, setStreamQuality] = useState(playbackQuality);
   const [currentAudioSrc, setCurrentAudioSrc] = useState('');
   const [preloadAudioSrc, setPreloadAudioSrc] = useState('');
@@ -248,7 +247,7 @@ export function usePlaybackQuality({
   }, [lang]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !planReady) {
       setCurrentAudioSrc('');
       setPreloadAudioSrc('');
       setQualitiesReady(true);
@@ -262,7 +261,7 @@ export function usePlaybackQuality({
     setPlaybackQualityState(capped);
     setStreamQuality(capped);
     if (capped !== playbackQualityRef.current) setStoredPlaybackQuality(capped);
-  }, [effectivePlan, enabled]);
+  }, [effectivePlan, enabled, planReady]);
 
   useEffect(() => {
     if (!enabled) return undefined;

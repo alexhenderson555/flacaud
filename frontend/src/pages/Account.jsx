@@ -147,6 +147,7 @@ export default function Account() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [activationCode, setActivationCode] = useState('');
   const [avatar, setAvatar] = useState(PROFILE_EMOJIS[0]);
+  const [isPlanValidated, setIsPlanValidated] = useState(false);
 
   const refreshOfflineCacheStats = async () => {
     setOfflineCacheStats(await getOfflineCacheStats());
@@ -167,6 +168,7 @@ export default function Account() {
         setUserData(data);
         setDjAnalysisEnabled?.(!!data?.dj_enabled);
         setIsLoggedIn(true);
+        setIsPlanValidated(true);
       } else if (res.status === 401) {
         setIsLoggedIn(false);
         setUserData(null);
@@ -200,10 +202,10 @@ export default function Account() {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (!userData?.effective_plan) return;
+    if (!userData?.effective_plan || !isPlanValidated) return;
     const capped = clampQualityToPlan(defaultPlaybackQuality, userData.effective_plan);
     if (capped !== defaultPlaybackQuality) setDefaultPlaybackQuality(capped);
-  }, [userData?.effective_plan, defaultPlaybackQuality, setDefaultPlaybackQuality]);
+  }, [userData?.effective_plan, defaultPlaybackQuality, setDefaultPlaybackQuality, isPlanValidated]);
 
   const handleCancelSubscription = async () => {
     if (cancelLoading) return;
