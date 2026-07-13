@@ -24,7 +24,7 @@ export function usePlayerRadio({
     if (!advancePastSeed) {
       const seedQueue = buildRadioQueue(track, []);
       if (seedQueue.length > 0) {
-        playQueue(seedQueue[0], seedQueue);
+        playQueue(seedQueue[0], seedQueue, { preservePlaybackState: true });
       }
     }
 
@@ -32,7 +32,7 @@ export function usePlayerRadio({
       const queue = buildRadioQueue(track, radioTracks);
       const start = pickRadioStartTrack(queue, { advancePastSeed });
       if (!start || queue.length <= 1) return false;
-      playQueue(start, queue);
+      playQueue(start, queue, { preservePlaybackState: true });
       showToast(t(toastKey));
       return true;
     };
@@ -150,7 +150,7 @@ export function usePlayerRadio({
       }
       const queue = buildRadioQueue(combined[0], combined);
       if (queue.length > 0) {
-        playQueue(queue[0], queue);
+        playQueue(queue[0], queue, { preservePlaybackState: true });
         showToast(t('artistRadioStarted'));
         return true;
       }

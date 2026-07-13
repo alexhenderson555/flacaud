@@ -187,7 +187,7 @@ export function usePlayerQueue({
     releaseSetEmbed, lang, setCurrentAudioSrc, skipAudioSrcSyncRef,
   ]);
 
-  const playQueue = useCallback((track, contextPlaylist) => {
+  const playQueue = useCallback((track, contextPlaylist, { preservePlaybackState = false } = {}) => {
     if (!track) return;
     initAudioEngine();
     const trackId = String(track.provider_id);
@@ -210,7 +210,7 @@ export function usePlayerQueue({
       setCurrentTrack(merged);
       if (currentTrackRef) currentTrackRef.current = merged;
       const main = getMainAudioEl?.() ?? audioRef.current;
-      if (main?.paused) {
+      if (main?.paused && !preservePlaybackState) {
         releaseSetEmbed?.();
         pauseSetEmbed?.();
         resumePausedPlayback(main, {
@@ -219,12 +219,13 @@ export function usePlayerQueue({
           setIsPlaying,
           setIsLoading,
         });
-      } else {
+      } else if (!main?.paused) {
         setIsLoading(false);
       }
       return;
     }
 
+    // When starting radio for a completely different track while paused, we still want it to play.
     beginPlayback(track, normalized);
   }, [
     initAudioEngine, beginPlayback, setPlaylist, setCurrentTrackIndex, setCurrentTrack,
