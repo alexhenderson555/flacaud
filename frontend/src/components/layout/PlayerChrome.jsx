@@ -93,6 +93,7 @@ function PlayerChrome({ playbackEnabled = true }) {
         audioRef={audioRef}
         currentAudioSrc={currentAudioSrc}
         currentTrackId={currentTrack?.provider_id}
+        trackDuration={currentTrack?.duration_s || currentTrack?.duration || 0}
         preloadAudioSrc={preloadAudioSrc}
         isPlaying={isPlaying}
         isLoading={isLoading}

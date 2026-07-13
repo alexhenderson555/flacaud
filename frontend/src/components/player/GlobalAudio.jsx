@@ -7,6 +7,7 @@ import {
   shouldIgnoreStreamError,
   shouldStartPlayback,
 } from '../../utils/playerTransportLogic';
+import { effectivePlaybackDuration } from '../../utils/effectivePlaybackDuration';
 
 const HIDDEN_AUDIO_STYLE = {
   position: 'absolute',
@@ -24,6 +25,7 @@ export default function GlobalAudio({
   getMainAudioEl,
   currentAudioSrc,
   currentTrackId,
+  trackDuration,
   preloadAudioSrc,
   isPlaying = false,
   isLoading = false,
@@ -319,7 +321,7 @@ export default function GlobalAudio({
       // first click jump ahead. Require the element to have reached (near) its end.
       if (el) {
         const ct = el.currentTime || 0;
-        const dur = Number.isFinite(el.duration) ? el.duration : 0;
+        const dur = effectivePlaybackDuration(trackDuration, el.duration);
         const reachedEnd = dur > 0 ? ct >= dur - 2.5 : ct > 1;
         if (!reachedEnd) return;
       }
