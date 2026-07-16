@@ -1961,6 +1961,17 @@ button.nav-item {
   .app-container {
     flex-direction: column !important;
   }
+  /* Mobile scrolls by touch. The global `::-webkit-scrollbar { width: 8px }`
+     forces a persistent, space-reserving (non-overlay) scrollbar on the scroll
+     containers here, which shifts all page content ~8px to the left and leaves a
+     wider gap on the right. Zero it out on mobile so content is full-width. */
+  ::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+  }
+  html {
+    scrollbar-width: none;
+  }
   .sidebar {
     z-index: 120;
     -webkit-backdrop-filter: blur(20px);
