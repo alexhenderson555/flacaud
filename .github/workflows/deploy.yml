@@ -41,7 +41,11 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_SSH_PASSWORD }}
-          envs: GH_TOKEN
+          # Forward the OAuth app credentials into the SSH session so `docker
+          # compose up` can interpolate them (compose reads ${SPOTIPY_*}/${GOOGLE_*}
+          # from the shell env). Without this only GH_TOKEN reached the server and
+          # the connected-account connectors stayed dormant (configured=false).
+          envs: GH_TOKEN,SPOTIPY_CLIENT_ID,SPOTIPY_CLIENT_SECRET,GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET
           # 30 minutes — the build pulls node:22-alpine for frontend, then
           # docker compose build api worker bot (uv sync + torch/demucs for
           # worker). On a VPS this takes ~15-20 min on first deploy, ~5 min
