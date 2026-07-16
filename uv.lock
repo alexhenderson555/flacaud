@@ -2177,6 +2177,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pysocks"
+version = "1.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429, upload-time = "2019-09-20T02:07:35.714Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725, upload-time = "2019-09-20T02:06:22.938Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2423,6 +2432,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
 ]
 
+[package.optional-dependencies]
+socks = [
+    { name = "pysocks" },
+]
+
 [[package]]
 name = "rich"
 version = "15.0.0"
@@ -2663,6 +2677,8 @@ dependencies = [
     { name = "syncedlyrics" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "vkaudiotoken" },
+    { name = "yandex-music" },
     { name = "yt-dlp" },
     { name = "ytmusicapi" },
 ]
@@ -2734,6 +2750,8 @@ requires-dist = [
     { name = "syncedlyrics", specifier = ">=0.10" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "vkaudiotoken", specifier = ">=0.5.1" },
+    { name = "yandex-music", specifier = ">=3.0.0" },
     { name = "yt-dlp", specifier = ">=2026.6.9" },
     { name = "ytmusicapi", specifier = ">=1.10.3" },
 ]
@@ -2932,6 +2950,17 @@ wheels = [
 ]
 
 [[package]]
+name = "vkaudiotoken"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/34/b3/93665d73d12d4af81b181b9ab5510213f8bf50d85e7f2cf9b2e57a226b04/vkaudiotoken-0.5.1-py2.py3-none-any.whl", hash = "sha256:d7f883439136707666124994de5c5640b96b39d631a1b909c65d2114a4d7cc1d", size = 12326, upload-time = "2020-07-21T17:30:53.343Z" },
+]
+
+[[package]]
 name = "watchfiles"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3093,6 +3122,16 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/3f/f70e03f40ffc9a30d817eef7da1be72ee4956ba8d7255c399a01b135902a/websockets-16.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:a653aea902e0324b52f1613332ddf50b00c06fdaf7e92624fbf8c77c78fa5767", size = 178735, upload-time = "2026-01-10T09:23:42.259Z" },
     { url = "https://files.pythonhosted.org/packages/6f/28/258ebab549c2bf3e64d2b0217b973467394a9cea8c42f70418ca2c5d0d2e/websockets-16.0-py3-none-any.whl", hash = "sha256:1637db62fad1dc833276dded54215f2c7fa46912301a24bd94d45d46a011ceec", size = 171598, upload-time = "2026-01-10T09:23:45.395Z" },
 ]
+
+[[package]]
+name = "yandex-music"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests", extra = ["socks"] },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/e0/3b264e5d8442d57c2668fe6b98eb3b4be6ea489a74d1faea190c964e54db/yandex_music-3.0.0.tar.gz", hash = "sha256:a0fbb5c838726f2806af547a48e9dba315d2779b9273d5da8b4ef1749cac3320", size = 261855, upload-time = "2026-04-18T17:06:49.649Z" }
 
 [[package]]
 name = "yarl"

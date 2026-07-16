@@ -46,13 +46,20 @@ def test_state_sign_verify():
     assert verify_state("tampered.token.value") is None
 
 
-def test_dormant_connectors_report_not_configured():
-    # No SPOTIPY_/GOOGLE_ creds in the test env → connectors present but dormant.
+def test_connector_configured_state():
     ensure_connectors_loaded()
-    providers = {c.provider for c in all_connectors()}
-    assert {"spotify", "ytmusic"}.issubset(providers)
-    for c in all_connectors():
-        assert c.oauth_config().configured is False
+    by_provider = {c.provider: c for c in all_connectors()}
+    assert {"spotify", "ytmusic", "yandex", "vk"}.issubset(set(by_provider))
+    # Server-credential connectors are dormant without SPOTIPY_/GOOGLE_ env creds.
+    assert by_provider["spotify"].oauth_config().configured is False
+    assert by_provider["ytmusic"].oauth_config().configured is False
+    # Token-paste (unofficial) connectors need no server creds — always available,
+    # and flagged unofficial so the UI can warn.
+    for p in ("yandex", "vk"):
+        cfg = by_provider[p].oauth_config()
+        assert cfg.configured is True
+        assert cfg.flow == "token"
+        assert cfg.unofficial is True
 
 
 def test_upsert_get_delete_account():

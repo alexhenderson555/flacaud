@@ -228,3 +228,16 @@
   min-width: 24px;
   text-align: right;
 }
+.ca-token-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  outline: none;
+  font-size: 0.9rem;
+}
+.ca-token-input:focus {
+  border-color: var(--accent-solid);
+}

@@ -6,6 +6,7 @@ import {
   getConnectedAccounts,
   authorizeAccount,
   pollDeviceAuth,
+  submitAccountToken,
   disconnectAccount,
   getAccountPlaylists,
   importFromAccount,
@@ -24,6 +25,7 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
   const [busy, setBusy] = useState('');          // provider currently connecting
   const [device, setDevice] = useState(null);    // { provider, user_code, verification_url }
   const [picker, setPicker] = useState(null);    // { provider, name, playlists }
+  const [tokenPrompt, setTokenPrompt] = useState(null); // { provider, note, value, saving }
   const [importingId, setImportingId] = useState('');
   const pollSession = useRef(0);
   const authed = hasAuthSession();
@@ -86,11 +88,30 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
         runDevicePoll(provider, res.device_code, res.interval, res.expires_in);
         return;
       }
+      if (res.flow === 'token') {
+        setTokenPrompt({ provider, note: res.note || '', value: '', saving: false });
+        return;
+      }
       showToast(res.note || t('Follow the instructions to connect', 'Следуйте инструкциям для подключения'));
     } catch (e) {
       showToast(e?.message || t('Could not start authorization', 'Не удалось начать авторизацию'));
     } finally {
       setBusy('');
+    }
+  };
+
+  const submitToken = async () => {
+    if (!tokenPrompt || !tokenPrompt.value.trim()) return;
+    const { provider, value } = tokenPrompt;
+    setTokenPrompt((p) => ({ ...p, saving: true }));
+    try {
+      await submitAccountToken(provider, value.trim(), lang);
+      setTokenPrompt(null);
+      showToast(t('Account connected', 'Аккаунт подключён'));
+      refresh();
+    } catch (e) {
+      showToast(e?.message || t('Could not link account', 'Не удалось подключить аккаунт'));
+      setTokenPrompt((p) => (p ? { ...p, saving: false } : p));
     }
   };
 
@@ -256,6 +277,42 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {tokenPrompt ? (
+        <div
+          className="ca-modal"
+          role="presentation"
+          onClick={(e) => { if (e.target === e.currentTarget) setTokenPrompt(null); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setTokenPrompt(null); }}
+        >
+          <div className="ca-modal__box glass-panel" role="dialog" aria-modal="true">
+            <button type="button" className="ca-modal__close" aria-label="Close" onClick={() => setTokenPrompt(null)}>
+              <X size={20} />
+            </button>
+            <h3>{t('Paste your token', 'Вставьте токен')}</h3>
+            {tokenPrompt.note ? <p className="ca-modal__waiting" style={{ color: 'var(--text-secondary)' }}>{tokenPrompt.note}</p> : null}
+            <input
+              type="text"
+              className="ca-token-input"
+              autoComplete="off"
+              placeholder={t('token…', 'токен…')}
+              value={tokenPrompt.value}
+              onChange={(e) => setTokenPrompt((p) => ({ ...p, value: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitToken(); }}
+            />
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!tokenPrompt.value.trim() || tokenPrompt.saving}
+              onClick={submitToken}
+              style={{ borderRadius: '20px', padding: '10px 18px' }}
+            >
+              {tokenPrompt.saving ? <Loader2 size={15} className="spinner" /> : <Link2 size={15} />}
+              {' '}{t('Connect', 'Подключить')}
+            </button>
           </div>
         </div>
       ) : null}

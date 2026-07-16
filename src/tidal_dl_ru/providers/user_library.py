@@ -137,6 +137,8 @@ def _load_builtin_connectors() -> None:
     modules = [
         "tidal_dl_ru.providers.connectors.spotify_connector",
         "tidal_dl_ru.providers.connectors.ytmusic_connector",
+        "tidal_dl_ru.providers.connectors.yandex_connector",
+        "tidal_dl_ru.providers.connectors.vk_connector",
     ]
     for mod in modules:
         try:

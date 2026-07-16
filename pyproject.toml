@@ -34,6 +34,8 @@ dependencies = [
     "alembic>=1.13",
     "filelock>=3.13",
     "sentry-sdk[fastapi]>=2.20",
+    "yandex-music>=3.0.0",
+    "vkaudiotoken>=0.5.1",
 ]
 
 [project.optional-dependencies]

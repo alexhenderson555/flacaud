@@ -73,6 +73,14 @@ export async function pollDeviceAuth(provider, deviceCode, lang = 'en') {
   );
 }
 
+export async function submitAccountToken(provider, token, lang = 'en') {
+  return apiPostJson(
+    `/api/connected-accounts/${provider}/token`,
+    { token },
+    { auth: true, lang },
+  );
+}
+
 export async function disconnectAccount(provider, lang = 'en') {
   const res = await apiFetch(`/api/connected-accounts/${provider}`, {
     method: 'DELETE',
