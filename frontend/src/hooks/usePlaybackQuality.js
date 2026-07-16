@@ -634,7 +634,13 @@ export function usePlaybackQuality({
       showToast?.(lang === 'ru' ? 'Это качество доступно на платном тарифе' : 'This quality requires a paid plan');
       return;
     }
-    if (!isPlaybackQualityAvailable(newQ, availableQualities, maxTrackQuality, effectivePlan, probeDataRef.current)) {
+    // Only enforce the per-track availability gate once we've actually probed the
+    // current track. On a fresh load (no track probed yet) maxTrackQuality is the
+    // 'HIGH' placeholder, which would wrongly block selecting a plan-allowed tier
+    // like Lossless. The chosen tier downgrades per track later if truly needed.
+    const hasProbeForTrack = probeDataRef.current && probeReadyTrackKeyRef.current === trackKeyRef.current;
+    if (hasProbeForTrack
+      && !isPlaybackQualityAvailable(newQ, availableQualities, maxTrackQuality, effectivePlan, probeDataRef.current)) {
       showToast?.(qualityTierBlockedToast(lang, {
         tidalCatalogOnly: isTidalCatalogOnlyLossless(probeDataRef.current) && newQ === 'LOSSLESS',
       }));
