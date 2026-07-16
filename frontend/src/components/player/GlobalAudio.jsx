@@ -3,11 +3,18 @@ import { initAudioEngine, resumeAudioContext, setGraphGain } from '../../utils/a
 import { PRELOAD_ENABLED } from '../../utils/playerConfig';
 import { sameStreamResource } from '../../utils/qualityPrefs';
 import {
+  bufferedSecondsAhead,
   shouldAdvanceToNextTrack,
   shouldIgnoreStreamError,
   shouldStartPlayback,
 } from '../../utils/playerTransportLogic';
 import { effectivePlaybackDuration } from '../../utils/effectivePlaybackDuration';
+
+// Build up a playback buffer before starting a fresh track, so it doesn't begin
+// after ~1s and immediately re-buffer (worst on Lossless). Best-effort: play
+// anyway once this budget elapses so a slow/progressive stream still starts.
+const INITIAL_PREBUFFER_SEC = 10;
+const INITIAL_PREBUFFER_TIMEOUT_MS = 8000;
 
 const HIDDEN_AUDIO_STYLE = {
   position: 'absolute',
@@ -48,6 +55,10 @@ export default function GlobalAudio({
   const losslessReadyRef = useRef(false);
   const losslessStreamPathRef = useRef('');
   const streamErrorAtRef = useRef(0);
+  const prebufferStartRef = useRef(0);
+
+  // Reset the prebuffer budget when the stream (track/quality) changes.
+  useEffect(() => { prebufferStartRef.current = 0; }, [currentAudioSrc]);
 
   const resolveMainEl = useCallback(
     () => getMainAudioEl?.() ?? audioRef.current,
@@ -81,6 +92,25 @@ export default function GlobalAudio({
       elSrc: el.src || '',
       elCurrentSrc: el.currentSrc || '',
     })) return;
+    // Pre-buffer gate: wait until ~10s is buffered before the first play, so the
+    // track doesn't start after ~1s and immediately re-buffer. Skipped near the
+    // end of a track, and bypassed after a best-effort timeout so slow/progressive
+    // streams still start. A seek uses its own wait (playAfterSeekBuffered), so
+    // only gate when there's no pending seek. The watchdog keeps calling this until
+    // the buffer fills or the budget elapses.
+    if (pendingSeekRef.current == null) {
+      const dur = effectivePlaybackDuration(trackDuration, el.duration);
+      const remaining = dur && dur > 0 ? dur - (el.currentTime || 0) : Infinity;
+      const nearEnd = remaining <= INITIAL_PREBUFFER_SEC + 1;
+      if (!nearEnd && bufferedSecondsAhead(el) < INITIAL_PREBUFFER_SEC) {
+        if (!prebufferStartRef.current) prebufferStartRef.current = performance.now();
+        if (performance.now() - prebufferStartRef.current < INITIAL_PREBUFFER_TIMEOUT_MS) {
+          setIsLoading(true);
+          return;
+        }
+      }
+    }
+    prebufferStartRef.current = 0;
     skipEndedRef.current = false;
     el.volume = volume;
     // currentSrc is now confirmed to be the new track (shouldStartPlayback gates on it)
@@ -121,6 +151,7 @@ export default function GlobalAudio({
     deferPlayUntilReady,
     volume,
     currentAudioSrc,
+    trackDuration,
   ]);
 
   // Single playback watchdog. Once there is intent to play (the queue armed
@@ -138,7 +169,9 @@ export default function GlobalAudio({
 
     let stopped = false;
     let timerId = null;
-    const deadline = Date.now() + 8000;
+    // Long enough to cover the initial pre-buffer wait (~8s) plus margin before
+    // treating a truly stalled load as a 503.
+    const deadline = Date.now() + 14000;
 
     const stop = () => {
       stopped = true;
@@ -153,8 +186,11 @@ export default function GlobalAudio({
         // route it into stream-error recovery so it retries / falls back quality /
         // ultimately surfaces a toast and stops loading.
         const el = resolveMainEl();
+        // Only a genuine stall (no meaningful buffer) is a 503 — a track that is
+        // simply still pre-buffering has data and must not trigger recovery.
         const stalledUnstarted = el && el.paused && !el.error
           && (el.currentTime || 0) < 0.5
+          && bufferedSecondsAhead(el) < 1
           && (pendingPlayRef.current || isPlaying)
           && pendingSeekRef.current == null;
         if (stalledUnstarted) {
