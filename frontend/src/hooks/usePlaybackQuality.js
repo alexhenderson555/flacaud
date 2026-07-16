@@ -756,7 +756,10 @@ export function usePlaybackQuality({
       return;
     }
 
-    const maxSilentRetries = neverStarted ? (isLossless ? 10 : 1) : 3;
+    // Cap silent retries so a persistent server 503 (stream_failed) can't spin the
+    // loader for ~40s. Lossless still gets a few (DASH assembly is genuinely slower)
+    // before we fall back a quality tier / give up with a toast.
+    const maxSilentRetries = neverStarted ? (isLossless ? 3 : 1) : 3;
     if (currentTrack && streamRetryNonceRef.current < maxSilentRetries) {
       const time = mainEl?.currentTime || 0;
       if (time > 0) pendingSeekRef.current = time;

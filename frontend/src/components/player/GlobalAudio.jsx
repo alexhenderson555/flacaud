@@ -146,7 +146,21 @@ export default function GlobalAudio({
     };
 
     const schedule = () => {
-      if (stopped || Date.now() >= deadline) {
+      if (stopped) return;
+      if (Date.now() >= deadline) {
+        // Window elapsed and the element never started. A 503/stall that never
+        // fired an `error` event would otherwise leave the spinner up forever —
+        // route it into stream-error recovery so it retries / falls back quality /
+        // ultimately surfaces a toast and stops loading.
+        const el = resolveMainEl();
+        const stalledUnstarted = el && el.paused && !el.error
+          && (el.currentTime || 0) < 0.5
+          && (pendingPlayRef.current || isPlaying)
+          && pendingSeekRef.current == null;
+        if (stalledUnstarted) {
+          streamErrorAtRef.current = Date.now();
+          handleStreamError?.();
+        }
         stop();
         return;
       }
@@ -193,6 +207,7 @@ export default function GlobalAudio({
     pendingSeekRef,
     crossfadingRef,
     tryStartPlayback,
+    handleStreamError,
   ]);
 
   // Sync element src when React stream URL updated (Web Audio slot keeps stale blob until React commits).
