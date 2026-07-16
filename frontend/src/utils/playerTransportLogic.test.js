@@ -17,10 +17,23 @@ import {
   isAtTrackEnd,
   shouldAdvanceToNextTrack,
   hasAdequatePlaybackBuffer,
+  bufferedSecondsAhead,
   shouldIgnoreStreamError,
   shouldStartPlayback,
   END_THRESHOLD_SEC,
 } from './playerTransportLogic';
+
+// Build a fake media element with a `buffered` TimeRanges-like object.
+function elWithBuffer(ranges, currentTime = 0) {
+  return {
+    currentTime,
+    buffered: {
+      length: ranges.length,
+      start: (i) => ranges[i][0],
+      end: (i) => ranges[i][1],
+    },
+  };
+}
 
 const TRACK_A = { provider_id: '1', title: 'A' };
 const TRACK_B = { provider_id: '2', title: 'B' };
@@ -374,6 +387,29 @@ describe('isAtTrackEnd', () => {
 
   it('is false mid-track', () => {
     expect(isAtTrackEnd({ ended: false, currentTime: 60, duration: 200 }, 200)).toBe(false);
+  });
+});
+
+describe('bufferedSecondsAhead', () => {
+  it('returns 0 when nothing is buffered', () => {
+    expect(bufferedSecondsAhead({ currentTime: 0, buffered: { length: 0 } })).toBe(0);
+    expect(bufferedSecondsAhead(null)).toBe(0);
+  });
+
+  it('measures the buffer ahead of the current position', () => {
+    // Buffered 0–12s, playing at 2s → 10s ahead.
+    expect(bufferedSecondsAhead(elWithBuffer([[0, 12]], 2))).toBe(10);
+  });
+
+  it('uses a future range when the playhead is before it', () => {
+    // Playhead at 1s, a range starting at 5s and ending at 20s → 15s ahead.
+    expect(bufferedSecondsAhead(elWithBuffer([[5, 20]], 1))).toBe(15);
+  });
+
+  it('picks the largest applicable range across gaps', () => {
+    const el = elWithBuffer([[0, 3], [10, 40]], 1);
+    // Current range 0–3 gives 2s ahead; the 10–40 future range gives 30 — max wins.
+    expect(bufferedSecondsAhead(el)).toBe(30);
   });
 });
 
