@@ -110,20 +110,33 @@ jobs:
 
             DOMAIN="${DOMAIN:-flacaud.ru}"
 
-            # Caddy holds host ports 80/443. Compose's own "Recreate" (stop old,
-            # start new) is not atomic enough: twice this took the site down with
-            # "address already in use" because the new container tried to bind
-            # before Docker fully released the port from the old one. Stop+remove
-            # it explicitly first so every `up` below only ever CREATES caddy
-            # fresh — the port is guaranteed free, no race to lose.
+            # Caddy holds host ports 80/443, and repeated deploy failures in this
+            # incident kept hitting "address already in use" — even after
+            # `compose stop/rm caddy`, which only accounts for THIS project's own
+            # container. A previous aborted attempt can leave an orphaned
+            # container (or its docker-proxy) bound to the port under a stale
+            # name/ID that compose no longer tracks. Force-remove ANY container on
+            # the host publishing 80 or 443, regardless of project, before every
+            # `up` — this is the only check that's actually port-scoped rather
+            # than name-scoped, so it can't miss a stray holder.
+            free_web_ports() {
+              for port in 80 443; do
+                cids=$(docker ps -q --filter "publish=${port}" 2>/dev/null || true)
+                if [ -n "$cids" ]; then
+                  echo "Force-removing container(s) holding port ${port}: ${cids}"
+                  docker rm -f $cids >/dev/null 2>&1 || true
+                fi
+              done
+            }
+
             bring_stack_up() {
-              $COMPOSE stop caddy >/dev/null 2>&1 || true
-              $COMPOSE rm -f caddy >/dev/null 2>&1 || true
+              free_web_ports
               for attempt in 1 2 3; do
                 if $COMPOSE up -d --remove-orphans; then
                   return 0
                 fi
                 echo "compose up attempt $attempt failed — retrying in 5s"
+                free_web_ports
                 sleep 5
               done
               return 1
