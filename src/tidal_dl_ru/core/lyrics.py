@@ -32,7 +32,7 @@ _LRCLIB_PARALLEL_TIMEOUT_S = 14.0
 _LYRICS_PROVIDERS = ["Lrclib", "Megalobiz", "NetEase", "Musixmatch", "Genius"]
 # NetEase is often fastest; Lrclib via syncedlyrics is a backup to the httpx LRCLIB race.
 _FAST_LYRICS_PROVIDERS = ["NetEase", "Lrclib", "Megalobiz"]
-_PLAIN_LYRICS_PROVIDERS = ["NetEase", "Lrclib", "Megalobiz", "Musixmatch", "Genius"]
+_PLAIN_LYRICS_PROVIDERS = ["Genius", "Lrclib"]
 _PLAIN_RACE_TIMEOUT_S = 14.0
 _FEAT_SUFFIX_RE = re.compile(
     r"\s*[\(\[](?:feat\.?|ft\.?|featuring)[^\)\]]+[\)\]]",
@@ -85,7 +85,7 @@ def _title_roughly_matches(a: str, b: str) -> bool:
     return SequenceMatcher(None, na, nb).ratio() >= 0.5
 
 
-def clean_plain_lyrics(text: str, expected_title: Optional[str] = None) -> Optional[str]:
+def clean_plain_lyrics(text: str, expected_title: Optional[str] = None, expected_artist: Optional[str] = None) -> Optional[str]:
     """Strip Genius scrape cruft from unsynced lyrics.
 
     Returns cleaned text, or None when the Genius "<Song> Lyrics" header names a
@@ -103,8 +103,17 @@ def clean_plain_lyrics(text: str, expected_title: Optional[str] = None) -> Optio
             continue
         header = _GENIUS_LYRICS_HEADER_RE.match(s)
         if header and len(s) <= 120:
-            if expected_title and not _title_roughly_matches(header.group("title"), expected_title):
-                return None  # wrong song — reject entirely
+            if expected_title:
+                header_title = header.group("title")
+                na = _norm_title_for_match(header_title)
+                nt = _norm_title_for_match(expected_title)
+                if nt not in na:
+                    return None  # wrong title
+                if expected_artist:
+                    n_art = _norm_title_for_match(expected_artist)
+                    # If header has a dash (Artist - Title) and artist doesn't match, reject.
+                    if n_art and n_art not in na and ("-" in header_title or "–" in header_title):
+                        return None
             continue  # drop the "<Song> Lyrics" header line
         if _BRACKET_ONLY_RE.match(s):
             continue  # [Couplet 1 : X] / [Paroles de …] / [Chorus] section markers
@@ -672,8 +681,6 @@ def _search_queries(artist: str, title: str, album: Optional[str]) -> list[str]:
         for t in _title_variants(title):
             queries.append(f"{a} - {t}")
             queries.append(f"{a} {t}")
-    for t in _title_variants(title):
-        queries.append(t)
     if artist and album:
         queries.append(f"{artist} {album}")
     seen: set[str] = set()
@@ -754,8 +761,6 @@ def fetch_lyrics_lines(
     )
     if not lrc and query:
         lrc = _syncedlyrics_search(query, _FAST_LYRICS_PROVIDERS, synced_only=True)
-    if not lrc and query:
-        lrc = _syncedlyrics_search(query, _FAST_LYRICS_PROVIDERS, synced_only=False)
     if lrc:
         parsed = parse_lrc_lines(lrc)
         if parsed:
@@ -775,7 +780,7 @@ def fetch_lyrics_lines(
             else:
                 return cleaned
         else:
-            cleaned_plain = clean_plain_lyrics(lrc, track_title)
+            cleaned_plain = clean_plain_lyrics(lrc, track_title, expected_artist=artist)
             if cleaned_plain:
                 plain_from_lrc = _plain_lyrics_to_lines(cleaned_plain)
                 if plain_from_lrc:
@@ -790,7 +795,7 @@ def fetch_lyrics_lines(
         query=query,
     )
     if plain:
-        cleaned_plain = clean_plain_lyrics(plain, track_title)
+        cleaned_plain = clean_plain_lyrics(plain, track_title, expected_artist=artist)
         if cleaned_plain:
             lines = _plain_lyrics_to_lines(cleaned_plain)
             if lines:
