@@ -109,9 +109,27 @@ jobs:
             fi
 
             $COMPOSE build api worker bot
-            $COMPOSE up -d --remove-orphans
-            $COMPOSE up -d caddy
-            $COMPOSE restart caddy api bot
+            # Single `up` recreates every service whose image/config changed
+            # (api/worker/bot from the rebuild above; caddy is untouched so it's
+            # left running). Do NOT follow this with a separate `up -d caddy` or
+            # `restart caddy` — that recreates an already-healthy caddy container
+            # a second time, and if Docker hasn't released port 80 from the first
+            # recreate yet, the second bind fails with "address already in use"
+            # and (with set -e) aborts before the health-check/rollback below ever
+            # runs, leaving no proxy listening at all. Retry with backoff instead
+            # of a second unconditional recreate, so a genuine port-release race
+            # is absorbed rather than left to kill the whole deploy.
+            for attempt in 1 2 3; do
+              if $COMPOSE up -d --remove-orphans; then
+                break
+              fi
+              echo "compose up attempt $attempt failed — retrying in 5s"
+              sleep 5
+              if [ "$attempt" = "3" ]; then
+                echo "compose up failed after 3 attempts"
+                exit 1
+              fi
+            done
 
             # Health check with retries — give the stack up to 90s to come up.
             DOMAIN="${DOMAIN:-flacaud.ru}"
@@ -132,8 +150,10 @@ jobs:
               git reset --hard "$PREV_HEAD"
               docker run --rm -v "$DEPLOY_PATH/frontend:/app" -w /app node:22-alpine sh -c "npm ci && npm run build"
               $COMPOSE build api worker bot
+              # Same reasoning as the primary deploy path above: no separate
+              # `restart caddy` after `up` — it's the redundant-recreate that
+              # caused the port-80 race in the first place.
               $COMPOSE up -d --remove-orphans
-              $COMPOSE restart caddy api bot
               sleep 15
               if curl -sf "https://${DOMAIN}/healthz" 2>/dev/null | grep -q '"ok": *true' \
                  || curl -sf http://127.0.0.1:8001/healthz 2>/dev/null | grep -q '"ok": *true'; then
