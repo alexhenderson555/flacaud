@@ -108,36 +108,49 @@ jobs:
               COMPOSE="$COMPOSE -f docker-compose.postgres.yml"
             fi
 
-            $COMPOSE build api worker bot
-            # Single `up` recreates every service whose image/config changed
-            # (api/worker/bot from the rebuild above; caddy is untouched so it's
-            # left running). Do NOT follow this with a separate `up -d caddy` or
-            # `restart caddy` — that recreates an already-healthy caddy container
-            # a second time, and if Docker hasn't released port 80 from the first
-            # recreate yet, the second bind fails with "address already in use"
-            # and (with set -e) aborts before the health-check/rollback below ever
-            # runs, leaving no proxy listening at all. Retry with backoff instead
-            # of a second unconditional recreate, so a genuine port-release race
-            # is absorbed rather than left to kill the whole deploy.
-            for attempt in 1 2 3; do
-              if $COMPOSE up -d --remove-orphans; then
-                break
-              fi
-              echo "compose up attempt $attempt failed — retrying in 5s"
-              sleep 5
-              if [ "$attempt" = "3" ]; then
-                echo "compose up failed after 3 attempts"
-                exit 1
-              fi
-            done
+            DOMAIN="${DOMAIN:-flacaud.ru}"
+
+            # Caddy holds host ports 80/443. Compose's own "Recreate" (stop old,
+            # start new) is not atomic enough: twice this took the site down with
+            # "address already in use" because the new container tried to bind
+            # before Docker fully released the port from the old one. Stop+remove
+            # it explicitly first so every `up` below only ever CREATES caddy
+            # fresh — the port is guaranteed free, no race to lose.
+            bring_stack_up() {
+              $COMPOSE stop caddy >/dev/null 2>&1 || true
+              $COMPOSE rm -f caddy >/dev/null 2>&1 || true
+              for attempt in 1 2 3; do
+                if $COMPOSE up -d --remove-orphans; then
+                  return 0
+                fi
+                echo "compose up attempt $attempt failed — retrying in 5s"
+                sleep 5
+              done
+              return 1
+            }
+
+            # Local health probe that bypasses DNS/Cloudflare entirely: forces the
+            # connection to localhost via --resolve while keeping the real
+            # hostname for TLS SNI + the Caddyfile's vhost match, so it exercises
+            # the actual cert/routing Caddy serves in production. This must be the
+            # authoritative signal — the plain https://$DOMAIN check also asks
+            # Cloudflare's edge to have already marked the origin healthy again
+            # after an outage, which is not something a deploy controls or
+            # should have to wait out.
+            check_health() {
+              curl -sf --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/healthz" 2>/dev/null | grep -q '"ok": *true'
+            }
+
+            if ! bring_stack_up; then
+              echo "compose up failed after 3 attempts"
+              exit 1
+            fi
 
             # Health check with retries — give the stack up to 90s to come up.
-            DOMAIN="${DOMAIN:-flacaud.ru}"
             HEALTH_OK=false
             for i in $(seq 1 12); do
               sleep 5
-              if curl -sf "https://${DOMAIN}/healthz" 2>/dev/null | grep -q '"ok": *true' \
-                 || curl -sf http://127.0.0.1:8001/healthz 2>/dev/null | grep -q '"ok": *true'; then
+              if check_health; then
                 HEALTH_OK=true
                 echo "Health check passed on attempt $i"
                 break
@@ -150,16 +163,15 @@ jobs:
               git reset --hard "$PREV_HEAD"
               docker run --rm -v "$DEPLOY_PATH/frontend:/app" -w /app node:22-alpine sh -c "npm ci && npm run build"
               $COMPOSE build api worker bot
-              # Same reasoning as the primary deploy path above: no separate
-              # `restart caddy` after `up` — it's the redundant-recreate that
-              # caused the port-80 race in the first place.
-              $COMPOSE up -d --remove-orphans
-              sleep 15
-              if curl -sf "https://${DOMAIN}/healthz" 2>/dev/null | grep -q '"ok": *true' \
-                 || curl -sf http://127.0.0.1:8001/healthz 2>/dev/null | grep -q '"ok": *true'; then
-                echo "Rollback successful — serving previous version ($PREV_HEAD)"
+              if bring_stack_up; then
+                sleep 15
+                if check_health; then
+                  echo "Rollback successful — serving previous version ($PREV_HEAD)"
+                else
+                  echo "ROLLBACK FAILED — manual intervention required"
+                fi
               else
-                echo "ROLLBACK FAILED — manual intervention required"
+                echo "ROLLBACK FAILED — compose up did not succeed — manual intervention required"
               fi
               exit 1
             fi
