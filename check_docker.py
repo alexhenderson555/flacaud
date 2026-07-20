@@ -1,8 +1,6 @@
 import paramiko
-
-ssh = paramiko.SSHClient()
-ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh.connect('46.17.102.157', username='root', password='***REMOVED-VPS-ROOT-PASSWORD***', timeout=10)
-cmd = "docker ps | grep node"
-stdin, stdout, stderr = ssh.exec_command(cmd)
-print('Output:', stdout.read().decode())
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect('46.17.102.157', username='root', password='***REMOVED-VPS-ROOT-PASSWORD***')
+stdin, stdout, stderr = client.exec_command('ps aux | grep docker')
+print(stdout.read().decode())

@@ -112,8 +112,16 @@ def clean_plain_lyrics(text: str, expected_title: Optional[str] = None, expected
                 if expected_artist:
                     n_art = _norm_title_for_match(expected_artist)
                     # If header has a dash (Artist - Title) and artist doesn't match, reject.
-                    if n_art and n_art not in na and ("-" in header_title or "–" in header_title):
-                        return None
+                    if n_art and ("-" in header_title or "–" in header_title):
+                        if n_art not in na:
+                            return None
+                    elif n_art:
+                        # No artist in header. If artist isn't in the first 500 chars, be very strict with title.
+                        n_text = _norm_title_for_match(text[:500])
+                        if n_art not in n_text:
+                            # Substring match is too dangerous here (e.g. "Maybe" in "Maybe I'll Do")
+                            if nt != na and SequenceMatcher(None, na, nt).ratio() < 0.8:
+                                return None
             continue  # drop the "<Song> Lyrics" header line
         if _BRACKET_ONLY_RE.match(s):
             continue  # [Couplet 1 : X] / [Paroles de …] / [Chorus] section markers
