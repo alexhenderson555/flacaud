@@ -14,8 +14,8 @@ const MOBILE_MORE_LINKS = [
   { to: '/playlists', icon: ListMusic, labelKey: 'playlists' },
   { to: '/sync', icon: Repeat, labelKey: 'transfer' },
   { to: '/set-browser', icon: Compass, labelKey: 'setBrowser' },
-  { to: '/analyzer', icon: Wand2, labelKey: 'setAnalyzer' },
   { to: '/set-library', icon: Library, labelKey: 'setLibrary' },
+  { to: '/analyzer', icon: Wand2, labelKey: 'setAnalyzer' },
 ];
 
 export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen }) {
@@ -78,13 +78,13 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
             <Compass size={20} />
             <span>{t('setBrowser')}</span>
           </NavLink>
-          <NavLink to="/analyzer" className={navClass('', 'hide-on-mobile')}>
-            <Wand2 size={20} />
-            <span>{t('setAnalyzer')}</span>
-          </NavLink>
           <NavLink to="/set-library" className={navClass('', 'hide-on-mobile')}>
             <Library size={20} />
             <span>{t('setLibrary')}</span>
+          </NavLink>
+          <NavLink to="/analyzer" className={navClass('', 'hide-on-mobile')}>
+            <Wand2 size={20} />
+            <span>{t('setAnalyzer')}</span>
           </NavLink>
 
           <NavLink to="/account" className={navClass('', 'nav-item-account mobile-only')}>

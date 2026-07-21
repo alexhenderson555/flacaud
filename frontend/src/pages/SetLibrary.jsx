@@ -377,7 +377,7 @@ export default function SetLibrary() {
                       // Capped so a wide-screen 16:9 YouTube embed doesn't
                       // dwarf the row — SoundCloud's flat player bar was
                       // already fine at full width, so only the video is capped.
-                      maxWidth: isSc ? '100%' : '480px',
+                      maxWidth: isSc ? '100%' : '560px',
                       margin: isSc ? undefined : '0 auto',
                       minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 180,
                     }}
