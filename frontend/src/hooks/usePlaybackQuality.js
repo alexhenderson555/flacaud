@@ -75,6 +75,16 @@ export function usePlaybackQuality({
   const qualityActualRef = useRef({});
   const probeDataRef = useRef(null);
   const pendingSeekRef = useRef(null);
+  // Which track pendingSeekRef's timestamp belongs to (provider:provider_id).
+  // restorePendingSeek only had a "does the timestamp fit this element's
+  // duration" check, no track-identity check — a stale pending seek recorded
+  // for the previous track could still slip through and get applied to a
+  // freshly-switched track that happens to have a longer duration, if the
+  // switch and the pending-seek write race within the same tick (e.g. the
+  // seek-bar's handleSeekCommit firing just as the user switches tracks).
+  // This is a second, independent guard on top of the track-change reset
+  // effect below, which only clears pendingSeekRef itself.
+  const pendingSeekTrackKeyRef = useRef('');
   const pendingPlayAfterSeekRef = useRef(false);
   const streamRetryNonceRef = useRef(0);
   const loadedSrcKeyRef = useRef('');
@@ -295,6 +305,7 @@ export function usePlaybackQuality({
       loadedSrcKeyRef.current = '';
       if (skipAudioSrcSyncRef) skipAudioSrcSyncRef.current = null;
       pendingSeekRef.current = null;
+      pendingSeekTrackKeyRef.current = '';
       pendingPlayAfterSeekRef.current = false;
       return undefined;
     }
@@ -310,6 +321,7 @@ export function usePlaybackQuality({
     // NEW track to the old one's leftover position on its first loadedmetadata.
     // This is what surfaced as tracks starting at an unrelated ~20-45s offset.
     pendingSeekRef.current = null;
+    pendingSeekTrackKeyRef.current = '';
     pendingPlayAfterSeekRef.current = false;
     trackChangePendingRef.current = true;
     streamErrorSuppressUntilRef.current = performance.now() + 1200;
@@ -632,10 +644,23 @@ export function usePlaybackQuality({
 
   const restorePendingSeek = useCallback(() => {
     if (pendingSeekRef.current == null || !audioRef?.current) return;
+    // Belt-and-suspenders track-identity check: the reset effect above clears
+    // pendingSeekRef on track change, but if a write to it (e.g. a seek-bar
+    // commit or a quality-retry) races that reset within the same tick, a
+    // stale timestamp meant for the PREVIOUS track could still be pending
+    // here. Discard rather than apply it if it isn't tagged for the track
+    // that's current right now.
+    if (pendingSeekTrackKeyRef.current && pendingSeekTrackKeyRef.current !== trackKeyRef.current) {
+      pendingSeekRef.current = null;
+      pendingSeekTrackKeyRef.current = '';
+      pendingPlayAfterSeekRef.current = false;
+      return;
+    }
     const target = pendingSeekRef.current;
     const dur = audioRef.current.duration;
     if (dur && !Number.isNaN(dur) && target > dur) return;
     pendingSeekRef.current = null;
+    pendingSeekTrackKeyRef.current = '';
     audioRef.current.currentTime = target;
     setProgress?.(target);
     if (pendingPlayAfterSeekRef.current) {
@@ -688,6 +713,7 @@ export function usePlaybackQuality({
     streamErrorSuppressUntilRef.current = performance.now() + 800;
     const time = audioRef?.current?.currentTime || 0;
     pendingSeekRef.current = time;
+    pendingSeekTrackKeyRef.current = trackKeyRef.current;
     pendingPlayAfterSeekRef.current = isPlaying;
     lastStreamErrorKeyRef.current = '';
     streamRetryNonceRef.current += 1;
@@ -760,7 +786,10 @@ export function usePlaybackQuality({
       if (!currentTrack || !nextQuality) return false;
       if (toast) showToast?.(toast);
       const time = mainEl?.currentTime || 0;
-      if (time > 0) pendingSeekRef.current = time;
+      if (time > 0) {
+        pendingSeekRef.current = time;
+        pendingSeekTrackKeyRef.current = trackKeyRef.current;
+      }
       pendingPlayAfterSeekRef.current = isPlayingRef.current || pendingPlayRef?.current;
       await removeCachedAudioTrack(currentTrack, streamQuality);
       setStreamQuality(nextQuality);
@@ -798,7 +827,10 @@ export function usePlaybackQuality({
     const maxSilentRetries = neverStarted ? (isLossless ? 3 : 1) : 3;
     if (currentTrack && streamRetryNonceRef.current < maxSilentRetries) {
       const time = mainEl?.currentTime || 0;
-      if (time > 0) pendingSeekRef.current = time;
+      if (time > 0) {
+        pendingSeekRef.current = time;
+        pendingSeekTrackKeyRef.current = trackKeyRef.current;
+      }
       pendingPlayAfterSeekRef.current = isPlayingRef.current || pendingPlayRef?.current;
       await removeCachedAudioTrack(currentTrack, streamQuality);
       await getMediaToken({ force: true });
@@ -900,6 +932,7 @@ export function usePlaybackQuality({
     restorePendingSeek,
     handleStreamError,
     pendingSeekRef,
+    pendingSeekTrackKeyRef,
     pendingPlayAfterSeekRef,
   };
 }

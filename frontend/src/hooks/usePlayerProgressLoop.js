@@ -40,6 +40,7 @@ export function usePlayerProgressLoop({
   skipEndedRef,
   skipAudioSrcSyncRef,
   pendingSeekRef,
+  pendingSeekTrackKeyRef,
   pendingPlayAfterSeekRef,
   modesRef,
   shuffleEnabled = false,
@@ -345,11 +346,17 @@ export function usePlayerProgressLoop({
     resetEndDetection();
     skipEndedRef.current = true;
 
+    const trackKey = currentTrackRef.current
+      ? `${currentTrackRef.current.provider || 'tidal'}:${currentTrackRef.current.provider_id}`
+      : '';
+
     if (pendingSeekRef) pendingSeekRef.current = null;
+    if (pendingSeekTrackKeyRef) pendingSeekTrackKeyRef.current = '';
     if (pendingPlayAfterSeekRef) pendingPlayAfterSeekRef.current = false;
 
     if (el.readyState < HTMLMediaElement.HAVE_METADATA) {
       if (pendingSeekRef) pendingSeekRef.current = newTime;
+      if (pendingSeekTrackKeyRef) pendingSeekTrackKeyRef.current = trackKey;
       if (isPlaying) pendingPlayAfterSeekRef.current = true;
       setProgress(newTime);
       return;
@@ -359,11 +366,13 @@ export function usePlayerProgressLoop({
       el.currentTime = newTime;
     } catch {
       if (pendingSeekRef) pendingSeekRef.current = newTime;
+      if (pendingSeekTrackKeyRef) pendingSeekTrackKeyRef.current = trackKey;
       if (isPlaying) pendingPlayAfterSeekRef.current = true;
     }
     const applied = Math.abs((el.currentTime || 0) - newTime) < 0.75;
     if (!applied) {
       if (pendingSeekRef) pendingSeekRef.current = newTime;
+      if (pendingSeekTrackKeyRef) pendingSeekTrackKeyRef.current = trackKey;
       if (isPlaying) pendingPlayAfterSeekRef.current = true;
     }
     setProgress(applied ? (el.currentTime || newTime) : newTime);
@@ -372,8 +381,8 @@ export function usePlayerProgressLoop({
     }
   }, [
     trackDuration, audioRef, getMainAudioEl, setProgress, resetEndDetection, skipEndedRef,
-    pendingSeekRef, pendingPlayAfterSeekRef, isPlaying, seekScrubbingRef,
-    clearSeekBufferWait, playAfterSeekBuffered,
+    pendingSeekRef, pendingSeekTrackKeyRef, pendingPlayAfterSeekRef, isPlaying, seekScrubbingRef,
+    clearSeekBufferWait, playAfterSeekBuffered, currentTrackRef,
   ]);
 
   const beginSeekScrub = useCallback(() => {

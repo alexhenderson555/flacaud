@@ -20,6 +20,8 @@ import {
   bufferedSecondsAhead,
   shouldIgnoreStreamError,
   shouldStartPlayback,
+  shouldArmMidStreamStallWatchdog,
+  shouldRecoverFromMidStreamStall,
   END_THRESHOLD_SEC,
 } from './playerTransportLogic';
 
@@ -549,5 +551,67 @@ describe('shouldStartPlayback', () => {
   it('does not start on a media error or with no wanted src', () => {
     expect(shouldStartPlayback({ ...base, hasError: true })).toBe(false);
     expect(shouldStartPlayback({ ...base, wantSrc: '' })).toBe(false);
+  });
+});
+
+// Regression coverage for the "track sometimes loads forever, more often at
+// 320k" bug: a stream that stalls AFTER playback has started (buffer
+// underrun / stuck upstream fetch) left el.paused === false, so the
+// pre-start watchdog never re-engaged and isLoading stayed stuck forever —
+// the only thing that unstuck it was a fresh track-switch (play previous,
+// then next again), which happens to force a brand new stream request.
+describe('shouldArmMidStreamStallWatchdog', () => {
+  const playingEl = { currentTime: 12, seeking: false };
+
+  it('arms once real playback progress has happened and nothing else is in flight', () => {
+    expect(shouldArmMidStreamStallWatchdog({ el: playingEl })).toBe(true);
+  });
+
+  it('does not arm before real progress (pre-start buffering is the other watchdog\'s job)', () => {
+    expect(shouldArmMidStreamStallWatchdog({ el: { currentTime: 0, seeking: false } })).toBe(false);
+    expect(shouldArmMidStreamStallWatchdog({ el: { currentTime: 0.2, seeking: false } })).toBe(false);
+  });
+
+  it('does not arm while a seek is in progress (element or pending)', () => {
+    expect(shouldArmMidStreamStallWatchdog({ el: { ...playingEl, seeking: true } })).toBe(false);
+    expect(shouldArmMidStreamStallWatchdog({ el: playingEl, pendingSeek: 5 })).toBe(false);
+  });
+
+  it('does not arm during a crossfade', () => {
+    expect(shouldArmMidStreamStallWatchdog({ el: playingEl, crossfading: true })).toBe(false);
+  });
+
+  it('does not re-arm when a watchdog timer is already pending', () => {
+    expect(shouldArmMidStreamStallWatchdog({ el: playingEl, alreadyArmed: true })).toBe(false);
+  });
+
+  it('has no element to check', () => {
+    expect(shouldArmMidStreamStallWatchdog({ el: null })).toBe(false);
+  });
+});
+
+describe('shouldRecoverFromMidStreamStall', () => {
+  const stuckEl = { error: null, seeking: false };
+
+  it('recovers when genuinely stuck with standing play intent', () => {
+    expect(shouldRecoverFromMidStreamStall({ el: stuckEl, isPlaying: true })).toBe(true);
+    expect(shouldRecoverFromMidStreamStall({ el: stuckEl, pendingPlay: true })).toBe(true);
+  });
+
+  it('stands down if a hard media error already surfaced (onError already handling it)', () => {
+    expect(shouldRecoverFromMidStreamStall({ el: { error: { code: 2 } }, isPlaying: true })).toBe(false);
+  });
+
+  it('stands down if a seek started or is pending since the watchdog armed', () => {
+    expect(shouldRecoverFromMidStreamStall({ el: { ...stuckEl, seeking: true }, isPlaying: true })).toBe(false);
+    expect(shouldRecoverFromMidStreamStall({ el: stuckEl, pendingSeek: 5, isPlaying: true })).toBe(false);
+  });
+
+  it('stands down if play intent was withdrawn (user paused) while the timer was pending', () => {
+    expect(shouldRecoverFromMidStreamStall({ el: stuckEl, isPlaying: false, pendingPlay: false })).toBe(false);
+  });
+
+  it('stands down with no element', () => {
+    expect(shouldRecoverFromMidStreamStall({ el: null, isPlaying: true })).toBe(false);
   });
 });

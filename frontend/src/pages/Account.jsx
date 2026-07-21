@@ -66,6 +66,11 @@ const dict = {
     offlineCacheEmpty: 'No cached tracks',
     offlineCacheClear: 'Clear cache',
     offlineCacheCleared: 'Offline cache cleared',
+    offlineCacheShow: 'View tracks',
+    offlineCacheHide: 'Hide tracks',
+    offlineCacheDownload: 'Download',
+    offlineCacheRemove: 'Remove',
+    offlineCacheRemoved: 'Removed from offline cache',
     acceptTerms: 'I accept the Terms of Use and Privacy Policy',
     verifyBanner: 'Please verify your email — check your inbox.',
     verifySpamHint: 'If you do not see it, check Spam — mail from a new domain often lands there first.',
@@ -110,6 +115,11 @@ const dict = {
     offlineCacheEmpty: 'Нет кэшированных треков',
     offlineCacheClear: 'Очистить кэш',
     offlineCacheCleared: 'Офлайн-кэш очищен',
+    offlineCacheShow: 'Показать треки',
+    offlineCacheHide: 'Скрыть треки',
+    offlineCacheDownload: 'Скачать',
+    offlineCacheRemove: 'Удалить',
+    offlineCacheRemoved: 'Удалено из офлайн-кэша',
     acceptTerms: 'Я принимаю Условия и Политику конфиденциальности',
     verifyBanner: 'Подтвердите email — проверьте почту.',
     verifySpamHint: 'Если письма нет, загляните в «Спам» — с нового домена письма часто попадают туда.',
@@ -340,6 +350,15 @@ export default function Account() {
             isLoggedIn={isLoggedIn}
             onOpen={() => setDownloadHistoryOpen(true)}
           />
+
+          <OfflineCacheCard
+            t={t}
+            isLoggedIn={isLoggedIn}
+            offlineCacheStats={offlineCacheStats}
+            onCleared={refreshOfflineCacheStats}
+          />
+
+          <LanguageCard t={t} lang={lang} setLang={setLang} />
         </motion.div>
 
         {/* RIGHT COLUMN */}
@@ -379,15 +398,6 @@ export default function Account() {
             </div>
             <ThemeList theme={theme} setTheme={setTheme} lang={lang} />
           </div>
-
-          <OfflineCacheCard
-            t={t}
-            isLoggedIn={isLoggedIn}
-            offlineCacheStats={offlineCacheStats}
-            onCleared={refreshOfflineCacheStats}
-          />
-
-          <LanguageCard t={t} lang={lang} setLang={setLang} />
         </motion.div>
       </div>
     </div>

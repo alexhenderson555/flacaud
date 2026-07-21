@@ -57,6 +57,17 @@ export default function KaraokeMode({
     };
   }, [currentTrack]);
 
+  // Reset scroll to the top whenever the track itself changes, regardless of how
+  // the switch was triggered (click, keyboard hotkey, or natural auto-advance).
+  // The active-line auto-scroll effect below only re-runs when `activeIndex`
+  // changes value — for a fresh track that resolves to the same index the
+  // previous track ended on (e.g. both land on line 0), that effect never fires,
+  // leaving any manual scroll position from the old track in place.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) container.scrollTop = 0;
+  }, [currentTrack?.provider_id]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || activeIndex < 0) return;

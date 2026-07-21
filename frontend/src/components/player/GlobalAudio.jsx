@@ -5,7 +5,9 @@ import { sameStreamResource } from '../../utils/qualityPrefs';
 import {
   bufferedSecondsAhead,
   shouldAdvanceToNextTrack,
+  shouldArmMidStreamStallWatchdog,
   shouldIgnoreStreamError,
+  shouldRecoverFromMidStreamStall,
   shouldStartPlayback,
 } from '../../utils/playerTransportLogic';
 import { effectivePlaybackDuration } from '../../utils/effectivePlaybackDuration';
@@ -15,6 +17,17 @@ import { effectivePlaybackDuration } from '../../utils/effectivePlaybackDuration
 // anyway once this budget elapses so a slow/progressive stream still starts.
 const INITIAL_PREBUFFER_SEC = 10;
 const INITIAL_PREBUFFER_TIMEOUT_MS = 8000;
+
+// Once actual playback has started, a buffer underrun only sets isLoading via
+// onWaiting/onStalled — el.paused stays false (nothing called pause()), so the
+// pre-start watchdog above never re-engages (it stops the moment !el.paused).
+// A stuck upstream fetch (seen most on HIGH/320k's progressive BTS-proxy path,
+// which can sit mid-read for a while before erroring) then leaves the spinner
+// up with no recovery until the user replays a previous track and comes back —
+// that action's fresh track-switch is what actually unsticks it, nothing
+// inherent to "previous". This watchdog detects that specific case and routes
+// it into the same handleStreamError recovery already used elsewhere.
+const MID_STREAM_STALL_TIMEOUT_MS = 15000;
 
 const HIDDEN_AUDIO_STYLE = {
   position: 'absolute',
@@ -56,14 +69,55 @@ export default function GlobalAudio({
   const losslessStreamPathRef = useRef('');
   const streamErrorAtRef = useRef(0);
   const prebufferStartRef = useRef(0);
-
-  // Reset the prebuffer budget when the stream (track/quality) changes.
-  useEffect(() => { prebufferStartRef.current = 0; }, [currentAudioSrc]);
+  const midStreamStallTimerRef = useRef(null);
 
   const resolveMainEl = useCallback(
     () => getMainAudioEl?.() ?? audioRef.current,
     [getMainAudioEl, audioRef],
   );
+
+  const clearMidStreamStallWatchdog = useCallback(() => {
+    if (midStreamStallTimerRef.current) {
+      clearTimeout(midStreamStallTimerRef.current);
+      midStreamStallTimerRef.current = null;
+    }
+  }, []);
+
+  // A stall is only "mid-stream" (this watchdog's job) once real playback
+  // progress has happened — an el that never started is the pre-start
+  // watchdog's job, and treating pre-start buffering as a stall here would
+  // fire recovery too eagerly on a merely slow initial load.
+  const armMidStreamStallWatchdog = useCallback(() => {
+    const el = resolveMainEl();
+    if (!shouldArmMidStreamStallWatchdog({
+      el,
+      pendingSeek: pendingSeekRef.current,
+      crossfading: crossfadingRef?.current,
+      alreadyArmed: Boolean(midStreamStallTimerRef.current),
+    })) return;
+    midStreamStallTimerRef.current = setTimeout(() => {
+      midStreamStallTimerRef.current = null;
+      // Only recover if still genuinely stuck: no error already handling it,
+      // no seek now in flight, and playback intent still stands.
+      if (!shouldRecoverFromMidStreamStall({
+        el: resolveMainEl(),
+        pendingSeek: pendingSeekRef.current,
+        isPlaying,
+        pendingPlay: pendingPlayRef.current,
+      })) return;
+      streamErrorAtRef.current = Date.now();
+      handleStreamError?.();
+    }, MID_STREAM_STALL_TIMEOUT_MS);
+  }, [resolveMainEl, pendingSeekRef, crossfadingRef, isPlaying, pendingPlayRef, handleStreamError]);
+
+  // Reset the prebuffer budget and any pending mid-stream-stall watchdog when
+  // the stream (track/quality) changes — a new track/quality is a fresh load.
+  useEffect(() => {
+    prebufferStartRef.current = 0;
+    clearMidStreamStallWatchdog();
+  }, [currentAudioSrc, clearMidStreamStallWatchdog]);
+
+  useEffect(() => clearMidStreamStallWatchdog, [clearMidStreamStallWatchdog]);
 
   useEffect(() => {
     const streamPath = (currentAudioSrc || '').split('?')[0] || '';
@@ -352,6 +406,7 @@ export default function GlobalAudio({
       }
     },
     onPause: () => {
+      clearMidStreamStallWatchdog();
       if (pendingPlayRef.current) return;
       setIsPlaying(false);
       const el = resolveMainEl();
@@ -359,6 +414,7 @@ export default function GlobalAudio({
     },
     onSeeking: () => {
       skipEndedRef.current = true;
+      clearMidStreamStallWatchdog();
     },
     onSeeked: () => {
       skipEndedRef.current = false;
@@ -366,6 +422,7 @@ export default function GlobalAudio({
       if (el) setProgress(el.currentTime || 0);
     },
     onEnded: () => {
+      clearMidStreamStallWatchdog();
       const el = resolveMainEl();
       // Ignore a spurious 'ended' that fires before the track actually played
       // (e.g. an empty/errored src on a fresh load) — advancing on it made the
@@ -383,11 +440,13 @@ export default function GlobalAudio({
       const el = resolveMainEl();
       if (el?.seeking) return;
       setIsLoading(true);
+      armMidStreamStallWatchdog();
     },
     onStalled: () => {
       const el = resolveMainEl();
       if (el?.seeking) return;
       setIsLoading(true);
+      armMidStreamStallWatchdog();
     },
     onProgress: () => {
       const el = resolveMainEl();
@@ -405,6 +464,7 @@ export default function GlobalAudio({
       }
     },
     onPlaying: () => {
+      clearMidStreamStallWatchdog();
       resumeAudioContext();
       const el = resolveMainEl();
       if (!el) return;
@@ -422,6 +482,9 @@ export default function GlobalAudio({
       const isReadyForNewTrack = sameStreamResource(el.currentSrc || '', currentAudioSrc);
       if (!isReadyForNewTrack && el.currentSrc) return;
 
+      // Native `timeupdate` only fires while currentTime is actually advancing —
+      // a reliable "we're not stalled" signal, so disarm the mid-stream watchdog.
+      clearMidStreamStallWatchdog();
       if ((el.currentTime || 0) > 0.05) {
         setIsLoading(false);
       }
@@ -467,6 +530,7 @@ export default function GlobalAudio({
       }
     },
     onError: (e) => {
+      clearMidStreamStallWatchdog();
       const el = e?.currentTarget || resolveMainEl();
       const code = el?.error?.code;
       // Aborted / empty src during rapid track switch — not a stream failure.

@@ -22,6 +22,22 @@ export function cacheKeyFor(track, quality = 'HIGH') {
   return `${provider}_${track.provider_id}_${quality}`;
 }
 
+function metaKeyFor(cacheKey) {
+  return `${cacheKey}__meta`;
+}
+
+function trackMeta(track, quality) {
+  return {
+    provider: track?.provider || 'tidal',
+    provider_id: track?.provider_id,
+    title: track?.title || '',
+    artists: Array.isArray(track?.artists) ? track.artists : [],
+    cover_url: track?.cover_url || null,
+    quality,
+    cachedAt: Date.now(),
+  };
+}
+
 /** Parse total size from Content-Range: bytes 0-524287/9000000 */
 export function parseContentRangeTotal(header) {
   if (!header) return null;
@@ -91,6 +107,7 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
       return false;
     }
     await localforage.setItem(cacheKey, blob);
+    await localforage.setItem(metaKeyFor(cacheKey), trackMeta(track, quality));
     notifyOfflineCacheUpdated();
     return true;
   } catch (error) {
@@ -176,11 +193,63 @@ export const removeCachedAudioTrack = async (track, quality = 'HIGH') => {
   const cacheKey = cacheKeyFor(track, quality);
   try {
     await localforage.removeItem(cacheKey);
+    await localforage.removeItem(metaKeyFor(cacheKey));
+    notifyOfflineCacheUpdated();
     return true;
   } catch {
     return false;
   }
 };
+
+/** List cached tracks (name/artist/quality/size) for the Account offline-cache browser. */
+export async function listCachedTracks() {
+  const keys = await localforage.keys();
+  const rows = [];
+  for (const key of keys) {
+    if (!key.endsWith('__meta')) continue;
+    const meta = await localforage.getItem(key);
+    if (!meta) continue;
+    const cacheKey = key.slice(0, -'__meta'.length);
+    const blob = await localforage.getItem(cacheKey);
+    if (!(blob instanceof Blob)) continue;
+    rows.push({ ...meta, cacheKey, bytes: blob.size });
+  }
+  rows.sort((a, b) => (b.cachedAt || 0) - (a.cachedAt || 0));
+  return rows;
+}
+
+/** Download a cached track by its cache key (from listCachedTracks) without needing the full track object. */
+export async function downloadCachedTrackByKey(cacheKey, meta) {
+  try {
+    const blob = await localforage.getItem(cacheKey);
+    if (!blob) return false;
+    const artist = meta?.artists?.[0] || 'Unknown';
+    const title = meta?.title || 'track';
+    const ext = blob.type?.includes('flac') ? 'flac' : 'm4a';
+    const filename = `${artist} - ${title}.${ext}`.replace(/[<>:"/\\|?*]+/g, '_');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    return true;
+  } catch (error) {
+    console.error('Failed to download cached track', error);
+    return false;
+  }
+}
+
+export async function removeCachedAudioByKey(cacheKey) {
+  try {
+    await localforage.removeItem(cacheKey);
+    await localforage.removeItem(metaKeyFor(cacheKey));
+    notifyOfflineCacheUpdated();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Count/size of blobs in the offline audio cache (Account settings). */
 export async function getOfflineCacheStats() {

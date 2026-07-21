@@ -177,6 +177,40 @@ export function shouldStartPlayback({
   return sameStreamResource(elCurrentSrc, wantSrc);
 }
 
+/**
+ * Decide whether to arm the mid-stream-stall watchdog on an onWaiting/onStalled
+ * event. Only a genuine mid-playback stall qualifies — playback that hasn't
+ * started yet is the pre-start watchdog's job (arming here too would fire
+ * recovery too eagerly on a merely slow initial load).
+ */
+export function shouldArmMidStreamStallWatchdog({
+  el,
+  pendingSeek = null,
+  crossfading = false,
+  alreadyArmed = false,
+  minCurrentTimeSec = 0.5,
+}) {
+  if (alreadyArmed) return false;
+  if (!el || el.seeking || pendingSeek != null || crossfading) return false;
+  return (el.currentTime || 0) >= minCurrentTimeSec;
+}
+
+/**
+ * Decide whether a mid-stream-stall watchdog firing should actually trigger
+ * stream-error recovery, or stand down because something else already
+ * resolved the situation (error handling, a seek, or intent withdrawn) since
+ * the watchdog was armed.
+ */
+export function shouldRecoverFromMidStreamStall({
+  el,
+  pendingSeek = null,
+  isPlaying = false,
+  pendingPlay = false,
+}) {
+  if (!el || el.error || el.seeking || pendingSeek != null) return false;
+  return Boolean(isPlaying || pendingPlay);
+}
+
 /** Seconds of media buffered ahead of currentTime. */
 export function bufferedSecondsAhead(audioEl) {
   if (!audioEl?.buffered?.length) return 0;

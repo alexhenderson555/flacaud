@@ -3,26 +3,51 @@ import { PARTY_MODE_ENABLED } from './usePartyModeAvailable';
 
 const SEEK_STEP = 5;
 
+// Tracks in-flight seek-without-click cycles per <audio> element. Rapid repeated
+// seeks (e.g. holding/spamming the seek hotkey) start a new mute/restore cycle
+// before the previous one's `seeked` event (or its 250ms fallback) has fired.
+// Without this, each nested call re-reads `el.muted`, which the prior call has
+// already forced to `true` — so it captures a "was muted" state of `true` for
+// itself. Whichever call's restore happens to finish last then sets
+// `el.muted = true` permanently, since nothing else ever flips it back. The
+// <audio> element is reused across track changes (only `src` changes), so
+// that stuck mute silently carries into every later track until a full reload
+// creates a fresh element.
+const seekMuteState = new WeakMap();
+
 /**
  * Seeking by writing `currentTime` mid-playback produces an audible click at the
  * waveform discontinuity. Mute across the seek and restore once it lands (on the
- * `seeked` event, with a safety timeout) so the jump is silent.
+ * `seeked` event, with a safety timeout) so the jump is silent. Overlapping calls
+ * on the same element share one "was muted" snapshot (taken before the first
+ * seek in the burst) and only unmute once every outstanding seek has settled.
  */
-function seekWithoutClick(el, time) {
+export function seekWithoutClick(el, time) {
   if (!el) return;
   const target = Math.max(0, Math.min(el.duration || Infinity, time));
-  const wasMuted = el.muted;
-  let restored = false;
-  const restore = () => {
-    if (restored) return;
-    restored = true;
-    el.removeEventListener('seeked', restore);
-    el.muted = wasMuted;
+
+  let state = seekMuteState.get(el);
+  if (!state) {
+    state = { wasMuted: el.muted, pending: 0 };
+    seekMuteState.set(el, state);
+  }
+  state.pending += 1;
+
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    el.removeEventListener('seeked', settle);
+    state.pending -= 1;
+    if (state.pending <= 0) {
+      el.muted = state.wasMuted;
+      seekMuteState.delete(el);
+    }
   };
   el.muted = true;
-  el.addEventListener('seeked', restore, { once: true });
+  el.addEventListener('seeked', settle, { once: true });
   el.currentTime = target;
-  setTimeout(restore, 250);
+  setTimeout(settle, 250);
 }
 
 /**

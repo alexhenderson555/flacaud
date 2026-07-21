@@ -1,5 +1,6 @@
 import { Activity } from 'lucide-react';
 import { usePlayer } from '../../store/usePlayerStore';
+import FancySlider from '../FancySlider';
 
 /**
  * Background visualizer toggle + sensitivity/smoothing sliders.
@@ -51,14 +52,13 @@ export default function VisualizerCard({ t, lang, visualizerEnabled, setVisualiz
               </label>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{visualSensitivity.toFixed(1)}x</span>
             </div>
-            <input
-              type="range"
-              min="0.5"
-              max="2.5"
-              step="0.1"
+            <FancySlider
+              min={0.5}
+              max={2.5}
+              step={0.1}
               value={visualSensitivity}
               onChange={(e) => setVisualSensitivity(parseFloat(e.target.value))}
-              style={{ width: '100%', accentColor: 'var(--accent-solid)' }}
+              ariaLabel={lang === 'ru' ? 'Чувствительность к биту' : 'Beat Sensitivity'}
             />
             <p style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               {lang === 'ru' ? 'Выше = анимации дергаются сильнее даже на тихих треках.' : 'Higher = more reactive animations even on quiet tracks.'}
@@ -72,14 +72,13 @@ export default function VisualizerCard({ t, lang, visualizerEnabled, setVisualiz
               </label>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{Math.round(visualSmoothing * 100)}%</span>
             </div>
-            <input
-              type="range"
-              min="0.1"
-              max="0.95"
-              step="0.05"
+            <FancySlider
+              min={0.1}
+              max={0.95}
+              step={0.05}
               value={visualSmoothing}
               onChange={(e) => setVisualSmoothing(parseFloat(e.target.value))}
-              style={{ width: '100%', accentColor: 'var(--accent-solid)' }}
+              ariaLabel={lang === 'ru' ? 'Сглаживание' : 'Animation Smoothing'}
             />
             <p style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               {lang === 'ru' ? 'Меньше = резкие скачки. Больше = плавные, как желе, переходы.' : 'Lower = sharp jumps. Higher = fluid jelly-like motion.'}

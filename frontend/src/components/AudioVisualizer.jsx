@@ -55,10 +55,12 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
   const modeRef = useRef(visualMode);
   const sensitivityRef = useRef(visualSensitivity);
   const smoothingRef = useRef(visualSmoothing);
-  
+  const cinemaRef = useRef(cinema);
+
   useEffect(() => { modeRef.current = visualMode; }, [visualMode]);
   useEffect(() => { sensitivityRef.current = visualSensitivity; }, [visualSensitivity]);
   useEffect(() => { smoothingRef.current = visualSmoothing; }, [visualSmoothing]);
+  useEffect(() => { cinemaRef.current = cinema; }, [cinema]);
 
   useEffect(() => {
     colorsRef.current = readAccentColors();
@@ -214,7 +216,10 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       const barWidth = width / barCount;
       const gap = Math.min(4, Math.max(1, barWidth * 0.12));
 
-      ctx.shadowBlur = 30;
+      // Fullscreen (cinema) paints the canvas at the full screen resolution
+      // instead of the small player-bar strip — shadowBlur cost scales with
+      // canvas area, so it's cut roughly in half there to keep frame time down.
+      ctx.shadowBlur = cinemaRef.current ? 15 : 30;
       ctx.shadowColor = accent;
 
       let x = 0;
