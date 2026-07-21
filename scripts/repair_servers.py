@@ -405,9 +405,15 @@ def deploy_tidal_server() -> None:
         "docker builder prune -f --reserved-space 3gb 2>/dev/null || docker builder prune -f 2>/dev/null || true; "
         "docker image prune -f 2>/dev/null || true; "
         "if [ -z \"$COMPOSE\" ]; then echo 'Deploy aborted due to earlier errors.'; exit 1; fi; "
+        # Single `up` recreates every service whose image/config changed and starts
+        # caddy fresh if it isn't running — do NOT follow with a separate `up -d caddy`
+        # / `restart caddy`. That redundant second touch force-recreates an
+        # already-healthy caddy container before Docker has released port 80/443 from
+        # the first recreate, failing with "address already in use" and leaving no
+        # proxy listening (this pattern caused a real flacaud.ru outage — see the
+        # matching fix in .github/workflows/deploy.yml).
         "$COMPOSE up -d --remove-orphans && "
-        "bash ops/prune-frontend-dist.sh frontend/dist 2>/dev/null || true; "
-        "$COMPOSE up -d caddy && $COMPOSE restart caddy api bot"
+        "bash ops/prune-frontend-dist.sh frontend/dist 2>/dev/null || true"
     )
     code = _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=3600)
     if code != 0:

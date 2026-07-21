@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 import httpx
@@ -10,6 +11,8 @@ from tidal_dl_ru.providers.tidal import manifest_cache
 from tidal_dl_ru.providers.tidal import pool as tidal_pool
 from tidal_dl_ru.providers.tidal.client import TidalClient
 from tidal_dl_ru.providers.tidal.models import AudioQuality, PlaybackManifest
+
+logger = logging.getLogger(__name__)
 
 _MAX_POOL_ATTEMPTS = 4
 _RETRY_SLEEP_SEC = 0.35
@@ -26,8 +29,21 @@ def _fetch_once(client: TidalClient, track_id: str, enum_q: AudioQuality) -> tup
                     time.sleep(_RETRY_SLEEP_SEC)
                     continue
                 return None, True
+            logger.info(
+                "Manifest fetch failed track=%s quality=%s status=%s body=%s",
+                track_id,
+                enum_q.name,
+                exc.response.status_code,
+                exc.response.text[:200],
+            )
             return None, False
-        except Exception:
+        except Exception as exc:
+            logger.info(
+                "Manifest fetch failed track=%s quality=%s error=%s",
+                track_id,
+                enum_q.name,
+                exc,
+            )
             return None, False
     return None, True
 
