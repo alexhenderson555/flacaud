@@ -60,15 +60,25 @@ def _search_one(query: str, prefix: str, source: str, limit: int) -> list[dict]:
     return results
 
 
+# A regular track/single is at most a few minutes; a DJ set/mix runs long.
+# Below this, it's very unlikely to be an actual set — filter it out rather
+# than show individual tracks in a "search sets" grid.
+MIN_SET_DURATION_SECONDS = 20 * 60
+
+
 def search_sets(query: str, limit: int = 12) -> list[dict]:
     """Search YouTube + SoundCloud for DJ sets/mixes matching `query`."""
     query = (query or "").strip()
     if not query:
         return []
-    per_source = max(4, limit // 2)
+    # Overfetch since some results get filtered out by duration below.
+    per_source = max(6, limit)
     yt = _search_one(query, "ytsearch", "youtube", per_source)
     sc = _search_one(query, "scsearch", "soundcloud", per_source)
-    combined = yt + sc
+    combined = [
+        r for r in (yt + sc)
+        if r["duration_seconds"] >= MIN_SET_DURATION_SECONDS
+    ]
     return combined[:limit]
 
 
@@ -103,8 +113,28 @@ _NOISE_RE = re.compile(
 )
 
 
+# Splits a title like "Antdot | Tomorrowland Winter 2026" or "Antdot @ Club
+# Vibe 2025" into its first segment — almost always the DJ/artist name,
+# regardless of which festival/venue/channel actually uploaded the video.
+_TITLE_SPLIT_RE = re.compile(r"\s*[|@:]\s*|\s+[-–]\s+")
+
+
+def _artist_from_title(title: str) -> str:
+    first = _TITLE_SPLIT_RE.split((title or "").strip(), maxsplit=1)[0].strip()
+    # No separator at all (first == whole title) means this isn't reliably
+    # an "Artist <sep> Event" title — too generic/long to use as a name.
+    if first and len(first) < 60 and first.lower() != (title or "").strip().lower():
+        return first
+    return ""
+
+
 def build_similar_query(title: str, channel: str) -> str:
-    """Best-effort query to find sets similar to one identified by title/channel."""
+    """Best-effort query to find sets by the SAME ARTIST/DJ (not just the
+    same festival/venue — a big event's own upload channel, e.g.
+    "Tomorrowland", is nearly always the channel but is not who's playing)."""
+    artist = _artist_from_title(title)
+    if artist:
+        return f"{artist} dj set"
     if channel:
         return f"{channel} dj set"
     cleaned = _NOISE_RE.sub(" ", title or "")
