@@ -33,6 +33,7 @@ os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST") or tidal_host(
 os.environ.pop("VPN_FIX", None)
 
 from scripts.repair_servers import (  # noqa: E402
+    add_pool_account,
     check_deployed_code,
     check_logger_state,
     check_manifest_failures,
@@ -63,6 +64,12 @@ def main() -> None:
     if "--raw-logs" in sys.argv:
         print(f"Raw api logs -> {host}")
         check_raw_logs()
+        return
+    if "--pool-add" in sys.argv:
+        idx = sys.argv.index("--pool-add")
+        label = sys.argv[idx + 1] if len(sys.argv) > idx + 1 else "family-2"
+        print(f"Adding Tidal pool account '{label}' via device-code login -> {host}")
+        add_pool_account(label)
         return
     if "--resolve-stream" in sys.argv:
         print(f"Direct resolve_tidal_stream check -> {host}")

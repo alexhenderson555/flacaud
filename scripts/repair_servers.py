@@ -219,6 +219,53 @@ def _ssh_run(host: str, user: str, password: str, command: str, *, timeout: int 
         ssh.close()
 
 
+def _ssh_run_streaming(host: str, user: str, password: str, command: str, *, timeout: int = 400) -> int:
+    """Like _ssh_run but prints stdout as it arrives (for interactive device-flow login)."""
+    import time
+
+    import paramiko
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host, username=user, password=password, timeout=30)
+    try:
+        print(f"\n=== {host} ===\n+ {command}\n")
+        chan = ssh.get_transport().open_session()
+        chan.settimeout(timeout)
+        chan.exec_command(command)
+        deadline = time.time() + timeout
+        while True:
+            if chan.recv_ready():
+                data = chan.recv(4096).decode(errors="replace")
+                sys.stdout.write(data)
+                sys.stdout.flush()
+            if chan.recv_stderr_ready():
+                data = chan.recv_stderr(4096).decode(errors="replace")
+                sys.stderr.write(data)
+                sys.stderr.flush()
+            if chan.exit_status_ready() and not chan.recv_ready() and not chan.recv_stderr_ready():
+                break
+            if time.time() > deadline:
+                print("\n[timed out waiting for remote command]")
+                break
+            time.sleep(0.3)
+        return chan.recv_exit_status() if chan.exit_status_ready() else 1
+    finally:
+        ssh.close()
+
+
+def add_pool_account(label: str, quota: int = 100, timeout: int = 360) -> None:
+    """Add a Tidal account to the pool via device-code login (streams the
+    verification URL/code to stdout immediately so it can be relayed)."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        f"$COMPOSE exec -T api tidal-dl-ru pool add {label} --device-flow --quota {quota}"
+    )
+    _ssh_run_streaming(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=timeout)
+
+
 def _scp_tar(host: str, user: str, password: str, local_tar: Path) -> None:
     import math
     import sys
