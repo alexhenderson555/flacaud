@@ -33,9 +33,14 @@ os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST") or tidal_host(
 os.environ.pop("VPN_FIX", None)
 
 from scripts.repair_servers import (  # noqa: E402
+    check_deployed_code,
+    check_logger_state,
     check_manifest_failures,
     check_pool_status,
+    check_raw_logs,
+    check_stream_resolve,
     deploy_tidal_server,
+    live_tail_logs,
     smoke_tidal,
     verify_password_reset_mail_ready,
 )
@@ -50,6 +55,26 @@ def main() -> None:
     if "--pool-status" in sys.argv:
         print(f"Tidal pool status -> {host}")
         check_pool_status()
+        return
+    if "--check-code" in sys.argv:
+        print(f"Deployed code check -> {host}")
+        check_deployed_code()
+        return
+    if "--raw-logs" in sys.argv:
+        print(f"Raw api logs -> {host}")
+        check_raw_logs()
+        return
+    if "--resolve-stream" in sys.argv:
+        print(f"Direct resolve_tidal_stream check -> {host}")
+        check_stream_resolve()
+        return
+    if "--logger-state" in sys.argv:
+        print(f"Logger state check -> {host}")
+        check_logger_state()
+        return
+    if "--live-tail" in sys.argv:
+        print(f"Live-tailing api logs for 25s -> {host}. Reproduce the error now.")
+        live_tail_logs()
         return
     tag = (os.environ.get("FLACAUD_TAG") or "").strip() or "auto"
     print(f"Deploy tidal only -> {host} (VPN 151.x NOT contacted; VPN_FIX ignored)")

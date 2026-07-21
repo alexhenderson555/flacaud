@@ -468,7 +468,7 @@ def check_manifest_failures() -> None:
     remote = (
         f"cd {DEPLOY_PATH} && "
         f"COMPOSE='{compose_files()}' && "
-        "$COMPOSE logs api --tail 2000 2>/dev/null | grep -i 'Manifest fetch failed' | tail -n 40 || true"
+        "$COMPOSE logs api --tail 500 --timestamps 2>&1 | tail -n 250 || true"
     )
     _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=120)
 
@@ -487,6 +487,86 @@ def check_pool_status() -> None:
         "\""
     )
     _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=120)
+
+
+def check_raw_logs() -> None:
+    """Dump the last raw log lines from the api container, unfiltered."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        "$COMPOSE logs api --tail 400 --timestamps 2>&1"
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=60)
+
+
+def live_tail_logs(seconds: int = 25) -> None:
+    """Follow api logs for a short window so a live repro can be correlated."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        f"timeout {seconds} $COMPOSE logs api -f --tail 0 --timestamps 2>&1 || true"
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=seconds + 30)
+
+
+def check_stream_resolve(track_id: str = "405320403") -> None:
+    """Call resolve_tidal_stream directly inside the api container to see the
+    real exception, bypassing whatever is eating our log output."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    script = (
+        "import logging, traceback\n"
+        "logging.basicConfig(level=logging.DEBUG, format='%(name)s %(levelname)s %(message)s')\n"
+        "from tidal_dl_ru.core.router import get_provider_by_name\n"
+        "from tidal_dl_ru.server.streaming import resolve_tidal_stream, quality_to_enum\n"
+        "p = get_provider_by_name('tidal')\n"
+        "q = quality_to_enum('HIGH')\n"
+        "try:\n"
+        f"    res = resolve_tidal_stream(p, '{track_id}', q, 'free')\n"
+        "    print('OK:', res.get('type'), res.get('actual_quality'))\n"
+        "except Exception as exc:\n"
+        "    print('EXCEPTION:', type(exc).__name__, exc)\n"
+        "    traceback.print_exc()\n"
+    )
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        f"$COMPOSE exec -T api python3 << 'PYEOF'\n{script}PYEOF"
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=60)
+
+
+def check_logger_state() -> None:
+    """Introspect the media/manifest_fetch loggers inside the running api container."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        "$COMPOSE exec -T api python -c \""
+        "from tidal_dl_ru.server.app import app; "
+        "import logging; "
+        "root = logging.getLogger(); "
+        "print('root handlers:', root.handlers); "
+        "print('root level:', root.level); "
+        "names = ['tidal_dl_ru.server.routers.media', 'tidal_dl_ru.providers.tidal.manifest_fetch']; "
+        "logs = [logging.getLogger(n) for n in names]; "
+        "[print(n, 'disabled=', lg.disabled, 'level=', lg.level, 'effective=', lg.getEffectiveLevel(), 'propagate=', lg.propagate, 'handlers=', lg.handlers) for n, lg in zip(names, logs)]"
+        "\""
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=60)
+
+
+def check_deployed_code() -> None:
+    """Verify the running api container has the manifest_fetch.py AuthError fix."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        "$COMPOSE exec -T api grep -n 'Pool account auth error\\|Manifest fetch failed' "
+        "/app/src/tidal_dl_ru/providers/tidal/manifest_fetch.py || echo NOT_FOUND"
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=60)
 
 
 def main() -> None:
