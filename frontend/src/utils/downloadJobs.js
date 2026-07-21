@@ -1,6 +1,6 @@
 /** Track server download jobs shown in DownloadToast (bottom-right). */
 
-import { apiGetJson, apiPostJson } from './apiClient';
+import { apiFetch, apiGetJson, apiPostJson } from './apiClient';
 import { prefetchAudioToCache } from './cache';
 
 const QUEUE_KEY = 'tidal-queue-jobs';
@@ -182,4 +182,41 @@ export async function fetchJobStatus(jobId) {
   } catch {
     return null;
   }
+}
+
+const SET_DOWNLOAD_POLL_MS = 1500;
+const SET_DOWNLOAD_MAX_ATTEMPTS = 240; // ~6 minutes
+
+/**
+ * Download a DJ set's raw audio (YouTube/SoundCloud, via yt-dlp on the
+ * server) as a browser file — not a Tidal catalog download, so it uses the
+ * "download_set" job type + the set audio cache, not startDownloadJob.
+ */
+export async function downloadSetAudio(url, { lang = 'en', filename = 'set.mp3' } = {}) {
+  const { job_id: jobId } = await apiPostJson(
+    '/api/jobs', { url, job_type: 'download_set' }, { auth: true, lang },
+  );
+
+  for (let attempt = 0; attempt < SET_DOWNLOAD_MAX_ATTEMPTS; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, SET_DOWNLOAD_POLL_MS));
+    const status = await fetchJobStatus(jobId);
+    if (!status) continue;
+    if (status.status === 'failed' || status.status === 'cancelled') {
+      throw new Error(status.tracks?.[0]?.error || 'Set download failed');
+    }
+    if (status.status === 'done') {
+      const params = new URLSearchParams({ url });
+      const res = await apiFetch(`/api/sets/cached-audio?${params.toString()}`, { auth: true });
+      if (!res.ok) throw new Error('Could not fetch downloaded audio');
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+      return;
+    }
+  }
+  throw new Error('Set download timed out');
 }

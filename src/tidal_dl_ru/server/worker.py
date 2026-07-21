@@ -254,6 +254,20 @@ async def analyze_set(ctx: dict, job_id: str, url: str) -> dict:
         raise
 
 
+async def download_set_audio(ctx: dict, job_id: str, url: str) -> dict:
+    log.info(
+        "download_set_audio_start job_id=%s", job_id,
+        extra={"event": "download_set_audio_start", "job_id": job_id},
+    )
+    from tidal_dl_ru.core.set_analyzer import download_set_audio_task
+
+    try:
+        return await download_set_audio_task(job_id, url)
+    except Exception as e:
+        job_state.mark_failed(job_id, f"{type(e).__name__}: {e}")
+        raise
+
+
 async def subscription_expiry_notify(ctx) -> dict:
     count = await asyncio.to_thread(notify_expiring_subscriptions)
     return {"sent": count}
@@ -267,7 +281,10 @@ async def subscription_expire_due(ctx) -> dict:
 class WorkerSettings:
     """Run with: `arq tidal_dl_ru.server.worker.WorkerSettings`"""
 
-    functions = [download_url, analyze_set, subscription_expiry_notify, subscription_expire_due]
+    functions = [
+        download_url, analyze_set, download_set_audio,
+        subscription_expiry_notify, subscription_expire_due,
+    ]
     cron_jobs = [
         cron(disk_cleanup_task, hour={3, 15}, minute=0),  # type: ignore[arg-type]
         cron(subscription_expiry_notify, hour={10}, minute=0),

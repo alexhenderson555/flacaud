@@ -60,6 +60,27 @@ async def create_job(
             raise HTTPException(status_code=500, detail="Job state lost after creation")
         return status
 
+    if req.job_type == "download_set":
+        # Raw set audio (YouTube/SoundCloud) via yt-dlp — not a Tidal catalog
+        # URL, so this bypasses find_provider below entirely (it would always
+        # reject a youtube.com/soundcloud.com URL with "no provider matches").
+        try:
+            safe_url = validate_public_http_url(req.url)
+        except OutboundUrlError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid set URL: {e}")
+        job_id = job_state.new_job_id()
+        job_state.create(job_id, provider="youtube", job_type="download_set", owner_id=current_user.id)
+        arq_pool = getattr(request.app.state, "arq", None)
+        if arq_pool is None:
+            raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
+
+        await arq_pool.enqueue_job("download_set_audio", job_id, safe_url, _job_id=job_id)
+
+        status = job_state.load(job_id)
+        if status is None:
+            raise HTTPException(status_code=500, detail="Job state lost after creation")
+        return status
+
     provider = find_provider(req.url)
     if provider is None:
         raise HTTPException(status_code=400, detail="no provider matches URL")

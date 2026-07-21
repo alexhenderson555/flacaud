@@ -55,6 +55,72 @@ def _download_progress_hook(job_id: str):
     return hook
 
 
+async def download_set_audio_task(job_id: str, url: str) -> dict:
+    """ARQ task: fetch a DJ set's raw audio via yt-dlp and cache it (no Shazam
+    scan) — used by the "Download set" button, which previously tried to run
+    a Tidal-catalog download job against a YouTube/SoundCloud URL and always
+    failed with "no provider matches URL"."""
+    import yt_dlp
+
+    from tidal_dl_ru.core.set_audio_cache import store_set_audio
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        audio_base = os.path.join(temp_dir, "set_audio")
+        audio_file = f"{audio_base}.mp3"
+
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': f'{audio_base}.%(ext)s',
+            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
+            'quiet': True,
+            'no_warnings': True,
+            'socket_timeout': 30,
+            'retries': 3,
+            'fragment_retries': 5,
+            'progress_hooks': [_download_progress_hook(job_id)],
+        }
+
+        job_state.update_analysis(job_id, phase="download", percent=0, label="Downloading Set… 0%")
+
+        if job_state.is_cancelled(job_id):
+            return {"ok": False, "error": "cancelled"}
+
+        def _download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
+
+        try:
+            await asyncio.to_thread(_download)
+        except Exception as e:
+            if job_state.is_cancelled(job_id):
+                return {"ok": False, "error": "cancelled"}
+            job_state.mark_failed(job_id, f"Failed to download audio: {e}")
+            return {"ok": False, "error": str(e)}
+
+        if not os.path.exists(audio_file):
+            candidates = [
+                p for p in os.listdir(temp_dir)
+                if p.startswith("set_audio") and not p.endswith(".part")
+            ]
+            mp3 = next((p for p in candidates if p.endswith(".mp3")), None)
+            if mp3:
+                audio_file = os.path.join(temp_dir, mp3)
+            else:
+                job_state.mark_failed(job_id, "Audio file was not created.")
+                return {"ok": False, "error": "No audio file"}
+
+        from pathlib import Path
+
+        cached = store_set_audio(url, Path(audio_file))
+        if cached is None:
+            job_state.mark_failed(job_id, "Failed to cache downloaded audio.")
+            return {"ok": False, "error": "cache failed"}
+
+        job_state.update_analysis(job_id, phase="done", percent=100, label="Download complete")
+        job_state.mark_done(job_id)
+        return {"ok": True}
+
+
 async def analyze_set_task(
     job_id: str,
     url: str,

@@ -272,7 +272,7 @@ export default function DownloadToast({ lang = 'en' }) {
 
         results.forEach((job) => {
           if (!job) return;
-          if (job.job_type === 'analyze_set') return;
+          if (job.job_type === 'analyze_set' || job.job_type === 'download_set') return;
           if (dismissedRef.current.has(job.job_id)) return;
 
           keepIds.push(job.job_id);

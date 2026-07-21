@@ -16,14 +16,14 @@ import PlaylistModal from '../components/PlaylistModal';
 import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
 import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
-import { startDownloadJob, cancelJob } from '../utils/downloadJobs';
+import { startDownloadJob, cancelJob, downloadSetAudio } from '../utils/downloadJobs';
 import { enableDjAnalysisPreference } from '../utils/enableDjAnalysis';
 import { apiPostJson } from '../utils/apiClient';
 import { fetchJobStatus } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
 import { classifySetUrl, SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
-import { normalizeSetUrl, readSetLibrary } from '../utils/setLibrary';
+import { normalizeSetUrl, readSetLibrary, deriveSetTitle } from '../utils/setLibrary';
 import {
   ANALYZER_MAX_ATTEMPTS,
   ANALYZER_POLL_MS,
@@ -80,6 +80,7 @@ export default function SetAnalyzer() {
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   const [bulkPlaylistOpen, setBulkPlaylistOpen] = useState(false);
   const [djAnalyzeRequested, setDjAnalyzeRequested] = useState(false);
+  const [downloadingSet, setDownloadingSet] = useState(false);
   const setPlayerSectionRef = useRef(null);
   const resumeToastShown = useRef(false);
 
@@ -311,12 +312,21 @@ export default function SetAnalyzer() {
   }, [jobId, status, trimmedUrl, lang, t]);
 
   const downloadSet = async () => {
-    if (!trimmedUrl) return;
+    if (!trimmedUrl || downloadingSet) return;
+    if (!hasAuthSession()) {
+      showToast(t('authRequired'));
+      return;
+    }
+    setDownloadingSet(true);
+    showToast(t('downloadSetPreparing'));
     try {
-      await startDownloadJob({ url: trimmedUrl, quality: 'LOSSLESS' });
+      const filename = `${deriveSetTitle(trimmedUrl)}.mp3`.replace(/[<>:"/\\|?*]+/g, '_');
+      await downloadSetAudio(trimmedUrl, { lang, filename });
       showToast(t('downloadStarted'));
     } catch (e) {
       showToast(e.message);
+    } finally {
+      setDownloadingSet(false);
     }
   };
 
@@ -448,11 +458,11 @@ export default function SetAnalyzer() {
           type="button"
           className="btn-secondary"
           onClick={downloadSet}
-          disabled={!trimmedUrl || isAnalyzing}
+          disabled={!trimmedUrl || isAnalyzing || downloadingSet}
           style={{ borderRadius: '24px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
           title={t('downloadSet')}
         >
-          <DownloadCloud size={20} />
+          {downloadingSet ? <Loader2 className="spinner" size={20} /> : <DownloadCloud size={20} />}
           <span className="hide-on-mobile">{t('downloadSet')}</span>
         </button>
       </motion.div>
