@@ -490,11 +490,12 @@ export default function SetAnalyzer() {
               background: '#000',
               aspectRatio: isSc ? undefined : '16/9',
               height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
-              // Capped so a wide-screen 16:9 embed doesn't dwarf the page —
-              // full page width made the video huge on desktop.
+              // Capped so a wide-screen 16:9 YouTube embed doesn't dwarf the
+              // page — SoundCloud's flat player bar was already fine at full
+              // width, so only the video gets the cap.
               width: '100%',
-              maxWidth: '640px',
-              margin: '0 auto',
+              maxWidth: isSc ? '100%' : '480px',
+              margin: isSc ? undefined : '0 auto',
               minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 200,
             }}
           />
