@@ -10,7 +10,7 @@ function isSoundCloudUrl(url) {
   return /soundcloud\.com|snd\.sc/i.test(url || '');
 }
 
-const EMBED_INLINE_PATHS = new Set(['/analyzer', '/sets', '/set-library']);
+const EMBED_INLINE_PATHS = new Set(['/analyzer', '/sets', '/set-library', '/set-browser']);
 
 export default function GlobalSetEmbed() {
   const location = useLocation();

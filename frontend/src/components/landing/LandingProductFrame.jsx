@@ -1,5 +1,5 @@
 import {
-  Search, Heart, Repeat, ListMusic, Radio, Flame, Library, ArrowLeftRight, User,
+  Search, Heart, Repeat, ListMusic, Radio, Flame, Library, Compass, User,
 } from 'lucide-react';
 import { BRAND_LOGO_SRC } from '../../brand';
 
@@ -7,11 +7,11 @@ const NAV = [
   { id: 'search', icon: Search, labelKey: 'search' },
   { id: 'recs', icon: Flame, labelKey: 'recs' },
   { id: 'vibe', icon: Radio, labelKey: 'vibe' },
+  { id: 'setBrowser', icon: Compass, labelKey: 'setBrowser' },
   { id: 'library', icon: Heart, labelKey: 'library' },
   { id: 'transfer', icon: Repeat, labelKey: 'transfer' },
   { id: 'analyzer', icon: ListMusic, labelKey: 'analyzer' },
   { id: 'sets', icon: Library, labelKey: 'sets' },
-  { id: 'transitions', icon: ArrowLeftRight, labelKey: 'transitions' },
 ];
 
 const LABELS = {
@@ -23,7 +23,7 @@ const LABELS = {
     transfer: 'Transfer Library',
     analyzer: 'Set Analyzer',
     sets: 'Set Library',
-    transitions: 'Transition Finder',
+    setBrowser: 'Set Browser',
     discover: 'Discover',
     myMusic: 'My music',
     proTools: 'Pro tools',
@@ -37,7 +37,7 @@ const LABELS = {
     transfer: 'Перенос медиатеки',
     analyzer: 'Анализ сета',
     sets: 'Библиотека сетов',
-    transitions: 'Поиск переходов',
+    setBrowser: 'Сет Браузер',
     discover: 'Обзор',
     myMusic: 'Моя музыка',
     proTools: 'Инструменты',

@@ -1,4 +1,6 @@
+import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -8,6 +10,9 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from tidal_dl_ru.core.set_audio_cache import cache_path, has_cached_set_audio
+from tidal_dl_ru.core.set_search import build_similar_query, fetch_set_info, search_sets
+from tidal_dl_ru.core.set_track_match import match_tidal_track
+from tidal_dl_ru.core.tracklist_parser import parse_tracklist_from_description
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import SavedSet, SavedSetRead, User
@@ -16,6 +21,8 @@ from tidal_dl_ru.server.share_utils import (
     parse_tracks_json,
     sum_track_durations,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["sets"])
 
@@ -165,6 +172,90 @@ def share_set(
         session.commit()
         session.refresh(row)
     return {"token": row.share_token, "path": f"/s/{row.share_token}"}
+
+
+@router.get("/sets/search")
+async def search_sets_endpoint(
+    q: str,
+    limit: int = 12,
+    current_user: User = Depends(get_current_user),
+):
+    """Search YouTube + SoundCloud for DJ sets/mixes (Set Browser search)."""
+    q = q.strip()
+    if not q:
+        return {"results": []}
+    limit = max(1, min(limit, 24))
+    results = await asyncio.to_thread(search_sets, q, limit)
+    return {"results": results}
+
+
+@router.get("/sets/quick-tracklist")
+async def quick_tracklist_endpoint(
+    url: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Fast tracklist from the video/track description — no audio analysis.
+
+    Returns source="description" with matched tracks when the uploader already
+    listed a tracklist with timestamps; source="none" otherwise (the caller should
+    fall back to the slower Shazam-based /api/jobs analyze_set flow).
+    """
+    url = _normalize_url(url)
+    if not url:
+        raise HTTPException(status_code=400, detail="URL required")
+    try:
+        info = await asyncio.to_thread(fetch_set_info, url)
+    except Exception as exc:
+        logger.info("quick_tracklist: fetch_set_info failed for %s: %s", url, exc)
+        raise HTTPException(status_code=502, detail="Could not read set info") from exc
+
+    rows = parse_tracklist_from_description(info.get("description") or "")
+    if not rows:
+        return {
+            "source": "none",
+            "title": info.get("title"),
+            "duration_seconds": info.get("duration_seconds"),
+            "thumbnail": info.get("thumbnail"),
+            "tracks": [],
+        }
+
+    matches = await asyncio.gather(
+        *[match_tidal_track(row["artist"], row["title"]) for row in rows]
+    )
+    tracks = [
+        {**row, "matched_track": match}
+        for row, match in zip(rows, matches)
+    ]
+    return {
+        "source": "description",
+        "title": info.get("title"),
+        "duration_seconds": info.get("duration_seconds"),
+        "thumbnail": info.get("thumbnail"),
+        "tracks": tracks,
+    }
+
+
+@router.get("/sets/radio")
+async def set_radio_endpoint(
+    url: str,
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+):
+    """'Similar sets' / radio-by-set: sets from the same channel or similar title."""
+    url = _normalize_url(url)
+    if not url:
+        raise HTTPException(status_code=400, detail="URL required")
+    limit = max(1, min(limit, 20))
+    try:
+        info = await asyncio.to_thread(fetch_set_info, url)
+    except Exception as exc:
+        logger.info("set_radio: fetch_set_info failed for %s: %s", url, exc)
+        raise HTTPException(status_code=502, detail="Could not read set info") from exc
+
+    query = build_similar_query(info.get("title") or "", info.get("channel") or "")
+    results = await asyncio.to_thread(search_sets, query, limit + 1)
+    results = [r for r in results if _normalize_url(r["url"]) != url][:limit]
+    return {"query": query, "results": results}
 
 
 @router.api_route("/sets/cached-audio", methods=["GET", "HEAD"])

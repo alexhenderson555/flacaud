@@ -22,7 +22,7 @@ const Sync = lazyRoute(() => import('./pages/Sync.jsx'));
 const Library = lazyRoute(() => import('./pages/Library.jsx'));
 const Genreverse = lazyRoute(() => import('./pages/Genreverse.jsx'));
 const SetAnalyzer = lazyRoute(() => import('./pages/SetAnalyzer.jsx'));
-const TransitionFinder = lazyRoute(() => import('./pages/TransitionFinder.jsx'));
+const SetBrowser = lazyRoute(() => import('./pages/SetBrowser.jsx'));
 const ArtistProfile = lazyRoute(() => import('./pages/ArtistProfile.jsx'));
 const AlbumView = lazyRoute(() => import('./pages/AlbumView.jsx'));
 const Recommendations = lazyRoute(() => import('./pages/Recommendations.jsx'));
@@ -118,8 +118,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="analyzer" element={<SetAnalyzer />} />
             <Route path="set-library" element={<SetLibrary />} />
             <Route path="sets" element={<SetLibrary />} />
-            <Route path="splitter" element={<Navigate to="/transitions" replace />} />
-            <Route path="transitions" element={<TransitionFinder />} />
+            <Route path="set-browser" element={<SetBrowser />} />
+            <Route path="splitter" element={<Navigate to="/set-browser" replace />} />
+            <Route path="transitions" element={<Navigate to="/set-browser" replace />} />
             <Route path="share" element={<ShareImport />} />
             <Route path="artist/:id" element={<ArtistProfile />} />
             <Route path="album/:id" element={<AlbumView />} />

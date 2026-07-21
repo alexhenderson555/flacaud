@@ -1,7 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ListMusic, User, Repeat, Radio, Flame, ArrowLeftRight, Library, Menu, X, Heart, Wand2,
+  Search, ListMusic, User, Repeat, Radio, Flame, Library, Menu, X, Heart, Wand2, Compass,
 } from 'lucide-react';
 import { BRAND_LOGO_SRC, BRAND_NAME } from '../../brand';
 
@@ -15,7 +15,7 @@ const MOBILE_MORE_LINKS = [
   { to: '/sync', icon: Repeat, labelKey: 'transfer' },
   { to: '/analyzer', icon: Wand2, labelKey: 'setAnalyzer' },
   { to: '/set-library', icon: Library, labelKey: 'setLibrary' },
-  { to: '/transitions', icon: ArrowLeftRight, labelKey: 'transitionFinder' },
+  { to: '/set-browser', icon: Compass, labelKey: 'setBrowser' },
 ];
 
 export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen }) {
@@ -60,6 +60,10 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
           </NavLink>
 
           <div className="sidebar-section-label hide-on-mobile">{t('myMusic')}</div>
+          <NavLink to="/set-browser" className={navClass()}>
+            <Compass size={20} />
+            <span>{t('setBrowser')}</span>
+          </NavLink>
           <NavLink to="/library" className={() => `nav-item${libraryActive ? ' active' : ''}`}>
             <Heart size={20} />
             <span>{t('library')}</span>
@@ -81,10 +85,6 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
           <NavLink to="/set-library" className={navClass('', 'hide-on-mobile')}>
             <Library size={20} />
             <span>{t('setLibrary')}</span>
-          </NavLink>
-          <NavLink to="/transitions" className={navClass('', 'hide-on-mobile')}>
-            <ArrowLeftRight size={20} />
-            <span>{t('transitionFinder')}</span>
           </NavLink>
 
           <NavLink to="/account" className={navClass('', 'nav-item-account mobile-only')}>
