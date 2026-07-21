@@ -490,7 +490,11 @@ export default function SetAnalyzer() {
               background: '#000',
               aspectRatio: isSc ? undefined : '16/9',
               height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
-              maxWidth: '100%',
+              // Capped so a wide-screen 16:9 embed doesn't dwarf the page —
+              // full page width made the video huge on desktop.
+              width: '100%',
+              maxWidth: '640px',
+              margin: '0 auto',
               minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 200,
             }}
           />

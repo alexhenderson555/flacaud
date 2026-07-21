@@ -374,7 +374,10 @@ export default function SetLibrary() {
                       background: isSc ? 'transparent' : '#000',
                       aspectRatio: isSc ? undefined : '16 / 9',
                       height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
-                      maxWidth: '100%',
+                      // Capped so a wide-screen 16:9 embed doesn't dwarf the
+                      // row — full row width made the video huge on desktop.
+                      maxWidth: '640px',
+                      margin: isSc ? undefined : '0 auto',
                       minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 180,
                     }}
                   />
