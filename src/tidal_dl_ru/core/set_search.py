@@ -128,18 +128,54 @@ def _artist_from_title(title: str) -> str:
     return ""
 
 
-def build_similar_query(title: str, channel: str) -> str:
-    """Best-effort query to find sets by the SAME ARTIST/DJ (not just the
-    same festival/venue — a big event's own upload channel, e.g.
-    "Tomorrowland", is nearly always the channel but is not who's playing)."""
-    artist = _artist_from_title(title)
-    if artist:
-        return f"{artist} dj set"
-    if channel:
-        return f"{channel} dj set"
+def _cleaned_title_fallback_query(title: str) -> str:
     cleaned = _NOISE_RE.sub(" ", title or "")
     cleaned = re.sub(r"[\[\](){}|:,-]", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     words = cleaned.split(" ")[:6]
     query = " ".join(words).strip()
     return f"{query} dj set" if query else "dj set"
+
+
+# Longer/more specific phrases must be checked before their generic substrings
+# ("afro house" before "house") so the more precise genre wins.
+_GENRE_KEYWORDS = [
+    "afro house", "tech house", "deep house", "melodic house", "funky house",
+    "progressive house", "melodic techno", "minimal techno", "hard techno",
+    "drum and bass", "dnb", "psytrance", "dubstep", "trance", "techno",
+    "house", "disco", "garage", "trap", "electro",
+]
+
+
+def _genre_from_title(title: str) -> str:
+    low = (title or "").lower()
+    for genre in _GENRE_KEYWORDS:
+        if genre in low:
+            return genre
+    return ""
+
+
+def build_similar_queries(title: str, channel: str) -> list[str]:
+    """Radio-style blend of queries for "similar sets" — same artist, same
+    genre/style, and the same event/channel — rather than one narrow query,
+    so the result is a mix like track radio, not just "more from this DJ"."""
+    artist = _artist_from_title(title)
+    genre = _genre_from_title(title)
+    queries = []
+    if artist:
+        queries.append(f"{artist} dj set")
+    if genre:
+        queries.append(f"{genre} dj set")
+    if channel and channel.strip().lower() != artist.strip().lower():
+        queries.append(f"{channel} dj set")
+    if not queries:
+        queries.append(_cleaned_title_fallback_query(title))
+
+    seen: set[str] = set()
+    deduped = []
+    for q in queries:
+        key = q.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(q)
+    return deduped[:3]

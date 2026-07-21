@@ -13,9 +13,9 @@ const MOBILE_MORE_LINKS = [
   { to: '/recommendations', icon: Flame, labelKey: 'recommendations' },
   { to: '/playlists', icon: ListMusic, labelKey: 'playlists' },
   { to: '/sync', icon: Repeat, labelKey: 'transfer' },
+  { to: '/set-browser', icon: Compass, labelKey: 'setBrowser' },
   { to: '/analyzer', icon: Wand2, labelKey: 'setAnalyzer' },
   { to: '/set-library', icon: Library, labelKey: 'setLibrary' },
-  { to: '/set-browser', icon: Compass, labelKey: 'setBrowser' },
 ];
 
 export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen }) {
@@ -60,10 +60,6 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
           </NavLink>
 
           <div className="sidebar-section-label hide-on-mobile">{t('myMusic')}</div>
-          <NavLink to="/set-browser" className={navClass()}>
-            <Compass size={20} />
-            <span>{t('setBrowser')}</span>
-          </NavLink>
           <NavLink to="/library" className={() => `nav-item${libraryActive ? ' active' : ''}`}>
             <Heart size={20} />
             <span>{t('library')}</span>
@@ -78,6 +74,10 @@ export default function AppSidebar({ t, isMobileMenuOpen, setIsMobileMenuOpen })
           </NavLink>
 
           <div className="sidebar-section-label hide-on-mobile">{t('proTools')}</div>
+          <NavLink to="/set-browser" className={navClass('', 'hide-on-mobile')}>
+            <Compass size={20} />
+            <span>{t('setBrowser')}</span>
+          </NavLink>
           <NavLink to="/analyzer" className={navClass('', 'hide-on-mobile')}>
             <Wand2 size={20} />
             <span>{t('setAnalyzer')}</span>

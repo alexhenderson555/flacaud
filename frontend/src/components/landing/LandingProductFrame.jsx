@@ -7,9 +7,9 @@ const NAV = [
   { id: 'search', icon: Search, labelKey: 'search' },
   { id: 'recs', icon: Flame, labelKey: 'recs' },
   { id: 'vibe', icon: Radio, labelKey: 'vibe' },
-  { id: 'setBrowser', icon: Compass, labelKey: 'setBrowser' },
   { id: 'library', icon: Heart, labelKey: 'library' },
   { id: 'transfer', icon: Repeat, labelKey: 'transfer' },
+  { id: 'setBrowser', icon: Compass, labelKey: 'setBrowser' },
   { id: 'analyzer', icon: ListMusic, labelKey: 'analyzer' },
   { id: 'sets', icon: Library, labelKey: 'sets' },
 ];
@@ -26,7 +26,7 @@ const LABELS = {
     setBrowser: 'Set Browser',
     discover: 'Discover',
     myMusic: 'My music',
-    proTools: 'Pro tools',
+    proTools: 'DJ tools',
     account: 'Account',
   },
   ru: {
@@ -40,7 +40,7 @@ const LABELS = {
     setBrowser: 'Сет Браузер',
     discover: 'Обзор',
     myMusic: 'Моя музыка',
-    proTools: 'Инструменты',
+    proTools: 'DJ-инструменты',
     account: 'Аккаунт',
   },
 };

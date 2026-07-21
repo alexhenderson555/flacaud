@@ -1,27 +1,30 @@
-from tidal_dl_ru.core.set_search import MIN_SET_DURATION_SECONDS, build_similar_query, search_sets
+from tidal_dl_ru.core.set_search import MIN_SET_DURATION_SECONDS, build_similar_queries, search_sets
 
 
-def test_similar_query_prefers_artist_from_title_over_festival_channel():
+def test_similar_queries_prefer_artist_over_festival_channel():
     # The festival's own upload channel ("Tomorrowland") is not who's playing —
-    # the artist name in the title is what should drive the "similar" search.
-    q = build_similar_query("Antdot | Tomorrowland Winter 2026", "Tomorrowland")
-    assert q == "Antdot dj set"
+    # the artist name in the title should drive the "similar" search, not the channel.
+    qs = build_similar_queries("Antdot | Tomorrowland Winter 2026", "Tomorrowland")
+    assert qs[0] == "Antdot dj set"
+    # Blended like radio: also includes the event/channel as a second angle.
+    assert "Tomorrowland dj set" in qs
 
 
-def test_similar_query_handles_at_separator():
-    q = build_similar_query("Antdot @ Club Vibe 2025", "Antdot")
-    assert q == "Antdot dj set"
+def test_similar_queries_include_genre_when_present():
+    qs = build_similar_queries("Antdot - Afro House Mix 2025", "Antdot")
+    assert "afro house dj set" in qs
 
 
-def test_similar_query_falls_back_to_channel_without_separator():
-    q = build_similar_query("SUMMER GOOD VIBES HOUSE VOL 1", "HORUS")
-    assert q == "HORUS dj set"
+def test_similar_queries_dedupe_artist_and_channel():
+    qs = build_similar_queries("Antdot @ Club Vibe 2025", "Antdot")
+    assert qs.count("Antdot dj set") == 1
 
 
-def test_similar_query_falls_back_to_cleaned_title_without_channel():
-    q = build_similar_query("Some Mix 2025 [HD]", "")
-    assert "dj set" in q
-    assert "2025" not in q
+def test_similar_queries_falls_back_to_cleaned_title_without_anything_else():
+    qs = build_similar_queries("Some Mix 2025 [HD]", "")
+    assert len(qs) == 1
+    assert "dj set" in qs[0]
+    assert "2025" not in qs[0]
 
 
 def test_search_sets_filters_out_short_tracks(monkeypatch):

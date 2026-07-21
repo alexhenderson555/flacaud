@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from tidal_dl_ru.core.set_audio_cache import cache_path, has_cached_set_audio
-from tidal_dl_ru.core.set_search import build_similar_query, fetch_set_info, search_sets
+from tidal_dl_ru.core.set_search import build_similar_queries, fetch_set_info, search_sets
 from tidal_dl_ru.core.set_track_match import match_tidal_track
 from tidal_dl_ru.core.tracklist_parser import parse_tracklist_from_description
 from tidal_dl_ru.database.auth import get_current_user
@@ -241,7 +241,8 @@ async def set_radio_endpoint(
     limit: int = 10,
     current_user: User = Depends(get_current_user),
 ):
-    """'Similar sets' / radio-by-set: sets from the same channel or similar title."""
+    """'Similar sets' / radio-by-set — a blended mix (same artist, same
+    genre/style, same event), like track radio, not just "more from this DJ"."""
     url = _normalize_url(url)
     if not url:
         raise HTTPException(status_code=400, detail="URL required")
@@ -252,10 +253,28 @@ async def set_radio_endpoint(
         logger.info("set_radio: fetch_set_info failed for %s: %s", url, exc)
         raise HTTPException(status_code=502, detail="Could not read set info") from exc
 
-    query = build_similar_query(info.get("title") or "", info.get("channel") or "")
-    results = await asyncio.to_thread(search_sets, query, limit + 1)
-    results = [r for r in results if _normalize_url(r["url"]) != url][:limit]
-    return {"query": query, "results": results}
+    queries = build_similar_queries(info.get("title") or "", info.get("channel") or "")
+    per_query = max(4, (limit // len(queries)) + 2)
+    batches = await asyncio.gather(
+        *[asyncio.to_thread(search_sets, q, per_query) for q in queries]
+    )
+
+    seen: set[str] = {url}
+    blended: list[dict] = []
+    # Interleave round-robin across queries (artist / genre / event) instead
+    # of exhausting one query first, so the blend is mixed like radio rather
+    # than "same artist first, then maybe some genre results at the bottom."
+    for row_idx in range(per_query):
+        for batch in batches:
+            if row_idx >= len(batch):
+                continue
+            row = batch[row_idx]
+            key = _normalize_url(row["url"])
+            if key in seen:
+                continue
+            seen.add(key)
+            blended.append(row)
+    return {"queries": queries, "results": blended[:limit]}
 
 
 @router.api_route("/sets/cached-audio", methods=["GET", "HEAD"])
