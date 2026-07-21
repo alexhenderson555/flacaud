@@ -462,6 +462,33 @@ def verify_password_reset_mail_ready() -> None:
     _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=240)
 
 
+def check_manifest_failures() -> None:
+    """Print recent 'Manifest fetch failed' log lines from the api container."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        "$COMPOSE logs api --tail 2000 2>/dev/null | grep -i 'Manifest fetch failed' | tail -n 40 || true"
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=120)
+
+
+def check_pool_status() -> None:
+    """Print active Tidal pool accounts, their quota/status/cooldown (read-only)."""
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        "$COMPOSE exec -T api python -c \""
+        "from tidal_dl_ru.providers.tidal.pool import session, TidalAccount; "
+        "s=session().__enter__(); "
+        "rows=s.execute(__import__('sqlalchemy').select(TidalAccount)).scalars().all(); "
+        "[print(r.id, r.status, 'quota=%d/%d' % (r.downloads_today, r.daily_quota), 'last_used=%s' % r.last_used_at) for r in rows]"
+        "\""
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=120)
+
+
 def main() -> None:
     fix_vpn_server()
     deploy_tidal_server()

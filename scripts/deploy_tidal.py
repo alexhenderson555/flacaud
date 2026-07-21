@@ -33,6 +33,8 @@ os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST") or tidal_host(
 os.environ.pop("VPN_FIX", None)
 
 from scripts.repair_servers import (  # noqa: E402
+    check_manifest_failures,
+    check_pool_status,
     deploy_tidal_server,
     smoke_tidal,
     verify_password_reset_mail_ready,
@@ -41,6 +43,14 @@ from scripts.repair_servers import (  # noqa: E402
 
 def main() -> None:
     host = os.environ.get("TIDAL_HOST") or tidal_host()
+    if "--logs-only" in sys.argv:
+        print(f"Manifest-fetch-failed log lines -> {host}")
+        check_manifest_failures()
+        return
+    if "--pool-status" in sys.argv:
+        print(f"Tidal pool status -> {host}")
+        check_pool_status()
+        return
     tag = (os.environ.get("FLACAUD_TAG") or "").strip() or "auto"
     print(f"Deploy tidal only -> {host} (VPN 151.x NOT contacted; VPN_FIX ignored)")
     print(f"Registry mode enabled (FLACAUD_TAG={tag})")

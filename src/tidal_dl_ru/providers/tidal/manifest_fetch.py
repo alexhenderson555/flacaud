@@ -9,6 +9,7 @@ import httpx
 
 from tidal_dl_ru.providers.tidal import manifest_cache
 from tidal_dl_ru.providers.tidal import pool as tidal_pool
+from tidal_dl_ru.providers.tidal.auth import AuthError
 from tidal_dl_ru.providers.tidal.client import TidalClient
 from tidal_dl_ru.providers.tidal.models import AudioQuality, PlaybackManifest
 
@@ -75,6 +76,14 @@ def fetch_playback_manifest(
             acc, tokens = tidal_pool.acquire(exclude_ids=excluded)
         except tidal_pool.NoAccountAvailable:
             break
+        except AuthError as exc:
+            # Token refresh failed for this account (revoked/expired refresh
+            # token). acquire() already bans the account internally on this
+            # path, so the next acquire() call naturally skips it (status
+            # filter). Log it and try the next account instead of letting
+            # this bubble up as an opaque 503 with no server-side trace.
+            logger.info("Pool account auth error, retrying next account: %s", exc)
+            continue
 
         own_http = httpx.Client(timeout=30.0)
         try:
