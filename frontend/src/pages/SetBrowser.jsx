@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, Loader2, ListMusic, DownloadCloud, Heart, ExternalLink,
@@ -122,6 +122,7 @@ export default function SetBrowser() {
   } = useOutletContext();
   const t = useCallback((key) => setBrowserDict[lang]?.[key] || setBrowserDict.en[key] || key, [lang]);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { loadSetEmbed, pauseSetEmbed, seekSetEmbed } = usePlayer();
 
   const [query, setQuery] = useState('');
@@ -187,10 +188,32 @@ export default function SetBrowser() {
     }
   }, [query, lang, t]);
 
+  // Opening a set pushes a browser-history entry (via the `set` query param) so
+  // the native Back button returns here to the results instead of skipping
+  // straight past this page to whatever was open before it (e.g. Library) —
+  // selecting a set was previously pure client state with no URL change, so
+  // Back had nothing of ours to undo.
+  useEffect(() => {
+    if (!searchParams.get('set') && selected) {
+      pauseSetEmbed();
+      setSelected(null);
+      setTracklist(null);
+      setSimilarSets([]);
+    }
+    // Only react to the URL going "backward" (param disappearing) — forward
+    // transitions are already handled by selectSet itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const selectSet = useCallback(async (set) => {
     setSelected(set);
     setTracklist(null);
     setSimilarSets([]);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('set', set.url);
+      return next;
+    });
     if (canPlaySetUrl(set.url)) loadSetEmbed(set.url);
 
     setTracklistLoading(true);
@@ -210,13 +233,20 @@ export default function SetBrowser() {
     } catch {
       setSimilarSets([]);
     }
-  }, [lang, loadSetEmbed, t]);
+  }, [lang, loadSetEmbed, t, setSearchParams]);
 
   const backToResults = () => {
-    pauseSetEmbed();
-    setSelected(null);
-    setTracklist(null);
-    setSimilarSets([]);
+    // Pop the history entry selectSet pushed, rather than resetting state
+    // directly — keeps the in-page "back" button and the browser's own Back
+    // button consistent (both undo the same navigation step).
+    if (searchParams.get('set')) {
+      navigate(-1);
+    } else {
+      pauseSetEmbed();
+      setSelected(null);
+      setTracklist(null);
+      setSimilarSets([]);
+    }
   };
 
   const seekSetAt = useCallback((timestamp) => {
