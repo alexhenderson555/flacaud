@@ -19,3 +19,10 @@ export async function fetchSimilarSets(url, { lang, limit = 10 } = {}) {
   const data = await apiGetJson(`/api/sets/radio?${params.toString()}`, { auth: true, lang });
   return data?.results || [];
 }
+
+/** Discover sets without a query — seeded from the user's library, radio-blended. */
+export async function fetchSetRecommendations({ lang, limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const data = await apiGetJson(`/api/sets/recommendations?${params.toString()}`, { auth: true, lang });
+  return data?.results || [];
+}

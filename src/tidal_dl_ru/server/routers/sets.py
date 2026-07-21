@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import random
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -15,7 +16,7 @@ from tidal_dl_ru.core.set_track_match import match_tidal_track
 from tidal_dl_ru.core.tracklist_parser import parse_tracklist_from_description
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.database import get_session
-from tidal_dl_ru.database.models import SavedSet, SavedSetRead, User
+from tidal_dl_ru.database.models import SavedSet, SavedSetRead, SavedTrack, User
 from tidal_dl_ru.server.share_utils import (
     new_share_token,
     parse_tracks_json,
@@ -235,6 +236,29 @@ async def quick_tracklist_endpoint(
     }
 
 
+async def _blend_queries(queries: list[str], limit: int, exclude: set[str]) -> list[dict]:
+    """Run several search queries in parallel and interleave them round-robin
+    (instead of exhausting one query first) so the result reads like a radio
+    blend rather than "query 1's results, then maybe some of query 2's"."""
+    per_query = max(4, (limit // max(1, len(queries))) + 2)
+    batches = await asyncio.gather(
+        *[asyncio.to_thread(search_sets, q, per_query) for q in queries]
+    )
+    seen = set(exclude)
+    blended: list[dict] = []
+    for row_idx in range(per_query):
+        for batch in batches:
+            if row_idx >= len(batch):
+                continue
+            row = batch[row_idx]
+            key = _normalize_url(row["url"])
+            if key in seen:
+                continue
+            seen.add(key)
+            blended.append(row)
+    return blended[:limit]
+
+
 @router.get("/sets/radio")
 async def set_radio_endpoint(
     url: str,
@@ -254,27 +278,63 @@ async def set_radio_endpoint(
         raise HTTPException(status_code=502, detail="Could not read set info") from exc
 
     queries = build_similar_queries(info.get("title") or "", info.get("channel") or "")
-    per_query = max(4, (limit // len(queries)) + 2)
-    batches = await asyncio.gather(
-        *[asyncio.to_thread(search_sets, q, per_query) for q in queries]
-    )
+    blended = await _blend_queries(queries, limit, exclude={url})
+    return {"queries": queries, "results": blended}
 
-    seen: set[str] = {url}
-    blended: list[dict] = []
-    # Interleave round-robin across queries (artist / genre / event) instead
-    # of exhausting one query first, so the blend is mixed like radio rather
-    # than "same artist first, then maybe some genre results at the bottom."
-    for row_idx in range(per_query):
-        for batch in batches:
-            if row_idx >= len(batch):
-                continue
-            row = batch[row_idx]
-            key = _normalize_url(row["url"])
-            if key in seen:
-                continue
-            seen.add(key)
-            blended.append(row)
-    return {"queries": queries, "results": blended[:limit]}
+
+# Generic queries used when a user has no liked tracks yet (or none with a
+# usable artist name) — rotated randomly so reloading the empty state doesn't
+# always show the exact same sets.
+_FALLBACK_DISCOVER_QUERIES = [
+    "boiler room dj set",
+    "tomorrowland dj set",
+    "afro house dj set",
+    "tech house dj set",
+    "melodic techno dj set",
+    "deep house dj set",
+]
+
+
+def _library_artist_names(session: Session, user_id: int, limit: int = 60) -> list[str]:
+    rows = session.exec(
+        select(SavedTrack)
+        .where(SavedTrack.user_id == user_id)
+        .order_by(SavedTrack.added_at.desc())  # type: ignore[attr-defined]
+        .limit(limit)
+    ).all()
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        try:
+            artists = json.loads(row.artists_json or "[]")
+        except (TypeError, ValueError):
+            artists = []
+        for name in artists:
+            key = str(name).strip().lower()
+            if name and key not in seen:
+                seen.add(key)
+                names.append(str(name).strip())
+    return names
+
+
+@router.get("/sets/recommendations")
+async def set_recommendations_endpoint(
+    limit: int = 12,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Sets to discover without typing a query — like the track Recommendations
+    page, seeded from artists in the user's library and blended radio-style."""
+    limit = max(1, min(limit, 24))
+    artist_names = _library_artist_names(session, current_user.id)
+    if artist_names:
+        picked = random.sample(artist_names, min(3, len(artist_names)))
+        queries = [f"{name} dj set" for name in picked]
+    else:
+        queries = random.sample(_FALLBACK_DISCOVER_QUERIES, 3)
+
+    blended = await _blend_queries(queries, limit, exclude=set())
+    return {"queries": queries, "results": blended}
 
 
 @router.api_route("/sets/cached-audio", methods=["GET", "HEAD"])

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -18,7 +18,9 @@ import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
 import { startDownloadJob } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { messageForApiError } from '../utils/apiClient';
-import { searchSets, fetchQuickTracklist, fetchSimilarSets } from '../utils/setSearchApi';
+import {
+  searchSets, fetchQuickTracklist, fetchSimilarSets, fetchSetRecommendations,
+} from '../utils/setSearchApi';
 import { analyzerQueryForSet } from '../utils/setLibrary';
 import { setBrowserDict } from '../locales/setBrowserDict';
 
@@ -132,6 +134,8 @@ export default function SetBrowser() {
   const [tracklistLoading, setTracklistLoading] = useState(false);
   const [similarSets, setSimilarSets] = useState([]);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
+  const [recommended, setRecommended] = useState([]);
+  const [recommendedLoading, setRecommendedLoading] = useState(false);
 
   const trimmedUrl = selected?.url || '';
   const canPlaySet = canPlaySetUrl(trimmedUrl);
@@ -148,6 +152,20 @@ export default function SetBrowser() {
     () => setTracks.map((row) => normalizeSetMatchedTrack(row)).filter(Boolean),
     [setTracks],
   );
+
+  useEffect(() => {
+    if (!hasAuthSession()) return;
+    let cancelled = false;
+    setRecommendedLoading(true);
+    fetchSetRecommendations({ lang })
+      .then((rows) => { if (!cancelled) setRecommended(rows); })
+      .catch(() => { if (!cancelled) setRecommended([]); })
+      .finally(() => { if (!cancelled) setRecommendedLoading(false); });
+    return () => { cancelled = true; };
+    // Fetched once per page load — a fresh, re-shuffled set on every visit is
+    // the point (discovery), not something that should refetch on re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runSearch = useCallback(async (e) => {
     e?.preventDefault();
@@ -311,8 +329,31 @@ export default function SetBrowser() {
             </div>
           )}
 
-          {!searching && !results.length && !searchError && (
-            <p style={{ color: 'var(--text-secondary)' }}>{t('noQuery')}</p>
+          {!searching && !results.length && !searchError && !query.trim() && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {recommendedLoading && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)' }}>
+                  <Loader2 className="spinner" size={18} />
+                  {t('loadingRecommended')}
+                </div>
+              )}
+              {!recommendedLoading && recommended.length > 0 && (
+                <>
+                  <h2 style={{ fontSize: '1.2rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={20} />
+                    {t('recommendedSets')}
+                  </h2>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gridAutoRows: '1fr', gap: '16px', paddingBottom: '24px' }}>
+                    {recommended.map((set) => (
+                      <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
+                    ))}
+                  </div>
+                </>
+              )}
+              {!recommendedLoading && !recommended.length && (
+                <p style={{ color: 'var(--text-secondary)' }}>{t('noQuery')}</p>
+              )}
+            </div>
           )}
 
           {!searching && query.trim() && results.length === 0 && !searchError && (
