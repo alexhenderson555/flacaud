@@ -63,7 +63,6 @@ function SetResultCard({ set, onSelect, t, lang }) {
       style={{
         display: 'flex', flexDirection: 'column', textAlign: 'left', padding: 0,
         borderRadius: '16px', overflow: 'hidden', border: 'none', cursor: 'pointer', background: 'var(--bg-surface)',
-        height: '100%',
       }}
     >
       <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', flexShrink: 0 }}>
@@ -82,7 +81,7 @@ function SetResultCard({ set, onSelect, t, lang }) {
           {set.source === 'soundcloud' ? 'SoundCloud' : 'YouTube'}
         </span>
       </div>
-      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column' }}>
         <div
           style={{
             fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px',
@@ -95,7 +94,7 @@ function SetResultCard({ set, onSelect, t, lang }) {
         <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {set.channel}
         </div>
-        <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {set.duration_seconds > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Clock size={12} />
@@ -373,7 +372,7 @@ export default function SetBrowser() {
                     <Sparkles size={20} />
                     {t('recommendedSets')}
                   </h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gridAutoRows: '1fr', gap: '16px', paddingBottom: '24px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '24px' }}>
                     {recommended.map((set) => (
                       <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                     ))}
@@ -405,7 +404,7 @@ export default function SetBrowser() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gridAutoRows: '1fr', gap: '16px', paddingBottom: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '24px' }}>
             {sortedResults.map((set) => (
               <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
             ))}
@@ -532,7 +531,7 @@ export default function SetBrowser() {
                 <Radio size={20} />
                 {t('similarSets')}
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gridAutoRows: '1fr', gap: '14px', paddingBottom: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px', paddingBottom: '24px' }}>
                 {similarSets.map((set) => (
                   <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                 ))}
