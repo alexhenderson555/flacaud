@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, Loader2, ListMusic, DownloadCloud, Heart, ExternalLink,
-  ArrowLeft, Sparkles, Radio, Music2, Clock,
+  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, ArrowUpDown,
 } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { usePlayer } from '../store/usePlayerStore';
@@ -28,7 +28,29 @@ function formatMinutes(seconds, t) {
   return `${m} ${t('minutes')}`;
 }
 
-function SetResultCard({ set, onSelect, t }) {
+function formatCompactNumber(n) {
+  if (!n) return null;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+  return String(n);
+}
+
+function formatUploadDate(timestamp, lang) {
+  if (!timestamp) return null;
+  try {
+    return new Date(timestamp * 1000).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  } catch {
+    return null;
+  }
+}
+
+const SORT_OPTIONS = ['relevance', 'views', 'date'];
+
+function SetResultCard({ set, onSelect, t, lang }) {
+  const views = formatCompactNumber(set.view_count);
+  const date = formatUploadDate(set.upload_timestamp, lang);
   return (
     <motion.button
       type="button"
@@ -39,9 +61,10 @@ function SetResultCard({ set, onSelect, t }) {
       style={{
         display: 'flex', flexDirection: 'column', textAlign: 'left', padding: 0,
         borderRadius: '16px', overflow: 'hidden', border: 'none', cursor: 'pointer', background: 'var(--bg-surface)',
+        height: '100%',
       }}
     >
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', flexShrink: 0 }}>
         {set.thumbnail ? (
           <img src={set.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
@@ -57,19 +80,33 @@ function SetResultCard({ set, onSelect, t }) {
           {set.source === 'soundcloud' ? 'SoundCloud' : 'YouTube'}
         </span>
       </div>
-      <div style={{ padding: '12px 14px' }}>
-        <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div
+          style={{
+            fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            overflow: 'hidden', minHeight: '2.5em',
+          }}
+        >
           {set.title}
         </div>
-        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span>{set.channel}</span>
+        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {set.channel}
+        </div>
+        <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {set.duration_seconds > 0 && (
-            <>
-              <span>·</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Clock size={12} />
-              <span>{formatMinutes(set.duration_seconds, t)}</span>
-            </>
+              {formatMinutes(set.duration_seconds, t)}
+            </span>
           )}
+          {views && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Eye size={12} />
+              {views}
+            </span>
+          )}
+          {date && <span>{date}</span>}
         </div>
       </div>
     </motion.button>
@@ -89,6 +126,7 @@ export default function SetBrowser() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [results, setResults] = useState([]);
+  const [sortBy, setSortBy] = useState('relevance');
   const [selected, setSelected] = useState(null);
   const [tracklist, setTracklist] = useState(null);
   const [tracklistLoading, setTracklistLoading] = useState(false);
@@ -98,6 +136,12 @@ export default function SetBrowser() {
   const trimmedUrl = selected?.url || '';
   const canPlaySet = canPlaySetUrl(trimmedUrl);
   const isSc = classifySetUrl(trimmedUrl) === 'soundcloud';
+
+  const sortedResults = useMemo(() => {
+    if (sortBy === 'views') return [...results].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    if (sortBy === 'date') return [...results].sort((a, b) => (b.upload_timestamp || 0) - (a.upload_timestamp || 0));
+    return results;
+  }, [results, sortBy]);
 
   const setTracks = useMemo(() => tracklist?.tracks || [], [tracklist]);
   const playableTracks = useMemo(
@@ -275,9 +319,24 @@ export default function SetBrowser() {
             <p style={{ color: 'var(--text-secondary)' }}>{t('noResults')}</p>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '24px' }}>
-            {results.map((set) => (
-              <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} />
+          {results.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <ArrowUpDown size={16} color="var(--text-muted)" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="set-browser__sort-select"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{t(`sort_${opt}`)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gridAutoRows: '1fr', gap: '16px', paddingBottom: '24px' }}>
+            {sortedResults.map((set) => (
+              <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
             ))}
           </div>
         </>
@@ -398,9 +457,9 @@ export default function SetBrowser() {
                 <Radio size={20} />
                 {t('similarSets')}
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px', paddingBottom: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gridAutoRows: '1fr', gap: '14px', paddingBottom: '24px' }}>
                 {similarSets.map((set) => (
-                  <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} />
+                  <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                 ))}
               </div>
             </div>

@@ -33,6 +33,13 @@ def _entry_to_result(entry: dict, source: str) -> dict | None:
         "duration_seconds": int(entry.get("duration") or 0),
         "thumbnail": thumbnail,
         "source": source,
+        "view_count": int(entry.get("view_count") or 0),
+        # Only SoundCloud's flat search includes a real timestamp for free;
+        # YouTube's flat search omits it (getting it there needs a full
+        # per-video extraction, which risks the same per-IP rate-limiting we
+        # already hit once this session on Tidal — not worth it for a search
+        # results grid of 8-12 videos).
+        "upload_timestamp": entry.get("timestamp"),
     }
 
 
