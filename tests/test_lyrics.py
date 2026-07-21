@@ -27,8 +27,11 @@ def test_parse_lrc_lines():
 
 def test_search_queries_includes_feat_stripped_title():
     qs = _search_queries("Calvin Harris", "I Need Your Love (feat. Ellie Goulding)", None)
-    assert "I Need Your Love" in qs
+    # A feat.-stripped title paired with the artist is a query variant.
     assert any("Calvin Harris" in q and "I Need Your Love" in q for q in qs)
+    # But never bare (no artist) — an artist-less query is what let wrong-artist
+    # lyrics slip through as false-positive matches.
+    assert "I Need Your Love" not in qs
 
 
 def test_display_title_with_version():

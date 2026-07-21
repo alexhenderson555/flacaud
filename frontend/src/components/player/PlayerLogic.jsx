@@ -192,12 +192,6 @@ export default function PlayerLogic({ children }) {
     downloadRegistryTick,
     effectivePlan,
     autoQuality: autoPlaybackQuality,
-    onManualQualityPick: () => {
-      if (autoPlaybackQuality) {
-        setAutoPlaybackQualityState(false);
-        persistAutoQuality(false);
-      }
-    },
     lang,
     showToast,
     audioRef,

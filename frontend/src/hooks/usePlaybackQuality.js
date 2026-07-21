@@ -46,7 +46,6 @@ export function usePlaybackQuality({
   downloadRegistryTick = 0,
   effectivePlan = 'free',
   autoQuality = true,
-  onManualQualityPick,
   pendingPlayRef,
   lang,
   showToast,
@@ -92,6 +91,11 @@ export function usePlaybackQuality({
   const qualitySwitchRef = useRef(false);
   const autoQualityRef = useRef(autoQuality);
   const streamErrorSuppressUntilRef = useRef(0);
+  // Mirrors trackOverrideQuality for synchronous reads (set directly alongside the
+  // state setter, not solely via a useEffect mirror) — applyStreamQuality is called
+  // in the same tick right after the override is set and needs the current value
+  // immediately, before React would otherwise re-render and run the mirror effect.
+  const trackOverrideQualityRef = useRef(null);
 
   const resolveMainEl = useCallback(
     () => getMainAudioEl?.() ?? audioRef?.current ?? null,
@@ -110,6 +114,7 @@ export function usePlaybackQuality({
 
   const setPlaybackQuality = useCallback((q, isOverride = false) => {
     if (isOverride) {
+      trackOverrideQualityRef.current = q;
       setTrackOverrideQuality(q);
       setStreamQuality(q);
       return;
@@ -152,9 +157,16 @@ export function usePlaybackQuality({
     const wantedQ = resolveWantedQuality(wanted);
     const streamable = streamableQualitiesForTrack(visibleQualities, activeProbe);
     const useAuto = autoQualityRef.current;
-    const effective = useAuto
-      ? pickMaxQualityForTrack(streamable, effectivePlan, activeProbe)
-      : pickQualityForPlan(wantedQ, streamable, effectivePlan);
+    // A player-picked quality (changeQuality) is a one-time, per-track override — it
+    // takes priority over both Auto and the fixed default, and is NOT what's saved
+    // as the profile's default (that only happens via setPlaybackQuality's non-override
+    // branch, from the Account settings page). It's cleared on track change.
+    const overrideQ = trackOverrideQualityRef.current;
+    const effective = overrideQ
+      ? pickQualityForPlan(overrideQ, streamable, effectivePlan)
+      : useAuto
+        ? pickMaxQualityForTrack(streamable, effectivePlan, activeProbe)
+        : pickQualityForPlan(wantedQ, streamable, effectivePlan);
 
     const mainEl = resolveMainEl();
     const playingSrc = mainEl?.currentSrc || mainEl?.src || '';
@@ -168,8 +180,15 @@ export function usePlaybackQuality({
     const activelyPlaying = playingCurrentTrack
       && (isActivelyPlayingAudio(isPlayingRef.current, mainEl)
         || (isPlayingRef.current && mainEl && !mainEl.paused));
+    // Only suppress Auto's mid-track upgrade once real listening is underway. Right
+    // after a track starts, the per-track quality probe can resolve a beat after
+    // playback begins (started at a lower tier while probing) — that's not "the user
+    // is mid-listening, don't disrupt them", it's the normal startup race, and Auto
+    // should still be allowed to correct up to the real max within the first few
+    // seconds instead of sitting at the lower tier for the rest of the track.
+    const justStartedTrack = (mainEl?.currentTime || 0) < 4;
 
-    if (!force && useAuto && activelyPlaying && effective !== streamQualityRef.current) {
+    if (!force && useAuto && activelyPlaying && !justStartedTrack && effective !== streamQualityRef.current) {
       // Auto won't switch the stream mid-track, so the badge must reflect what's
       // ACTUALLY playing (the current stream tier) — not the un-played auto-max.
       // Falling back to actualMap[effective] made a manual 320k pick visibly snap
@@ -180,7 +199,7 @@ export function usePlaybackQuality({
     }
 
     setStreamQuality(effective);
-    if (useAuto) setPlaybackQualityState(effective);
+    if (useAuto && !overrideQ) setPlaybackQualityState(effective);
 
     if (!useAuto && effective !== wantedQ) {
       const planBlocked = !isQualityAllowedForPlan(wantedQ, effectivePlan);
@@ -275,11 +294,23 @@ export function usePlaybackQuality({
       qualityActualRef.current = {};
       loadedSrcKeyRef.current = '';
       if (skipAudioSrcSyncRef) skipAudioSrcSyncRef.current = null;
+      pendingSeekRef.current = null;
+      pendingPlayAfterSeekRef.current = false;
       return undefined;
     }
 
     let cancelled = false;
+    trackOverrideQualityRef.current = null;
     setTrackOverrideQuality(null);
+    // A quality-change or stream-error retry on the PREVIOUS track can stage a
+    // resume position (to restore playback position across a stream reload) that
+    // never gets consumed if the user switches tracks before it fires. Left
+    // uncleared, restorePendingSeek has no track-identity check — only "is the
+    // timestamp within this element's duration" — so it would happily seek the
+    // NEW track to the old one's leftover position on its first loadedmetadata.
+    // This is what surfaced as tracks starting at an unrelated ~20-45s offset.
+    pendingSeekRef.current = null;
+    pendingPlayAfterSeekRef.current = false;
     trackChangePendingRef.current = true;
     streamErrorSuppressUntilRef.current = performance.now() + 1200;
     streamRetryNonceRef.current = 0;
@@ -626,7 +657,9 @@ export function usePlaybackQuality({
       elSrc.includes(`quality=${newQ}&`)
       || elSrc.includes(`quality=${newQ}`)
     );
-    if (newQ === playbackQuality && newQ === streamQualityRef.current && streamMatches) {
+    // Already there — via a prior override (Auto mode) or the fixed default — nothing to do.
+    if ((newQ === trackOverrideQuality || newQ === playbackQuality)
+      && newQ === streamQualityRef.current && streamMatches) {
       return;
     }
 
@@ -646,13 +679,11 @@ export function usePlaybackQuality({
       }));
       return;
     }
-    if (autoQuality) {
-      onManualQualityPick?.();
-      autoQualityRef.current = false;
-      setPlaybackQuality(newQ);
-    } else {
-      setPlaybackQuality(newQ, true);
-    }
+    // Always a one-time, per-track override — never persisted, never touches the
+    // profile's saved default or the Automatic toggle (those only change via the
+    // Account settings page). Automatic keeps picking its own tier for the NEXT
+    // track once this one ends (trackOverrideQuality resets on track change).
+    setPlaybackQuality(newQ, true);
     qualitySwitchRef.current = true;
     streamErrorSuppressUntilRef.current = performance.now() + 800;
     const time = audioRef?.current?.currentTime || 0;
@@ -673,11 +704,10 @@ export function usePlaybackQuality({
     requestPlaybackRetry();
   }, [
     playbackQuality,
+    trackOverrideQuality,
     availableQualities,
     maxTrackQuality,
     effectivePlan,
-    autoQuality,
-    onManualQualityPick,
     audioRef,
     resolveMainEl,
     isPlaying,
