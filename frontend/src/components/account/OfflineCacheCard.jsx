@@ -8,6 +8,7 @@ import {
 } from '../../utils/cache';
 import { showToast } from '../../utils/toast';
 import { coverImgSrc } from '../../utils/coverUrl';
+import { qualityButtonLabel } from '../../utils/qualityPrefs';
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -30,8 +31,14 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
   const [expanded, setExpanded] = useState(false);
   const [tracks, setTracks] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-  const [playingKey, setPlayingKey] = useState(null);
+  // activeKey = track currently loaded into the <audio> element (playing OR paused);
+  // isPlaying reflects only whether it's currently advancing. Kept separate so that
+  // pausing and resuming the SAME track doesn't re-fetch the blob and reset el.src,
+  // which would restart playback from 0:00.
+  const [activeKey, setActiveKey] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(null);
+  const listRef = useRef(null);
 
   useEffect(() => () => {
     audioRef.current?.pause();
@@ -53,12 +60,26 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
     }
   };
 
-  const togglePlay = async (row) => {
+  const playRowAt = async (index) => {
+    if (index < 0 || index >= tracks.length) return;
+    await togglePlay(tracks[index], { forcePlay: true });
+  };
+
+  const togglePlay = async (row, { forcePlay = false } = {}) => {
     const el = audioRef.current;
     if (!el) return;
-    if (playingKey === row.cacheKey) {
-      el.pause();
-      setPlayingKey(null);
+    if (activeKey === row.cacheKey) {
+      if (isPlaying && !forcePlay) {
+        el.pause();
+        setIsPlaying(false);
+        return;
+      }
+      try {
+        await el.play();
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(false);
+      }
       return;
     }
     const url = await getCachedBlobUrlByKey(row.cacheKey);
@@ -67,18 +88,48 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
       return;
     }
     el.src = url;
-    setPlayingKey(row.cacheKey);
+    setActiveKey(row.cacheKey);
     try {
       await el.play();
+      setIsPlaying(true);
     } catch {
-      setPlayingKey(null);
+      setIsPlaying(false);
+    }
+  };
+
+  const focusRowAt = (index) => {
+    const rows = listRef.current?.querySelectorAll('[data-cache-row]');
+    rows?.[index]?.focus();
+  };
+
+  const handleRowKeyDown = (e, index) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      togglePlay(tracks[index]);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      focusRowAt(Math.min(index + 1, tracks.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusRowAt(Math.max(index - 1, 0));
+    }
+  };
+
+  const handleTrackEnded = () => {
+    setIsPlaying(false);
+    const index = tracks.findIndex((r) => r.cacheKey === activeKey);
+    if (index >= 0 && index + 1 < tracks.length) {
+      playRowAt(index + 1);
+    } else {
+      setActiveKey(null);
     }
   };
 
   const removeOne = async (row) => {
-    if (playingKey === row.cacheKey) {
+    if (activeKey === row.cacheKey) {
       audioRef.current?.pause();
-      setPlayingKey(null);
+      setActiveKey(null);
+      setIsPlaying(false);
     }
     await removeCachedAudioByKey(row.cacheKey);
     setTracks((cur) => cur.filter((r) => r.cacheKey !== row.cacheKey));
@@ -140,19 +191,18 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
       </div>
 
       {expanded && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+        <div ref={listRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
           {loadingList && (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>…</p>
           )}
-          {!loadingList && tracks.map((row) => (
+          {!loadingList && tracks.map((row, index) => (
             <div
               key={row.cacheKey}
+              data-cache-row
               role="button"
               tabIndex={0}
               onClick={() => togglePlay(row)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') togglePlay(row);
-              }}
+              onKeyDown={(e) => handleRowKeyDown(e, index)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '12px', padding: '8px',
                 borderRadius: '12px', background: 'var(--bg-surface-hover)', cursor: 'pointer',
@@ -170,19 +220,19 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
                   {row.title || row.provider_id}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {(row.artists || []).join(', ')} · {row.quality} · {formatBytes(row.bytes)}
+                  {(row.artists || []).join(', ')} · {qualityButtonLabel(row.quality) || t('offlineCacheUnknownQuality')} · {formatBytes(row.bytes)}
                 </div>
               </div>
               <button
                 type="button"
-                title={playingKey === row.cacheKey ? t('offlineCachePause') : t('offlineCachePlay')}
+                title={activeKey === row.cacheKey && isPlaying ? t('offlineCachePause') : t('offlineCachePlay')}
                 onClick={(e) => { e.stopPropagation(); togglePlay(row); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer', padding: '6px', flexShrink: 0,
-                  color: playingKey === row.cacheKey ? 'var(--accent-solid)' : 'var(--text-secondary)',
+                  color: activeKey === row.cacheKey && isPlaying ? 'var(--accent-solid)' : 'var(--text-secondary)',
                 }}
               >
-                {playingKey === row.cacheKey ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+                {activeKey === row.cacheKey && isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
               </button>
               <button
                 type="button"
@@ -204,7 +254,7 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
           ))}
         </div>
       )}
-      <audio ref={audioRef} onEnded={() => setPlayingKey(null)} style={{ display: 'none' }} />
+      <audio ref={audioRef} onEnded={handleTrackEnded} style={{ display: 'none' }} />
     </div>
   );
 }
