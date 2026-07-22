@@ -163,6 +163,7 @@ async def download_url(
     karaoke: bool = False,
     dj_analyze: bool = False,
     match_tidal: bool = False,
+    quota_reserved: bool = False,
 ) -> dict:
     """ARQ task: fetch URL → produce files. Updates job state in Redis as it goes."""
     log.info(
@@ -217,6 +218,18 @@ async def download_url(
 
         job_state.mark_done(job_id)
         log.info("job_done job_id=%s tracks=%s", job_id, len(tracks), extra={"event": "job_done", "job_id": job_id})
+
+        # reserve_web_download only ever reserves 1 unit of daily quota at job
+        # creation, regardless of how many tracks the URL expands to (playlist/
+        # album) -- top up the rest now that the real count is known. Bot-
+        # originated jobs skip this: the bot already meters via check_and_increment
+        # + its own record_downloads call after sending files.
+        if quota_reserved and len(tracks) > 1:
+            job_status_for_quota = job_state.load(job_id)
+            if job_status_for_quota and job_status_for_quota.owner_id is not None:
+                from tidal_dl_ru.bot.users import record_downloads_by_user_id
+                record_downloads_by_user_id(job_status_for_quota.owner_id, len(tracks))
+
         return {"ok": True, "count": len(tracks)}
     except Exception as e:  # noqa: BLE001
         log.exception("job_failed job_id=%s error=%s", job_id, e, extra={"event": "job_failed", "job_id": job_id})

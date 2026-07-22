@@ -179,6 +179,22 @@ def record_downloads(telegram_id: int, count: int) -> None:
         s.commit()
 
 
+def record_downloads_by_user_id(user_id: int, count: int) -> None:
+    """Web counterpart of ``record_downloads`` — reserve_web_download only ever
+    reserves 1 unit regardless of how many tracks a URL expands to (a playlist/
+    album), so a batch job must top up the daily counter with the rest once it's
+    known how many tracks actually got downloaded."""
+    if count <= 0:
+        return
+    with _session() as s:
+        user = s.get(User, user_id)
+        if user is None:
+            return
+        user.downloads_today += count - 1
+        user.total_downloads += count - 1
+        s.commit()
+
+
 def set_plan(
     telegram_id: int,
     plan: Plan,

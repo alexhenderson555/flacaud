@@ -3,6 +3,7 @@ import { X, Plus, ListMusic } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiGetJson, apiPostJson, apiPutJson } from '../utils/apiClient';
 import { getAccessToken } from '../utils/tokenStorage';
+import { showToast } from '../utils/toast';
 
 export default function PlaylistModal({ track, tracks, onClose, onUpdated }) {
   const [playlists, setPlaylists] = useState([]);
@@ -60,7 +61,11 @@ export default function PlaylistModal({ track, tracks, onClose, onUpdated }) {
         if (seedTracks.length) {
           await apiPutJson(`/api/playlists/${newPlaylist.id}`, { tracks: seedTracks }, { auth: true });
         }
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        showToast("Couldn't save the playlist to your account — try again");
+        return;
+      }
     }
 
     const newList = [...playlists, newPlaylist];
@@ -85,14 +90,17 @@ export default function PlaylistModal({ track, tracks, onClose, onUpdated }) {
       return p;
     });
 
-    savePlaylists(newPlaylists);
-
     if (isLoggedIn() && updatedPlaylist) {
       try {
         await apiPutJson(`/api/playlists/${playlistId}`, { tracks: updatedPlaylist.tracks }, { auth: true });
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        showToast("Couldn't add the track to your account's playlist — try again");
+        return;
+      }
     }
 
+    savePlaylists(newPlaylists);
     onUpdated?.();
     onClose();
   };

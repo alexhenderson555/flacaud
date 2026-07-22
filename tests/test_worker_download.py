@@ -52,6 +52,94 @@ class TestDownloadSyncProviderError:
         assert result is None
 
 
+class TestDownloadUrlQuotaTopUp:
+    """reserve_web_download only reserves 1 unit at job creation, regardless of
+    how many tracks a URL expands to (playlist/album) -- download_url must top
+    up the rest once the real count is known, but only when the job actually
+    reserved quota (quota_reserved=True, i.e. not a bot-originated job)."""
+
+    @pytest.mark.asyncio
+    async def test_multi_track_job_tops_up_quota(self):
+        tracks = [_make_track(provider_id=str(i)) for i in range(3)]
+        provider = MagicMock()
+        provider.expand = MagicMock(return_value=tracks)
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        job_status = MagicMock(owner_id=42)
+
+        with (
+            patch("tidal_dl_ru.core.transfer_router.find_transfer_provider", return_value=provider),
+            patch("tidal_dl_ru.server.worker.job_state") as js,
+            patch("tidal_dl_ru.server.worker.asyncio.to_thread", side_effect=fake_to_thread),
+            patch("tidal_dl_ru.server.worker._download_sync", return_value=Path("/tmp/f")),
+            patch("tidal_dl_ru.bot.users.record_downloads_by_user_id") as record_mock,
+        ):
+            js.load.return_value = job_status
+            result = await download_url(
+                {}, "job1", "https://tidal.com/playlist/1", "LOSSLESS", False,
+                quota_reserved=True,
+            )
+
+        assert result == {"ok": True, "count": 3}
+        record_mock.assert_called_once_with(42, 3)
+
+    @pytest.mark.asyncio
+    async def test_bot_job_does_not_top_up_quota(self):
+        """Bot-originated jobs (quota_reserved=False) already meter via the
+        bot's own check_and_increment + record_downloads call — no top-up here."""
+        tracks = [_make_track(provider_id=str(i)) for i in range(3)]
+        provider = MagicMock()
+        provider.expand = MagicMock(return_value=tracks)
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        with (
+            patch("tidal_dl_ru.core.transfer_router.find_transfer_provider", return_value=provider),
+            patch("tidal_dl_ru.server.worker.job_state") as js,
+            patch("tidal_dl_ru.server.worker.asyncio.to_thread", side_effect=fake_to_thread),
+            patch("tidal_dl_ru.server.worker._download_sync", return_value=Path("/tmp/f")),
+            patch("tidal_dl_ru.bot.users.record_downloads_by_user_id") as record_mock,
+        ):
+            js.load.return_value = MagicMock(owner_id=42)
+            result = await download_url(
+                {}, "job1", "https://tidal.com/playlist/1", "LOSSLESS", False,
+                quota_reserved=False,
+            )
+
+        assert result == {"ok": True, "count": 3}
+        record_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_single_track_job_skips_top_up(self):
+        """A single-track job is fully covered by the 1-unit reservation already
+        made at creation — no need to touch the DB again."""
+        tracks = [_make_track()]
+        provider = MagicMock()
+        provider.expand = MagicMock(return_value=tracks)
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        with (
+            patch("tidal_dl_ru.core.transfer_router.find_transfer_provider", return_value=provider),
+            patch("tidal_dl_ru.server.worker.job_state") as js,
+            patch("tidal_dl_ru.server.worker.asyncio.to_thread", side_effect=fake_to_thread),
+            patch("tidal_dl_ru.server.worker._download_sync", return_value=Path("/tmp/f")),
+            patch("tidal_dl_ru.bot.users.record_downloads_by_user_id") as record_mock,
+        ):
+            js.load.return_value = MagicMock(owner_id=42)
+            result = await download_url(
+                {}, "job1", "https://tidal.com/track/1", "LOSSLESS", False,
+                quota_reserved=True,
+            )
+
+        assert result == {"ok": True, "count": 1}
+        record_mock.assert_not_called()
+
+
 class TestWorkerSettings:
     def test_functions_registered(self):
         # Checked by name (not just count) so adding a task doesn't silently

@@ -106,6 +106,7 @@ async def create_job(
         req.karaoke,
         req.dj_analyze,
         req.match_tidal,
+        not via_bot,
         _job_id=job_id,
     )
 
