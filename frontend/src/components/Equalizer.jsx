@@ -87,12 +87,16 @@ export default function Equalizer({ audioCtx, audioRef, onClose }) {
         return filter;
       });
 
-      const sourceNode = audioRef.current._sourceNode;
+      // Splice the EQ chain in AFTER the gain node (source -> gain -> eq... ->
+      // analyser), not after source directly -- gain is the anti-click mute
+      // used by setGraphGain() during track switches. Rewiring from source
+      // would silently bypass it, leaving every future track switch un-muted.
+      const gainNode = audioRef.current._gainNode;
       const analyser = audioRef.current._analyser;
 
-      if (sourceNode && analyser) {
-        sourceNode.disconnect();
-        sourceNode.connect(eqNodes[0]);
+      if (gainNode && analyser) {
+        gainNode.disconnect();
+        gainNode.connect(eqNodes[0]);
         for (let i = 0; i < eqNodes.length - 1; i += 1) {
           eqNodes[i].connect(eqNodes[i + 1]);
         }
