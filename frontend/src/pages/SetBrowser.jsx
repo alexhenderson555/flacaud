@@ -162,6 +162,14 @@ export default function SetBrowser() {
   const trimmedUrl = selected?.url || '';
   const canPlaySet = canPlaySetUrl(trimmedUrl);
 
+  // Playing a Tidal track from the tracklist releases the embed session
+  // (mutual exclusion with the main player) - reload it as soon as that
+  // happens so the inline embed box never sits empty while a set is open.
+  useEffect(() => {
+    if (!canPlaySet || !trimmedUrl || embedUrl) return;
+    loadSetEmbed(trimmedUrl);
+  }, [canPlaySet, trimmedUrl, embedUrl, loadSetEmbed]);
+
   const sortedResults = useMemo(() => {
     if (sortBy === 'views') return [...results].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
     if (sortBy === 'date') return [...results].sort((a, b) => (b.upload_timestamp || 0) - (a.upload_timestamp || 0));
@@ -554,7 +562,7 @@ export default function SetBrowser() {
             </div>
           </div>
 
-          {embedUrl && canPlaySetUrl(embedUrl) && (
+          {canPlaySetUrl(selected.url) && (
             <SetEmbedAnchor
               style={{
                 maxWidth: '760px',

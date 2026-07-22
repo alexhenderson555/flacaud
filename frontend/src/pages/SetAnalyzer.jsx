@@ -139,10 +139,13 @@ export default function SetAnalyzer() {
     }
   }, [searchParams]);
 
+  // Playing a matched Tidal track releases the embed session (mutual
+  // exclusion with the main player) - reload it as soon as that happens so
+  // the inline embed box never sits empty while a set is loaded.
   useEffect(() => {
-    if (!canPlaySet || !trimmedUrl) return;
+    if (!canPlaySet || !trimmedUrl || embedUrl) return;
     loadSetEmbed(trimmedUrl);
-  }, [trimmedUrl, canPlaySet, loadSetEmbed]);
+  }, [trimmedUrl, canPlaySet, embedUrl, loadSetEmbed]);
 
   useEffect(() => {
     if (!trimmedUrl) return;
@@ -518,7 +521,7 @@ export default function SetAnalyzer() {
         </div>
       )}
 
-      {embedUrl && canPlaySetUrl(embedUrl) && (
+      {canPlaySet && (
         <SetEmbedAnchor
           style={{
             width: '100%',
