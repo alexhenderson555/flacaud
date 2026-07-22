@@ -30,17 +30,21 @@ export default function AlbumView() {
   const rowT = globalT || ((k) => k);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchAlbum = async () => {
       setLoading(true);
       try {
         const d = await apiGetJson(`/api/album/${id}`);
+        if (cancelled) return;
         setData(d);
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     };
     fetchAlbum();
+    return () => { cancelled = true; };
   }, [id]);
 
   if (loading) {

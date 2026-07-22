@@ -28,8 +28,10 @@ def verify_file(token: str) -> Optional[Path]:
     if not job_id or not filename:
         return None
     candidate = (settings.jobs_dir / job_id / filename).resolve()
-    # Path-traversal guard: result must live inside jobs_dir
-    if not str(candidate).startswith(str(settings.jobs_dir.resolve())):
+    # Path-traversal guard: result must live inside jobs_dir. A plain startswith()
+    # string check would wrongly accept a sibling directory that merely shares the
+    # prefix (e.g. jobs_dir="/data/jobs" would let "/data/jobs_backup/..." through).
+    if not candidate.is_relative_to(settings.jobs_dir.resolve()):
         return None
     if not candidate.is_file():
         return None

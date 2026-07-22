@@ -36,19 +36,23 @@ export default function ArtistProfile() {
   const rowT = globalT || ((k) => k);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchArtist = async () => {
       setLoading(true);
       setPictureFailed(false);
       try {
         const d = await apiGetJson(`/api/artist/${id}`, { lang });
+        if (cancelled) return;
         setData(d);
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
         setData(null);
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     };
     fetchArtist();
+    return () => { cancelled = true; };
   }, [id, lang]);
 
   useEffect(() => {
