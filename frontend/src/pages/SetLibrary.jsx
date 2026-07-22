@@ -1,15 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ListMusic, Link, Plus, Play, Pause, Search, Trash2, ExternalLink, Share2,
+  ListMusic, Link, Plus, ListChecks, Search, Trash2, ExternalLink, Share2,
 } from 'lucide-react';
-import { usePlayer } from '../store/usePlayerStore';
 import { showToast } from '../utils/toast';
 import { messageForApiError } from '../utils/apiClient';
 import { canPlaySetUrl } from '../components/LazySetPlayer';
-import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
-import { SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
 import { formatTrackCountAndDuration } from '../utils/trackDuration';
 import {
   normalizeSetUrl,
@@ -25,12 +22,10 @@ const dict = {
   en: {
     title: 'Set',
     titleBold: 'Library',
-    desc: 'Saved DJ sets. Click the title for the tracklist; Listen loads the player here; Analyze starts Shazam.',
+    desc: 'Saved DJ sets. View tracklist opens what was already found; Analyze runs Shazam (listening happens in the analyzer).',
     addPlaceholder: 'Paste YouTube or SoundCloud set URL…',
     addBtn: 'Add to library',
     empty: 'No saved sets yet. Add a link or save a set from the analyzer.',
-    listen: 'Listen',
-    pause: 'Pause',
     analyze: 'Analyze',
     reanalyze: 'Re-analyze',
     remove: 'Remove',
@@ -45,12 +40,10 @@ const dict = {
   ru: {
     title: 'Библиотека',
     titleBold: 'сетов',
-    desc: 'Сохранённые сеты. Клик по названию — треклист; «Слушать» — плеер под строкой; «Анализ» — запуск Shazam.',
+    desc: 'Сохранённые сеты. «Треклист» — открыть уже найденное; «Анализ» — запуск Shazam (слушать — в анализаторе).',
     addPlaceholder: 'Ссылка YouTube или SoundCloud…',
     addBtn: 'Добавить',
     empty: 'Пока нет сетов. Добавьте ссылку или сохраните сет в анализаторе.',
-    listen: 'Слушать',
-    pause: 'Пауза',
     analyze: 'Анализ',
     reanalyze: 'Повторный анализ',
     remove: 'Удалить',
@@ -69,52 +62,7 @@ export default function SetLibrary() {
   const t = (key) => dict[lang]?.[key] || dict.en[key] || key;
   const navigate = useNavigate();
   const { sets, loading, addByUrl, removeSet, reload } = useSetLibraryData(lang);
-  const {
-    playSetEmbed,
-    pauseSetEmbed,
-    resumeSetEmbed,
-    releaseSetEmbed,
-    embedUrl,
-    embedPlaying,
-    embedEngaged,
-  } = usePlayer();
   const [addUrl, setAddUrl] = useState('');
-  const [embedRowUrl, setEmbedRowUrl] = useState(null);
-
-  useEffect(() => {
-    if (embedEngaged && embedUrl) {
-      setEmbedRowUrl(normalizeSetUrl(embedUrl));
-    }
-  }, [embedEngaged, embedUrl]);
-
-  const isSetPlaying = (url) => (
-    embedPlaying && normalizeSetUrl(embedUrl) === normalizeSetUrl(url)
-  );
-
-  const isSetEngaged = (url) => (
-    embedEngaged && normalizeSetUrl(embedUrl) === normalizeSetUrl(url)
-  );
-
-  const handleListen = (set) => {
-    const normalized = normalizeSetUrl(set.url);
-    if (!canPlaySetUrl(normalized)) {
-      showToast(t('invalidUrl'));
-      return;
-    }
-    if (isSetPlaying(normalized)) {
-      pauseSetEmbed();
-      return;
-    }
-    setEmbedRowUrl(normalized);
-    const title = resolveSetDisplayTitle(set);
-    if (isSetEngaged(normalized)) {
-      resumeSetEmbed();
-      return;
-    }
-    playSetEmbed(0, normalized, { title });
-  };
-
-  const isSoundCloudUrl = (url) => /soundcloud\.com|snd\.sc/i.test(url || '');
 
   const handleAdd = async () => {
     const url = normalizeSetUrl(addUrl);
@@ -236,12 +184,7 @@ export default function SetLibrary() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingBottom: '32px' }}>
           {sets.map((set, i) => {
             const displayTitle = resolveSetDisplayTitle(set);
-            const normalizedUrl = normalizeSetUrl(set.url);
-            const showEmbed = (
-              (embedRowUrl && normalizeSetUrl(embedRowUrl) === normalizedUrl)
-              || isSetEngaged(normalizedUrl)
-            );
-            const isSc = isSoundCloudUrl(set.url);
+            const hasTracks = (set.trackCount ?? set.setTracks?.length ?? 0) > 0;
 
             return (
               <motion.div
@@ -310,26 +253,25 @@ export default function SetLibrary() {
                   </div>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                    {hasTracks && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        data-testid="set-library-view-tracklist"
+                        onClick={() => goAnalyzer(set.url)}
+                        style={{ borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
+                      >
+                        <ListChecks size={16} /> {t('viewTracklist')}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="btn-primary"
-                      data-testid="set-library-listen"
-                      onClick={() => handleListen(set)}
-                      style={{ borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
-                    >
-                      {isSetPlaying(set.url)
-                        ? <Pause size={16} fill="currentColor" />
-                        : <Play size={16} fill="currentColor" />}
-                      {isSetPlaying(set.url) ? t('pause') : t('listen')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
+                      className={hasTracks ? 'btn-secondary' : 'btn-primary'}
                       data-testid="set-library-analyze"
                       onClick={() => goAnalyzer(set.url, { analyze: true })}
                       style={{ borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
                     >
-                      <Search size={16} /> {(set.trackCount ?? set.setTracks?.length ?? 0) > 0 ? t('reanalyze') : t('analyze')}
+                      <Search size={16} /> {hasTracks ? t('reanalyze') : t('analyze')}
                     </button>
                     {set.serverId && (
                       <button
@@ -344,13 +286,7 @@ export default function SetLibrary() {
                     <button
                       type="button"
                       aria-label={t('remove')}
-                      onClick={() => {
-                        if (isSetEngaged(normalizedUrl)) {
-                          setEmbedRowUrl(null);
-                          releaseSetEmbed();
-                        }
-                        handleRemove(set);
-                      }}
+                      onClick={() => handleRemove(set)}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -363,26 +299,6 @@ export default function SetLibrary() {
                     </button>
                   </div>
                 </div>
-
-                {showEmbed && (
-                  <SetEmbedAnchor
-                    testId="set-library-embed-anchor"
-                    style={{
-                      width: '100%',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      background: isSc ? 'transparent' : '#000',
-                      aspectRatio: isSc ? undefined : '16 / 9',
-                      height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
-                      // Capped so a wide-screen 16:9 YouTube embed doesn't
-                      // dwarf the row — SoundCloud's flat player bar was
-                      // already fine at full width, so only the video is capped.
-                      maxWidth: isSc ? '100%' : '560px',
-                      margin: isSc ? undefined : '0 auto',
-                      minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 180,
-                    }}
-                  />
-                )}
               </motion.div>
             );
           })}

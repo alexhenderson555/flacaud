@@ -17,6 +17,7 @@ import {
   upsertSetLibraryEntry,
 } from '../utils/setLibrary';
 import { canPlaySetUrl } from '../components/LazySetPlayer';
+import { fetchQuickTracklist } from '../utils/setSearchApi';
 
 function hasAuth() {
   return hasAuthSession();
@@ -54,13 +55,22 @@ export function useSetLibraryData(lang = 'en') {
   const addByUrl = useCallback(async (url) => {
     const n = normalizeSetUrl(url);
     if (!n || !canPlaySetUrl(n)) return false;
+    // Prefer the set's real title (from the video/track's own metadata) over the
+    // generic "YouTube set" / "SoundCloud set" placeholder derived from the URL.
+    let title = deriveSetTitle(n);
+    try {
+      const info = await fetchQuickTracklist(n, { lang });
+      if (info?.title) title = info.title;
+    } catch {
+      /* fall back to the derived placeholder title */
+    }
     if (hasAuth()) {
-      await upsertSetOnServer({ url: n, title: deriveSetTitle(n) }, lang);
+      await upsertSetOnServer({ url: n, title }, lang);
       await reload();
       dispatchSetsChanged();
       return true;
     }
-    upsertSetLibraryEntry({ url: n, title: deriveSetTitle(n) });
+    upsertSetLibraryEntry({ url: n, title });
     setSets(readSetLibrary());
     dispatchSetsChanged();
     return true;
