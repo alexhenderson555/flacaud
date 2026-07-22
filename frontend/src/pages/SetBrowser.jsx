@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { motion } from 'framer-motion';
 import {
   Search, Loader2, ListMusic, DownloadCloud, Heart, ExternalLink,
-  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, ArrowUpDown,
+  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, ArrowUpDown, Calendar, Timer,
 } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { usePlayer } from '../store/usePlayerStore';
@@ -54,6 +54,19 @@ function formatUploadDate(timestamp, lang) {
 }
 
 const SORT_OPTIONS = ['relevance', 'views', 'date'];
+const DURATION_OPTIONS = ['any', 'short', 'medium', 'long'];
+const UPLOADED_OPTIONS = ['any', 'week', 'month', 'year'];
+
+const DURATION_RANGES = {
+  short: [0, 60 * 60],
+  medium: [60 * 60, 120 * 60],
+  long: [120 * 60, Infinity],
+};
+const UPLOADED_MAX_AGE_SEC = {
+  week: 7 * 24 * 60 * 60,
+  month: 31 * 24 * 60 * 60,
+  year: 365 * 24 * 60 * 60,
+};
 
 function SetResultCard({ set, onSelect, t, lang }) {
   const views = formatCompactNumber(set.view_count);
@@ -148,6 +161,8 @@ export default function SetBrowser() {
     }
   });
   const [sortBy, setSortBy] = useState('relevance');
+  const [durationFilter, setDurationFilter] = useState('any');
+  const [uploadedFilter, setUploadedFilter] = useState('any');
   const [selected, setSelected] = useState(null);
   const [tracklist, setTracklist] = useState(null);
   const [tracklistLoading, setTracklistLoading] = useState(false);
@@ -184,10 +199,23 @@ export default function SetBrowser() {
   }, [trimmedUrl]);
 
   const sortedResults = useMemo(() => {
-    if (sortBy === 'views') return [...results].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-    if (sortBy === 'date') return [...results].sort((a, b) => (b.upload_timestamp || 0) - (a.upload_timestamp || 0));
-    return results;
-  }, [results, sortBy]);
+    let rows = results;
+    if (durationFilter !== 'any') {
+      const [min, max] = DURATION_RANGES[durationFilter];
+      rows = rows.filter((r) => {
+        const dur = r.duration_seconds || 0;
+        return dur >= min && dur < max;
+      });
+    }
+    if (uploadedFilter !== 'any') {
+      const maxAge = UPLOADED_MAX_AGE_SEC[uploadedFilter];
+      const cutoff = Date.now() / 1000 - maxAge;
+      rows = rows.filter((r) => (r.upload_timestamp || 0) >= cutoff);
+    }
+    if (sortBy === 'views') return [...rows].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    if (sortBy === 'date') return [...rows].sort((a, b) => (b.upload_timestamp || 0) - (a.upload_timestamp || 0));
+    return rows;
+  }, [results, sortBy, durationFilter, uploadedFilter]);
 
   const setTracks = useMemo(() => tracklist?.tracks || [], [tracklist]);
   const playableTracks = useMemo(
@@ -506,17 +534,43 @@ export default function SetBrowser() {
           )}
 
           {results.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <ArrowUpDown size={16} color="var(--text-muted)" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="set-browser__sort-select"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>{t(`sort_${opt}`)}</option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div className="set-browser__filter-group">
+                <ArrowUpDown size={14} className="set-browser__filter-icon" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="set-browser__sort-select"
+                >
+                  {SORT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{t(`sort_${opt}`)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="set-browser__filter-group">
+                <Timer size={14} className="set-browser__filter-icon" />
+                <select
+                  value={durationFilter}
+                  onChange={(e) => setDurationFilter(e.target.value)}
+                  className="set-browser__sort-select"
+                >
+                  {DURATION_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{t(`duration_${opt}`)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="set-browser__filter-group">
+                <Calendar size={14} className="set-browser__filter-icon" />
+                <select
+                  value={uploadedFilter}
+                  onChange={(e) => setUploadedFilter(e.target.value)}
+                  className="set-browser__sort-select"
+                >
+                  {UPLOADED_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{t(`uploaded_${opt}`)}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

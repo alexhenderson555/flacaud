@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""One-off diagnostic: run search_sets("tiesto", 6) directly inside the api
+container to see whether it hangs, errors, or returns results, and how long
+it takes - to debug the "search stuck on Searching..." report."""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env", override=True)
+    if (ROOT / ".env.local").is_file():
+        load_dotenv(ROOT / ".env.local", override=True)
+except ImportError:
+    pass
+
+sys.path.insert(0, str(ROOT / "scripts"))
+from _ops_env import tidal_host  # noqa: E402
+
+os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST") or tidal_host(required=False) or "")
+
+from scripts.repair_servers import TIDAL_HOST, TIDAL_USER, _ssh_run, _password, compose_files, DEPLOY_PATH  # noqa: E402
+
+QUERY = (
+    "import time\n"
+    "from tidal_dl_ru.core.set_search import search_sets\n"
+    "t0 = time.time()\n"
+    "try:\n"
+    "    rows = search_sets('tiesto', 6)\n"
+    "    print('OK in %.1fs, %d results' % (time.time() - t0, len(rows)))\n"
+    "    for r in rows[:3]:\n"
+    "        print(' -', r.get('source'), r.get('title'))\n"
+    "except Exception as e:\n"
+    "    print('FAILED after %.1fs: %r' % (time.time() - t0, e))\n"
+)
+
+
+def main() -> None:
+    pw = _password("TIDAL_SSH_PASSWORD")
+    remote = (
+        f"cd {DEPLOY_PATH} && "
+        f"COMPOSE='{compose_files()}' && "
+        f'$COMPOSE exec -T api python -c "{QUERY}"'
+    )
+    _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=90)
+
+
+if __name__ == "__main__":
+    main()
