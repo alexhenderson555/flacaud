@@ -13,6 +13,12 @@ import PlaylistModal from '../components/PlaylistModal';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
 import { normalizeSetMatchedTrack, parseSetTimestamp } from '../utils/setAnalyzerUtils';
 import { normalizeSetUrl } from '../utils/setLibrary';
+import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
+import { SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
+
+function isSoundCloudEmbed(url) {
+  return /soundcloud\.com|snd\.sc/i.test(url || '');
+}
 import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
 import { startDownloadJob } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
@@ -585,6 +591,19 @@ export default function SetBrowser() {
               </a>
             </div>
           </div>
+
+          {canPlaySetUrl(selected.url) && (
+            <SetEmbedAnchor
+              style={{
+                width: '100%',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                background: '#000',
+                height: isSoundCloudEmbed(embedUrl) ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
+                aspectRatio: isSoundCloudEmbed(embedUrl) ? undefined : '16/9',
+              }}
+            />
+          )}
 
           {tracklistLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)' }}>

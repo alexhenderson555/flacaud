@@ -10,11 +10,10 @@ function isSoundCloudUrl(url) {
   return /soundcloud\.com|snd\.sc/i.test(url || '');
 }
 
-// Set Library still anchors an embed inline per-row (its own layout, not a
-// single global player). Analyzer and Set Browser used to force a big
-// inline embed on the page itself — now they use the same small floating
-// corner "mini-player" dock as every other page.
-const EMBED_INLINE_PATHS = new Set(['/sets', '/set-library']);
+// Pages with their own SetEmbedAnchor host a full-size inline player while
+// you're on them; the embed only shrinks into the floating corner dock once
+// you navigate elsewhere (so it keeps playing without hogging every page).
+const EMBED_INLINE_PATHS = new Set(['/sets', '/set-library', '/analyzer', '/set-browser']);
 
 export default function GlobalSetEmbed() {
   const location = useLocation();

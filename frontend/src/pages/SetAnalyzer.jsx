@@ -8,6 +8,8 @@ import {
 import { motion } from 'framer-motion';
 import { usePlayer } from '../store/usePlayerStore';
 import { canPlaySetUrl } from '../components/LazySetPlayer';
+import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
+import { SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
 import AnalyzerProgressPanel from '../components/setanalyzer/AnalyzerProgressPanel';
 import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
 import SetDjInsights from '../components/setanalyzer/SetDjInsights';
@@ -326,6 +328,7 @@ export default function SetAnalyzer() {
     };
   }, [jobId, status, trimmedUrl, lang, t]);
 
+  const isSoundCloudEmbed = /soundcloud\.com|snd\.sc/i.test(embedUrl || '');
   const isSetPlaying = canPlaySet
     && embedPlaying && normalizeSetUrl(embedUrl) === normalizeSetUrl(trimmedUrl);
   const isSetEngaged = canPlaySet
@@ -549,6 +552,20 @@ export default function SetAnalyzer() {
         <div style={{ padding: '12px 16px', borderRadius: '12px', background: 'var(--bg-surface-hover)', color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '0.9rem' }}>
           {t('invalidUrl')}
         </div>
+      )}
+
+      {canPlaySet && (
+        <SetEmbedAnchor
+          style={{
+            width: '100%',
+            marginBottom: '24px',
+            borderRadius: '16px',
+            overflow: 'hidden',
+            background: '#000',
+            height: isSoundCloudEmbed ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
+            aspectRatio: isSoundCloudEmbed ? undefined : '16/9',
+          }}
+        />
       )}
 
       {isAnalyzing && jobId && (
