@@ -204,15 +204,23 @@ export const removeCachedAudioTrack = async (track, quality = 'HIGH') => {
 /** List cached tracks (name/artist/quality/size) for the Account offline-cache browser. */
 export async function listCachedTracks() {
   const keys = await localforage.keys();
+  const metaKeys = new Set(keys.filter((k) => k.endsWith('__meta')));
   const rows = [];
-  for (const key of keys) {
-    if (!key.endsWith('__meta')) continue;
+  for (const key of metaKeys) {
     const meta = await localforage.getItem(key);
     if (!meta) continue;
     const cacheKey = key.slice(0, -'__meta'.length);
     const blob = await localforage.getItem(cacheKey);
     if (!(blob instanceof Blob)) continue;
     rows.push({ ...meta, cacheKey, bytes: blob.size });
+  }
+  // Blobs cached before per-track metadata existed have no __meta entry —
+  // still show them (unnamed) so the list isn't silently short of the stats count.
+  for (const key of keys) {
+    if (metaKeys.has(key) || metaKeys.has(`${key}__meta`)) continue;
+    const item = await localforage.getItem(key);
+    if (!(item instanceof Blob)) continue;
+    rows.push({ cacheKey: key, provider_id: key, title: '', artists: [], cover_url: null, quality: '', cachedAt: 0, bytes: item.size });
   }
   rows.sort((a, b) => (b.cachedAt || 0) - (a.cachedAt || 0));
   return rows;
