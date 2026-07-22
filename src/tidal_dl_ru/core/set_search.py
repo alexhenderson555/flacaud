@@ -6,6 +6,7 @@ flat-extraction mode, which lists results without downloading anything.
 
 import logging
 import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,30 @@ def _search_one(query: str, prefix: str, source: str, limit: int) -> list[dict]:
 MIN_SET_DURATION_SECONDS = 20 * 60
 
 
+def _relevance_score(row: dict, rank: int) -> float:
+    """Rank within its own platform is the primary relevance signal — each
+    platform's search already orders by its own idea of relevance, so this
+    is what actually matters, NOT which platform a result came from.
+
+    A modest recency nudge is layered on top (weighted, not dominant — a
+    5-year-old top-rank result still beats a barely-relevant new one). Only
+    SoundCloud's flat search exposes a real upload timestamp for free;
+    YouTube results get a neutral factor rather than being penalized for
+    lacking the signal.
+    """
+    rank_score = 1.0 / (rank + 1)
+    ts = row.get("upload_timestamp")
+    if ts:
+        age_days = max(0.0, (time.time() - ts) / 86400)
+        recency = max(0.5, 1.0 - age_days / 1460)  # floors out after ~4 years
+    else:
+        recency = 0.85
+    return rank_score * (0.7 + 0.3 * recency)
+
+
 def search_sets(query: str, limit: int = 12) -> list[dict]:
-    """Search YouTube + SoundCloud for DJ sets/mixes matching `query`."""
+    """Search YouTube + SoundCloud for DJ sets/mixes matching `query`,
+    blended by relevance (not "all of YouTube's results, then SoundCloud's")."""
     query = (query or "").strip()
     if not query:
         return []
@@ -75,11 +98,18 @@ def search_sets(query: str, limit: int = 12) -> list[dict]:
     per_source = max(6, limit)
     yt = _search_one(query, "ytsearch", "youtube", per_source)
     sc = _search_one(query, "scsearch", "soundcloud", per_source)
-    combined = [
-        r for r in (yt + sc)
-        if r["duration_seconds"] >= MIN_SET_DURATION_SECONDS
+
+    scored = [
+        (_relevance_score(row, rank), row)
+        for rank, row in enumerate(yt)
+        if row["duration_seconds"] >= MIN_SET_DURATION_SECONDS
+    ] + [
+        (_relevance_score(row, rank), row)
+        for rank, row in enumerate(sc)
+        if row["duration_seconds"] >= MIN_SET_DURATION_SECONDS
     ]
-    return combined[:limit]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [row for _score, row in scored[:limit]]
 
 
 def fetch_set_info(url: str) -> dict:

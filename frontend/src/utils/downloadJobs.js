@@ -179,7 +179,13 @@ export function requestDownloadRegistryRefresh() {
 export async function fetchJobStatus(jobId) {
   try {
     return await apiGetJson(`/api/jobs/${jobId}`, { auth: true });
-  } catch {
+  } catch (err) {
+    // Session died mid-poll (both access token AND refresh cookie expired) —
+    // callers polling a long-running job (e.g. analyzing a 2hr set) need to
+    // know this specifically, not silently retry forever every second with
+    // no way to ever recover (the job itself keeps running server-side; only
+    // the frontend's ability to see its status is broken).
+    if (err?.status === 401) return { authExpired: true };
     return null;
   }
 }

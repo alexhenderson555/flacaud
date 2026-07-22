@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import LazySetPlayer from '../LazySetPlayer';
 import { usePlayer } from '../../store/usePlayerStore';
 import { SOUND_CLOUD_EMBED_HEIGHT } from '../../utils/setEmbedUrl';
@@ -10,7 +10,11 @@ function isSoundCloudUrl(url) {
   return /soundcloud\.com|snd\.sc/i.test(url || '');
 }
 
-const EMBED_INLINE_PATHS = new Set(['/analyzer', '/sets', '/set-library', '/set-browser']);
+// Set Library still anchors an embed inline per-row (its own layout, not a
+// single global player). Analyzer and Set Browser used to force a big
+// inline embed on the page itself — now they use the same small floating
+// corner "mini-player" dock as every other page.
+const EMBED_INLINE_PATHS = new Set(['/sets', '/set-library']);
 
 export default function GlobalSetEmbed() {
   const location = useLocation();
@@ -27,6 +31,7 @@ export default function GlobalSetEmbed() {
     anchorEl,
     playerRef,
     resumeSetEmbed,
+    releaseSetEmbed,
     handleEmbedReady,
     handleEmbedPlay,
     handleEmbedPause,
@@ -126,7 +131,20 @@ export default function GlobalSetEmbed() {
         data-testid="set-embed-dock"
         aria-hidden={!showDock}
         hidden={!showDock}
-      />
+        style={showDock ? { height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined, aspectRatio: isSc ? undefined : '16/9' } : undefined}
+      >
+        {showDock && (
+          <button
+            type="button"
+            className="set-embed-dock__close"
+            onClick={releaseSetEmbed}
+            aria-label="Close"
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
       {player && portalTarget ? createPortal(player, portalTarget) : null}
     </>
   );

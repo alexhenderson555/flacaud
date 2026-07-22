@@ -44,3 +44,24 @@ def test_search_sets_filters_out_short_tracks(monkeypatch):
     results = search_sets("test query")
     assert len(results) == 2  # 2 sources x 1 surviving long result each
     assert all(r["duration_seconds"] >= MIN_SET_DURATION_SECONDS for r in results)
+
+
+def test_search_sets_ranks_by_relevance_not_source_order(monkeypatch):
+    """A SoundCloud result ranked #1 on its own platform must not lose to a
+    YouTube result ranked #1 there just because YouTube was queried first —
+    concatenating [all YouTube] + [all SoundCloud] was the actual bug."""
+    import tidal_dl_ru.core.set_search as mod
+
+    def fake_search_one(query, prefix, source, limit):
+        long_row = {
+            "url": f"https://{source}/best", "title": "Best match", "channel": "X",
+            "duration_seconds": MIN_SET_DURATION_SECONDS + 60, "thumbnail": None,
+            "source": source, "view_count": 0, "upload_timestamp": None,
+        }
+        return [long_row]
+
+    monkeypatch.setattr(mod, "_search_one", fake_search_one)
+    results = search_sets("test query", limit=2)
+    # Both top-ranked (rank 0) on their own platform with identical inputs —
+    # scores must tie, not have SoundCloud structurally lose to YouTube.
+    assert {r["source"] for r in results} == {"youtube", "soundcloud"}

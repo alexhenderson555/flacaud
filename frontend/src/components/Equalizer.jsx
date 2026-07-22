@@ -8,6 +8,13 @@ const PRESETS = [
   { id: 'bass', label: 'Bass' },
   { id: 'vocal', label: 'Vocal' },
   { id: 'electronic', label: 'Electronic' },
+  { id: 'rock', label: 'Rock' },
+  { id: 'pop', label: 'Pop' },
+  { id: 'hiphop', label: 'Hip-Hop' },
+  { id: 'jazz', label: 'Jazz' },
+  { id: 'classical', label: 'Classical' },
+  { id: 'acoustic', label: 'Acoustic' },
+  { id: 'loudness', label: 'Loudness' },
 ];
 
 const PRESET_GAINS = {
@@ -15,6 +22,13 @@ const PRESET_GAINS = {
   bass: [6, 5, 4, 2, 0, -1, -2, 0, 1, 2],
   vocal: [-2, -1, 0, 2, 4, 4, 3, 1, 0, -1],
   electronic: [5, 4, 2, 0, -2, 0, 1, 3, 4, 5],
+  rock: [4, 3, 1, -1, -2, -1, 1, 3, 4, 4],
+  pop: [2, 1, 0, 1, 2, 2, 1, 2, 3, 3],
+  hiphop: [7, 6, 4, 1, -1, -1, 0, 2, 3, 3],
+  jazz: [2, 1, 0, 1, 2, 2, 1, 1, 2, 1],
+  classical: [0, 0, 0, 0, 0, 0, 0, 1, 2, 3],
+  acoustic: [1, 1, 0, 0, 1, 2, 2, 2, 1, 1],
+  loudness: [6, 5, 2, 0, -1, 0, 2, 4, 5, 6],
 };
 
 function formatFreq(freq) {

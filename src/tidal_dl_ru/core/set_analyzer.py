@@ -124,7 +124,10 @@ async def download_set_audio_task(job_id: str, url: str) -> dict:
 async def analyze_set_task(
     job_id: str,
     url: str,
-    interval: int = 30
+    # 30s produced roughly 2x the Shazam calls for little benefit — a track
+    # rarely changes within half a minute inside a DJ set, so this halves
+    # scan time (and Shazam traffic) with a negligible loss in resolution.
+    interval: int = 60
 ) -> dict:
     import yt_dlp
     from pydub import AudioSegment

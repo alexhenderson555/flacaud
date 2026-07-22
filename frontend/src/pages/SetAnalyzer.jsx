@@ -3,12 +3,11 @@ import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { showToast } from '../utils/toast';
 import {
   Search, ListMusic, Link as LinkIcon, Loader2, List,
-  DownloadCloud, Radio, ExternalLink, Library, Heart,
+  DownloadCloud, Library, Heart,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../store/usePlayerStore';
 import { canPlaySetUrl } from '../components/LazySetPlayer';
-import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
 import AnalyzerProgressPanel from '../components/setanalyzer/AnalyzerProgressPanel';
 import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
 import SetDjInsights from '../components/setanalyzer/SetDjInsights';
@@ -22,7 +21,6 @@ import { apiPostJson } from '../utils/apiClient';
 import { fetchJobStatus } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
-import { classifySetUrl, SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
 import { normalizeSetUrl, readSetLibrary, deriveSetTitle } from '../utils/setLibrary';
 import {
   ANALYZER_MAX_ATTEMPTS,
@@ -56,6 +54,8 @@ export default function SetAnalyzer() {
     djFeaturesActive,
     djFeaturesAvailable,
     setDjAnalysisEnabled,
+    startTrackRadio,
+    radioLoadingTrackId,
     t: tApp,
   } = useOutletContext();
   const t = (key) => setAnalyzerDict[lang]?.[key] || setAnalyzerDict.en[key] || key;
@@ -81,12 +81,10 @@ export default function SetAnalyzer() {
   const [bulkPlaylistOpen, setBulkPlaylistOpen] = useState(false);
   const [djAnalyzeRequested, setDjAnalyzeRequested] = useState(false);
   const [downloadingSet, setDownloadingSet] = useState(false);
-  const setPlayerSectionRef = useRef(null);
   const resumeToastShown = useRef(false);
 
   const trimmedUrl = url.trim();
   const canPlaySet = canPlaySetUrl(trimmedUrl);
-  const isSc = classifySetUrl(trimmedUrl) === 'soundcloud';
 
   const playableTracks = useMemo(
     () => setTracks.map((row) => normalizeSetMatchedTrack(row)).filter(Boolean),
@@ -160,7 +158,6 @@ export default function SetAnalyzer() {
     const seconds = parseSetTimestamp(timestamp);
     loadSetEmbed(trimmedUrl);
     seekSetEmbed(seconds, { preferEmbed: true, url: trimmedUrl });
-    setPlayerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [canPlaySet, trimmedUrl, loadSetEmbed, seekSetEmbed]);
 
   const { pendingCount: djPendingCount, getFeatures: getDjFeatures } = useTrackFeaturesForList(
@@ -281,6 +278,15 @@ export default function SetAnalyzer() {
       try {
         const data = await fetchJobStatus(jobId);
         if (!data) return;
+        if (data.authExpired) {
+          // The job itself keeps running server-side — only the frontend's
+          // session died, so tell the user rather than silently 401-looping
+          // once a second for the rest of a long analysis.
+          setError(t('sessionExpiredDuringAnalysis'));
+          clearActiveAnalyzerJob(trimmedUrl);
+          cancelled = true;
+          return;
+        }
         const outcome = resolveAnalyzerJobOutcome(data, t);
         const tracks = dedupeSetTracks(data.set_tracks || []);
 
@@ -293,7 +299,10 @@ export default function SetAnalyzer() {
           || (outcome.status === 'queued' ? t('waitingQueue') : ''),
         );
         setLastPollAt(Date.now());
-        if (outcome.error) setError(outcome.error);
+        // Always set (not just when truthy) — otherwise a stale error from a
+        // previous job (e.g. "Cancelled by user") survives forever once a
+        // fresh restart's polls stop reporting one of their own.
+        setError(outcome.error || null);
 
         if (outcome.status === 'done' || outcome.status === 'failed' || outcome.status === 'cancelled') {
           clearActiveAnalyzerJob(trimmedUrl);
@@ -467,51 +476,6 @@ export default function SetAnalyzer() {
         </button>
       </motion.div>
 
-      {canPlaySet && (
-        <motion.div
-          ref={setPlayerSectionRef}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-panel"
-          style={{ padding: '20px', borderRadius: '20px', marginBottom: '28px', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-solid)' }}>
-              <Radio size={22} />
-              <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{t('setPlayer')}</span>
-            </div>
-            <a
-              href={trimmedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)', textDecoration: 'none' }}
-            >
-              <ExternalLink size={14} />
-              {' '}
-              {t('openSource')}
-            </a>
-          </div>
-          <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('setPlayerHint')}</p>
-          <SetEmbedAnchor
-            testId="set-player-panel"
-            style={{
-              borderRadius: '12px',
-              overflow: 'hidden',
-              background: '#000',
-              aspectRatio: isSc ? undefined : '16/9',
-              height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
-              // Capped so a wide-screen 16:9 YouTube embed doesn't dwarf the
-              // page — SoundCloud's flat player bar was already fine at full
-              // width, so only the video gets the cap.
-              width: '100%',
-              maxWidth: isSc ? '100%' : '560px',
-              margin: isSc ? undefined : '0 auto',
-              minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 200,
-            }}
-          />
-        </motion.div>
-      )}
-
       {trimmedUrl && !canPlaySet && (
         <div style={{ padding: '12px 16px', borderRadius: '12px', background: 'var(--bg-surface-hover)', color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '0.9rem' }}>
           {t('invalidUrl')}
@@ -603,6 +567,8 @@ export default function SetAnalyzer() {
                 onToggleLike={toggleLike}
                 onDownload={downloadTrack}
                 onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
+                onStartRadio={startTrackRadio}
+                radioLoadingTrackId={radioLoadingTrackId}
               />
             ))}
           </div>

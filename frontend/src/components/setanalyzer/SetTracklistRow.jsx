@@ -23,6 +23,8 @@ export default function SetTracklistRow({
   onSeek,
   onPlayTidal,
   onToggleLike,
+  onStartRadio,
+  radioLoadingTrackId = null,
   onDownload,
   onAddToPlaylist,
 }) {
@@ -95,6 +97,9 @@ export default function SetTracklistRow({
             onToggleLike={onToggleLike}
             onAddToPlaylist={onAddToPlaylist}
             onDownload={onDownload}
+            onStartRadio={onStartRadio}
+            radioLoading={radioLoadingTrackId === String(track.provider_id)}
+            radioBusy={Boolean(radioLoadingTrackId)}
             testIdPrefix="set-analyzer"
           />
         ) : (

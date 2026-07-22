@@ -40,9 +40,6 @@
   font-weight: 400;
   line-height: 1.5;
 }
-html.set-embed-dock-visible {
-  --layout-page-pad-bottom: calc(120px + var(--set-embed-dock-height));
-}
 @media (width>=769px) {
   html:not(.is-tauri) {
     background: var(--bg-main);
@@ -56,9 +53,6 @@ html.set-embed-dock-visible {
     --layout-player-height: 88px;
     --layout-page-pad: 30px;
     --layout-page-pad-bottom: 100px;
-  }
-  html.set-embed-dock-visible {
-    --layout-page-pad-bottom: calc(100px + var(--set-embed-dock-height));
   }
   .sidebar {
     padding: 14px 10px;
@@ -1391,19 +1385,46 @@ button.nav-item {
 .download-toast-stack > * {
   pointer-events: auto;
 }
+/* Small floating "mini-player" — bottom-right, above the main player bar —
+   for a set embed that's playing while the user is on a page that doesn't
+   anchor it inline. Deliberately compact (not a full-width strip): it should
+   read like a picture-in-picture window, not take over the page. */
 .set-embed-dock {
-  bottom: var(--layout-player-height);
-  left: var(--layout-sidebar-width);
-  width: calc(100% - var(--layout-sidebar-width));
-  z-index: 100;
-  background: var(--player-bar-bg);
-  border-top: 1px solid var(--player-bar-border);
-  box-sizing: border-box;
   position: fixed;
+  right: 20px;
+  bottom: calc(var(--layout-player-height) + 16px);
+  width: 300px;
+  max-width: calc(100vw - 40px);
+  z-index: 100;
+  background: #000;
+  border: 1px solid var(--player-bar-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
   overflow: hidden;
 }
 .set-embed-dock[hidden] {
   display: none !important;
+}
+.set-embed-dock__close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+.set-embed-dock__close:hover {
+  background: rgba(0, 0, 0, 0.85);
 }
 .player-cover-thumb__placeholder--set {
   background: #ff7a1a1f;
@@ -2103,10 +2124,6 @@ button.nav-item {
     display: block;
     position: fixed;
     inset: 0;
-  }
-  .set-embed-dock {
-    width: 100% !important;
-    left: 0 !important;
   }
   .player-bar {
     min-height: var(--player-bar-height);
@@ -4526,6 +4543,7 @@ html.karaoke-mode-open body {
   gap: 8px;
   margin-bottom: 14px;
   display: flex;
+  flex-wrap: wrap;
   position: relative;
 }
 .eq-preset {

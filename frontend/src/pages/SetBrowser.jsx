@@ -8,8 +8,6 @@ import {
 import { showToast } from '../utils/toast';
 import { usePlayer } from '../store/usePlayerStore';
 import { canPlaySetUrl } from '../components/LazySetPlayer';
-import { classifySetUrl, SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
-import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
 import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
 import PlaylistModal from '../components/PlaylistModal';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
@@ -118,16 +116,26 @@ export default function SetBrowser() {
   const {
     togglePlay, playQueue, currentTrackId, isPlaying,
     downloadedTracks, lang, toggleLike, likedTracks, t: tApp,
+    startTrackRadio, radioLoadingTrackId,
   } = useOutletContext();
   const t = useCallback((key) => setBrowserDict[lang]?.[key] || setBrowserDict.en[key] || key, [lang]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { loadSetEmbed, pauseSetEmbed, seekSetEmbed } = usePlayer();
 
-  const [query, setQuery] = useState('');
+  // Query + results survive navigating away and back (e.g. to a set's
+  // detail view or another page entirely) — sessionStorage, same pattern
+  // Search.jsx already uses, so re-searching isn't needed every time.
+  const [query, setQuery] = useState(() => sessionStorage.getItem('tidal_set_browser_query') || '');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('tidal_set_browser_results') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [sortBy, setSortBy] = useState('relevance');
   const [selected, setSelected] = useState(null);
   const [tracklist, setTracklist] = useState(null);
@@ -139,7 +147,6 @@ export default function SetBrowser() {
 
   const trimmedUrl = selected?.url || '';
   const canPlaySet = canPlaySetUrl(trimmedUrl);
-  const isSc = classifySetUrl(trimmedUrl) === 'soundcloud';
 
   const sortedResults = useMemo(() => {
     if (sortBy === 'views') return [...results].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
@@ -166,6 +173,18 @@ export default function SetBrowser() {
     // the point (discovery), not something that should refetch on re-renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('tidal_set_browser_query', query);
+  }, [query]);
+
+  useEffect(() => {
+    if (results.length) {
+      sessionStorage.setItem('tidal_set_browser_results', JSON.stringify(results));
+    } else {
+      sessionStorage.removeItem('tidal_set_browser_results');
+    }
+  }, [results]);
 
   const runSearch = useCallback(async (e) => {
     e?.preventDefault();
@@ -434,24 +453,6 @@ export default function SetBrowser() {
             </a>
           </div>
 
-          {canPlaySet && (
-            <div className="glass-panel" style={{ padding: '20px', borderRadius: '20px', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-              <SetEmbedAnchor
-                testId="set-browser-player"
-                style={{
-                  borderRadius: '12px', overflow: 'hidden', background: '#000',
-                  aspectRatio: isSc ? undefined : '16/9',
-                  height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined,
-                  // Capped so a wide-screen 16:9 YouTube embed doesn't dwarf
-                  // the page — SoundCloud's flat player bar was already fine
-                  // at full width, so only the video gets the cap.
-                  width: '100%', maxWidth: isSc ? '100%' : '560px', margin: isSc ? undefined : '0 auto',
-                  minHeight: isSc ? SOUND_CLOUD_EMBED_HEIGHT : 200,
-                }}
-              />
-            </div>
-          )}
-
           {tracklistLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)' }}>
               <Loader2 className="spinner" size={18} />
@@ -503,6 +504,8 @@ export default function SetBrowser() {
                     onToggleLike={toggleLike}
                     onDownload={downloadTrack}
                     onAddToPlaylist={(tr, e) => { e.stopPropagation(); setPlaylistModalTrack(tr); }}
+                    onStartRadio={startTrackRadio}
+                    radioLoadingTrackId={radioLoadingTrackId}
                   />
                 ))}
               </div>

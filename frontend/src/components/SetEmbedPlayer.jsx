@@ -9,6 +9,19 @@ import {
 } from '../utils/setEmbedUrl';
 import { loadSoundCloudWidgetApi, loadYoutubeIframeApi } from '../utils/setEmbedScripts';
 
+// The SC Widget's play/pause/seekTo post a message to the iframe's
+// contentWindow — if the iframe was just detached (e.g. its portal target
+// unmounted the instant a "pause on the way out" call fires), contentWindow
+// is null and the widget library throws its own uncaught TypeError. It's a
+// teardown race we can't prevent on our side, only swallow.
+function scSafeCall(widget, method, ...args) {
+  try {
+    widget?.[method]?.(...args);
+  } catch {
+    /* widget's iframe was already detached — nothing to pause/play */
+  }
+}
+
 /**
  * Native YouTube iframe + SoundCloud widget embeds (react-player v3 dropped SC).
  * Ref API: { seekTo(seconds), play(), pause() }
@@ -52,19 +65,19 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
         return true;
       }
       if (kind === 'soundcloud' && scWidgetRef.current) {
-        scWidgetRef.current.seekTo(Math.round(s * 1000));
-        scWidgetRef.current.play();
+        scSafeCall(scWidgetRef.current, 'seekTo', Math.round(s * 1000));
+        scSafeCall(scWidgetRef.current, 'play');
         return true;
       }
       return false;
     },
     play() {
       if (kind === 'youtube') ytPlayerRef.current?.playVideo?.();
-      else if (kind === 'soundcloud') scWidgetRef.current?.play();
+      else if (kind === 'soundcloud') scSafeCall(scWidgetRef.current, 'play');
     },
     pause() {
       if (kind === 'youtube') ytPlayerRef.current?.pauseVideo?.();
-      else if (kind === 'soundcloud') scWidgetRef.current?.pause();
+      else if (kind === 'soundcloud') scSafeCall(scWidgetRef.current, 'pause');
     },
     get currentTime() {
       return undefined;
@@ -148,10 +161,10 @@ const SetEmbedPlayer = forwardRef(function SetEmbedPlayer({
     if (!readyRef.current) return;
     if (playing) {
       if (kind === 'youtube') ytPlayerRef.current?.playVideo?.();
-      else if (kind === 'soundcloud') scWidgetRef.current?.play();
+      else if (kind === 'soundcloud') scSafeCall(scWidgetRef.current, 'play');
     } else {
       if (kind === 'youtube') ytPlayerRef.current?.pauseVideo?.();
-      else if (kind === 'soundcloud') scWidgetRef.current?.pause();
+      else if (kind === 'soundcloud') scSafeCall(scWidgetRef.current, 'pause');
     }
   }, [playing, kind]);
 
