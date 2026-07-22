@@ -438,11 +438,13 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
 
             stream_mode = res["type"]
             quality_hdr["X-Stream-Mode"] = stream_mode
+            segments = len(dash["urls"]) if stream_mode == "dash_stream" and dash.get("urls") else None
             logger.info(
-                "stream track=%s quality=%s mode=%s user_plan=%s",
+                "stream track=%s quality=%s mode=%s segments=%s user_plan=%s",
                 track_id,
                 quality,
                 stream_mode,
+                segments,
                 current_user.effective_plan,
             )
 
@@ -450,6 +452,11 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
                 if requires_full_file_before_play(q_enum):
                     cache_path = bts_cache_path(cache_dir, track_id, q_enum, res["url"])
                     serve_path = await ensure_bts_cache(res["url"], cache_path)
+                    logger.info(
+                        "bts_cache track=%s bytes=%s",
+                        track_id,
+                        serve_path.stat().st_size if serve_path.is_file() else None,
+                    )
                     return ranged_file_response(
                         serve_path,
                         request,
@@ -461,6 +468,7 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
                     bts_cache_path(cache_dir, track_id, q_enum, res["url"]),
                     request,
                     quality_hdr,
+                    track_id=track_id,
                 )
 
             if res["type"] == "dash_stream":

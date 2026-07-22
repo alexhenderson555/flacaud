@@ -691,6 +691,7 @@ async def serve_bts_progressive(
     cache_path: Path,
     request: Request,
     extra_headers: dict,
+    track_id: str = "",
 ) -> Response | FileResponse | StreamingResponse:
     """Serve 320k BTS from local cache when possible — instant seek within buffered bytes."""
     schedule_bts_warm(url, cache_path)
@@ -716,7 +717,7 @@ async def serve_bts_progressive(
             resource_total=total,
         )
 
-    return await _proxy_bts_stream(url, request, extra_headers)
+    return await _proxy_bts_stream(url, request, extra_headers, track_id=track_id)
 
 
 _bts_proxy_client: httpx.AsyncClient | None = None
@@ -732,11 +733,25 @@ def _bts_proxy_http() -> httpx.AsyncClient:
     return _bts_proxy_client
 
 
-async def _proxy_bts_stream(url: str, request: Request, extra_headers: dict) -> StreamingResponse:
+async def _proxy_bts_stream(
+    url: str, request: Request, extra_headers: dict, track_id: str = "",
+) -> StreamingResponse:
     req_headers: dict[str, str] = {"Range": cap_bts_range(request.headers.get("range"))}
 
     client = _bts_proxy_http()
     upstream = await client.send(client.build_request("GET", url, headers=req_headers), stream=True)
+
+    # Diagnostic: a genuinely truncated upstream stream (short preview instead of
+    # the full track) shows up here as a suspiciously small Content-Length/Content-Range
+    # total relative to the track's real duration — logged so a premature "track ended"
+    # cutoff can be correlated with what Tidal's CDN actually declared for that request.
+    logger.info(
+        "bts_proxy track=%s status=%s content-range=%s content-length=%s",
+        track_id or "?",
+        upstream.status_code,
+        upstream.headers.get("content-range"),
+        upstream.headers.get("content-length"),
+    )
 
     headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_HEADERS}
     headers["Accept-Ranges"] = "bytes"
