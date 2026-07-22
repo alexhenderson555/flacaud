@@ -147,9 +147,15 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
           {!loadingList && tracks.map((row) => (
             <div
               key={row.cacheKey}
+              role="button"
+              tabIndex={0}
+              onClick={() => togglePlay(row)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') togglePlay(row);
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: '12px', padding: '8px',
-                borderRadius: '12px', background: 'var(--bg-surface-hover)',
+                borderRadius: '12px', background: 'var(--bg-surface-hover)', cursor: 'pointer',
               }}
             >
               {row.cover_url ? (
@@ -170,7 +176,7 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
               <button
                 type="button"
                 title={playingKey === row.cacheKey ? t('offlineCachePause') : t('offlineCachePlay')}
-                onClick={() => togglePlay(row)}
+                onClick={(e) => { e.stopPropagation(); togglePlay(row); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer', padding: '6px', flexShrink: 0,
                   color: playingKey === row.cacheKey ? 'var(--accent-solid)' : 'var(--text-secondary)',
@@ -181,7 +187,7 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
               <button
                 type="button"
                 title={t('offlineCacheDownload')}
-                onClick={() => downloadCachedTrackByKey(row.cacheKey, row)}
+                onClick={(e) => { e.stopPropagation(); downloadCachedTrackByKey(row.cacheKey, row); }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px', flexShrink: 0 }}
               >
                 <Download size={16} />
@@ -189,7 +195,7 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
               <button
                 type="button"
                 title={t('offlineCacheRemove')}
-                onClick={() => removeOne(row)}
+                onClick={(e) => { e.stopPropagation(); removeOne(row); }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px', flexShrink: 0 }}
               >
                 <Trash2 size={16} />
