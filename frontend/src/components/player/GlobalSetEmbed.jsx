@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { Loader2, X } from 'lucide-react';
@@ -39,30 +41,56 @@ export default function GlobalSetEmbed() {
     handleSetAudioLoadedMetadata,
   } = usePlayer();
 
-  const [dockHost, setDockHost] = useState(null);
-  const onDockRef = useCallback((el) => {
-    setDockHost(el || null);
-  }, []);
-
   const onInlinePage = EMBED_INLINE_PATHS.has(location.pathname);
-  const inlineAnchored = onInlinePage && anchorEl;
+  const inlineAnchored = onInlinePage && !!anchorEl;
   /** Keep dock while session is engaged (playing or paused) off inline pages. */
   const showDock = !!embedUrl && embedEngaged && !inlineAnchored && !setAudioMode;
-  const portalTarget = inlineAnchored ? anchorEl : (showDock ? dockHost : null);
+  const visible = !!embedUrl && !setAudioMode && (inlineAnchored || showDock);
   const isSc = isSoundCloudUrl(embedUrl);
+
+  // The player's DOM node is portaled to document.body exactly once and never
+  // reparented again after that — moving a live <iframe> to a different DOM
+  // parent makes the browser reload it from scratch (YouTube/SoundCloud
+  // restarts from 0:00). Instead of re-parenting between "inline" and "dock"
+  // containers, we keep a single fixed-position box and just move/resize it
+  // with CSS to visually match either the inline anchor's rect or the corner.
+  const [rect, setRect] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!inlineAnchored) {
+      setRect(null);
+      return undefined;
+    }
+    const update = () => {
+      const r = anchorEl.getBoundingClientRect();
+      setRect({
+        top: r.top, left: r.left, width: r.width, height: r.height,
+      });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(anchorEl);
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [inlineAnchored, anchorEl]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('set-embed-dock-visible', showDock);
     return () => document.documentElement.classList.remove('set-embed-dock-visible');
   }, [showDock]);
 
-  const prevTargetKindRef = useRef(inlineAnchored ? 'inline' : (showDock ? 'dock' : 'none'));
+  const prevModeRef = useRef(inlineAnchored ? 'inline' : (showDock ? 'dock' : 'none'));
   useEffect(() => {
-    const kind = inlineAnchored ? 'inline' : (showDock ? 'dock' : 'none');
-    const prev = prevTargetKindRef.current;
-    prevTargetKindRef.current = kind;
+    const mode = inlineAnchored ? 'inline' : (showDock ? 'dock' : 'none');
+    const prev = prevModeRef.current;
+    prevModeRef.current = mode;
     const mainPlaybackActive = !!currentTrack && (isPlaying || isLoading);
-    if (embedPlaying && prev === 'inline' && kind === 'dock' && !mainPlaybackActive) {
+    if (embedPlaying && prev === 'inline' && mode === 'dock' && !mainPlaybackActive) {
       const id = window.setTimeout(() => resumeSetEmbed?.(), 500);
       return () => window.clearTimeout(id);
     }
@@ -93,7 +121,10 @@ export default function GlobalSetEmbed() {
     />
   ) : null;
 
-  const player = embedUrl && portalTarget && !setAudioMode ? (
+  // Stays mounted whenever there's an embed session at all — visibility/position
+  // is purely CSS on the wrapping box below, so switching between inline and
+  // dock never unmounts (and never re-parents) this player.
+  const player = embedUrl && !setAudioMode ? (
     <LazySetPlayer
       ref={playerRef}
       src={embedUrl}
@@ -121,31 +152,44 @@ export default function GlobalSetEmbed() {
     />
   ) : null;
 
+  const inlineStyle = rect ? {
+    position: 'fixed',
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    borderRadius: '16px',
+    overflow: 'hidden',
+    background: '#000',
+    zIndex: 60,
+  } : undefined;
+
   return (
     <>
       {cachedAudio}
-      <div
-        ref={onDockRef}
-        className="set-embed-dock"
-        data-testid="set-embed-dock"
-        aria-hidden={!showDock}
-        hidden={!showDock}
-        style={showDock ? { height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined, aspectRatio: isSc ? undefined : '16/9' } : undefined}
-      >
-        {showDock && (
-          <button
-            type="button"
-            className="set-embed-dock__close"
-            onClick={releaseSetEmbed}
-            aria-label="Close"
-            title="Close"
-          >
-            <X size={14} />
-          </button>
-        )}
-      </div>
-      {player && portalTarget ? createPortal(player, portalTarget) : null}
+      {createPortal(
+        <div
+          className={rect ? undefined : 'set-embed-dock'}
+          data-testid="set-embed-dock"
+          aria-hidden={!visible}
+          hidden={!visible}
+          style={visible ? (inlineStyle || { height: isSc ? SOUND_CLOUD_EMBED_HEIGHT : undefined, aspectRatio: isSc ? undefined : '16/9' }) : undefined}
+        >
+          {showDock && (
+            <button
+              type="button"
+              className="set-embed-dock__close"
+              onClick={releaseSetEmbed}
+              aria-label="Close"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          )}
+          {player}
+        </div>,
+        document.body,
+      )}
     </>
   );
 }
-
