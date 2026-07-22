@@ -3,11 +3,12 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { motion } from 'framer-motion';
 import {
   Search, Loader2, ListMusic, DownloadCloud, Heart, ExternalLink,
-  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, ArrowUpDown, Calendar, Timer,
+  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye,
 } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { usePlayer } from '../store/usePlayerStore';
 import { canPlaySetUrl } from '../components/LazySetPlayer';
+import GlassDropdown from '../components/GlassDropdown';
 import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
 import PlaylistModal from '../components/PlaylistModal';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
@@ -535,42 +536,30 @@ export default function SetBrowser() {
 
           {results.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
-              <div className="set-browser__filter-group">
-                <ArrowUpDown size={14} className="set-browser__filter-icon" />
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="set-browser__sort-select"
-                >
-                  {SORT_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{t(`sort_${opt}`)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="set-browser__filter-group">
-                <Timer size={14} className="set-browser__filter-icon" />
-                <select
-                  value={durationFilter}
-                  onChange={(e) => setDurationFilter(e.target.value)}
-                  className="set-browser__sort-select"
-                >
-                  {DURATION_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{t(`duration_${opt}`)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="set-browser__filter-group">
-                <Calendar size={14} className="set-browser__filter-icon" />
-                <select
-                  value={uploadedFilter}
-                  onChange={(e) => setUploadedFilter(e.target.value)}
-                  className="set-browser__sort-select"
-                >
-                  {UPLOADED_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{t(`uploaded_${opt}`)}</option>
-                  ))}
-                </select>
-              </div>
+              <GlassDropdown
+                testId="set-browser-sort"
+                align="left"
+                minWidth={150}
+                value={sortBy}
+                onChange={setSortBy}
+                options={SORT_OPTIONS.map((opt) => ({ value: opt, label: t(`sort_${opt}`) }))}
+              />
+              <GlassDropdown
+                testId="set-browser-duration"
+                align="left"
+                minWidth={140}
+                value={durationFilter}
+                onChange={setDurationFilter}
+                options={DURATION_OPTIONS.map((opt) => ({ value: opt, label: t(`duration_${opt}`) }))}
+              />
+              <GlassDropdown
+                testId="set-browser-uploaded"
+                align="left"
+                minWidth={140}
+                value={uploadedFilter}
+                onChange={setUploadedFilter}
+                options={UPLOADED_OPTIONS.map((opt) => ({ value: opt, label: t(`uploaded_${opt}`) }))}
+              />
             </div>
           )}
 
