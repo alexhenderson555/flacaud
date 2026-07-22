@@ -312,7 +312,7 @@ async def cmd_sync(message: Message, api: APIClient) -> None:
             await message.answer_document(doc, caption=f"🎵 {track.title}")
             sent += 1
         except Exception:
-            pass
+            logger.exception("Failed to send track %s to bot user", track.file_token)
 
     if sent > 1:
         record_downloads(tg_user.id, sent)
