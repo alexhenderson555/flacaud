@@ -337,7 +337,8 @@ async def set_recommendations_endpoint(
     return {"queries": queries, "results": blended}
 
 
-@router.api_route("/sets/cached-audio", methods=["GET", "HEAD"])
+@router.head("/sets/cached-audio", operation_id="head_cached_set_audio")
+@router.get("/sets/cached-audio", operation_id="get_cached_set_audio")
 def stream_cached_set_audio(
     url: str,
     request: Request,
