@@ -187,6 +187,19 @@ class SavedSetRead(SavedSetBase):
     updated_at: datetime
     share_token: Optional[str] = None
 
+
+class ProcessedPayment(SQLModel, table=True):
+    """One row per successfully-applied YooKassa payment_id — webhook idempotency guard.
+
+    YooKassa retries payment.succeeded delivery on any non-2xx (or slow) response,
+    and the retried call re-verifies fine (the payment really did succeed), so
+    without this the plan gets credited again on every retry.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    payment_id: str = Field(unique=True, index=True)
+    processed_at: datetime = Field(default_factory=_utcnow)
+
 class PlaylistRead(PlaylistBase):
     id: int
     created_at: datetime

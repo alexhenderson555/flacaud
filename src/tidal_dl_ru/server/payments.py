@@ -13,8 +13,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 import httpx
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session
 
 from tidal_dl_ru.bot.users import Plan
+from tidal_dl_ru.database import database as db_mod
+from tidal_dl_ru.database.models import ProcessedPayment
 from tidal_dl_ru.server.subscription_apply import (
     apply_paid_plan_for_telegram,
     apply_paid_plan_for_user_id,
@@ -117,6 +121,21 @@ def _fetch_payment(payment_id: str) -> Optional[dict]:
     return resp.json()
 
 
+def _claim_payment_id(payment_id: str) -> bool:
+    """Atomically record payment_id as processed. Returns False if it was
+    ALREADY recorded (webhook retry / duplicate delivery) — the caller must
+    skip crediting in that case, since YooKassa can and does redeliver
+    payment.succeeded even after a successful 200 response."""
+    with Session(db_mod.engine) as session:
+        try:
+            session.add(ProcessedPayment(payment_id=payment_id))
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            return False
+        return True
+
+
 def _process_payment_canceled(body: dict) -> bool:
     """Acknowledge canceled checkout; no plan change (dunning/recurring is future work)."""
     obj = body.get("object", {}) or {}
@@ -173,13 +192,23 @@ def process_webhook(body: dict) -> bool:
 
     expected_price = PLAN_PRICE.get(plan)
     paid_value = (verified.get("amount") or {}).get("value")
-    if expected_price and paid_value:
+    if expected_price:
+        # A missing/blank amount is as suspicious as a wrong one — don't
+        # silently treat "nothing to compare" as a pass.
+        if not paid_value:
+            return False
         # Numeric compare so "199" / "199.0" / "199.00" don't reject a valid pay.
         try:
             if Decimal(str(paid_value)) != Decimal(str(expected_price)):
                 return False
         except (InvalidOperation, ValueError):
             return False
+
+    # Idempotency: YooKassa redelivers payment.succeeded on retries, and a
+    # verified-succeeded payment_id must only ever credit a plan once.
+    if not _claim_payment_id(str(payment_id)):
+        log.info("payment_id=%s already processed, skipping duplicate credit", payment_id)
+        return True
 
     telegram_id_str = metadata.get("telegram_id")
     user_id_str = metadata.get("user_id")

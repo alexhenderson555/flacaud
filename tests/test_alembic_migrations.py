@@ -39,8 +39,9 @@ def test_fresh_db_upgrade_creates_core_tables(alembic_db_file):
         assert "activationcode" in tables
         assert "transfermatchrule" in tables
         assert "playlisttrack" in tables
+        assert "processedpayment" in tables
         row = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert row == "005_connected_accounts"
+        assert row == "006_processed_payments"
 
 
 def test_legacy_db_gets_stamped_not_recreated(alembic_db_file):
@@ -55,4 +56,4 @@ def test_legacy_db_gets_stamped_not_recreated(alembic_db_file):
 
     with alembic_db_file.engine.connect() as conn:
         row = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert row == "005_connected_accounts"
+        assert row == "006_processed_payments"

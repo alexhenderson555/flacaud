@@ -90,6 +90,10 @@ function Search() {
   const queryRef = useRef(query);
   const loadingMoreRef = useRef(false);
   const micStreamRef = useRef(null);
+  // Monotonic counter so an older search response (debounce fired, then the user
+  // hit Enter for a refined query before the debounced one returned) can't clobber
+  // a newer one that already landed.
+  const searchRequestIdRef = useRef(0);
 
   // Safety net: if the page unmounts mid-recording, release the microphone so the
   // browser doesn't keep the mic-active indicator on.
@@ -182,6 +186,7 @@ function Search() {
   };
 
   const performSearch = useCallback(async (searchQuery, offset = 0, append = false) => {
+    const requestId = (searchRequestIdRef.current += 1);
     setIsSearching(true);
     try {
       const data = await apiPostJson(
@@ -189,6 +194,7 @@ function Search() {
         { provider: 'tidal', query: searchQuery, limit: PAGE_SIZE, offset },
         { auth: true },
       );
+      if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
       if (data.tracks) {
         setRealResults((prev) => (append && prev ? [...prev, ...data.tracks] : data.tracks));
         setHasMore(Boolean(data.has_more));
@@ -204,6 +210,7 @@ function Search() {
         }
       }
     } catch (err) {
+      if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
       console.error('Search failed:', err);
       if (!append) {
         setRealResults([]);
@@ -217,7 +224,7 @@ function Search() {
         showToast(msg);
       }
     }
-    setIsSearching(false);
+    if (requestId === searchRequestIdRef.current) setIsSearching(false);
   }, [lang]);
 
   useEffect(() => {
@@ -256,6 +263,7 @@ function Search() {
   }, [hasMore, performSearch]);
 
   const handleListen = async () => {
+    if (isListening) return; // already recording — ignore a repeat click
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
@@ -333,7 +341,7 @@ function Search() {
 
   const handleDownload = async (result, e) => {
     e.stopPropagation();
-    const url = result.source_url || (result.id === 2 ? 'https://tidal.com/browse/track/mock' : null);
+    const url = result.source_url || null;
     if (!url) {
       showToast("No source URL available for this track.");
       return;
@@ -554,9 +562,10 @@ function Search() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--text-secondary)' }}>
             <span style={{ fontSize: '0.9rem' }}>{t('audioRec')}</span>
-            <motion.button 
+            <motion.button
               type="button"
               onClick={handleListen}
+              disabled={isListening}
               animate={isListening ? { scale: [1, 1.1, 1], boxShadow: ['0 0 0px var(--accent-glow)', '0 0 20px var(--accent-glow)', '0 0 0px var(--accent-glow)'] } : {}}
               transition={{ repeat: isListening ? Infinity : 0, duration: 1.5 }}
               style={{ 

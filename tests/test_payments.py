@@ -96,6 +96,19 @@ class TestProcessWebhook:
         body = {"event": "payment.succeeded", "object": {"id": "pay_3", "status": "succeeded"}}
         assert pmod.process_webhook(body) is False
 
+    def test_missing_amount_rejected(self, monkeypatch):
+        """A verified payment with no amount value is treated as unverified,
+        not as "nothing to compare against"."""
+        from tidal_dl_ru.server import payments as pmod
+
+        verified = {
+            "status": "succeeded", "paid": True, "amount": {"value": "", "currency": "RUB"},
+            "metadata": {"telegram_id": "12345", "plan": "pro"},
+        }
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: verified)
+        body = {"event": "payment.succeeded", "object": {"id": "pay_no_amount", "status": "succeeded"}}
+        assert pmod.process_webhook(body) is False
+
     def test_missing_metadata(self, monkeypatch):
         from tidal_dl_ru.server import payments as pmod
 
@@ -103,6 +116,25 @@ class TestProcessWebhook:
         monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: verified)
         body = {"event": "payment.succeeded", "object": {"id": "pay_4", "status": "succeeded"}}
         assert pmod.process_webhook(body) is False
+
+    def test_duplicate_webhook_does_not_double_credit(self, monkeypatch):
+        """YooKassa can redeliver payment.succeeded for the same payment_id
+        (retry / duplicate delivery); a second delivery must not stack the
+        subscription expiry a second time."""
+        from tidal_dl_ru.bot.users import Plan, get_or_create
+        from tidal_dl_ru.server import payments as pmod
+
+        get_or_create(12345)
+        monkeypatch.setattr(pmod, "_fetch_payment", lambda pid: _verified("basic"))
+        body = {"event": "payment.succeeded", "object": {"id": "pay_dup", "status": "succeeded"}}
+
+        assert pmod.process_webhook(body) is True
+        expires_after_first = get_or_create(12345).subscription_expires_at
+
+        assert pmod.process_webhook(body) is True
+        expires_after_second = get_or_create(12345).subscription_expires_at
+
+        assert expires_after_second == expires_after_first
 
     def test_invalid_plan(self, monkeypatch):
         from tidal_dl_ru.server import payments as pmod
