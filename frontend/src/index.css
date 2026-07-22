@@ -7897,6 +7897,15 @@ html.party-mode-open body {
 .set-browser__sort-select:focus-visible {
   outline: none;
 }
+/* :root already sets color-scheme per theme, but some browsers (notably
+   Chrome/Windows) still render the native <option> popup list using the OS
+   theme rather than the page's color-scheme - style options explicitly (using
+   the same theme variables, so this still tracks light themes correctly) so
+   the dropdown never ends up as invisible light-text-on-light-background. */
+.set-browser__sort-select option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
 .set-browser__card {
   transition: transform 0.15s ease;
 }
