@@ -557,6 +557,8 @@ export default function SetBrowser() {
           {canPlaySetUrl(selected.url) && (
             <SetEmbedAnchor
               style={{
+                maxWidth: '560px',
+                margin: '0 auto',
                 width: '100%',
                 borderRadius: '16px',
                 overflow: 'hidden',
