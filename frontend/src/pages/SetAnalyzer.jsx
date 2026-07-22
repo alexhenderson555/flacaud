@@ -90,6 +90,17 @@ export default function SetAnalyzer() {
   const trimmedUrl = url.trim();
   const canPlaySet = canPlaySetUrl(trimmedUrl);
 
+  const [savedToLibrary, setSavedToLibrary] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const norm = normalizeSetUrl(trimmedUrl);
+      setSavedToLibrary(!!norm && readSetLibrary().some((entry) => normalizeSetUrl(entry.url) === norm));
+    };
+    check();
+    window.addEventListener('tidal-sets-changed', check);
+    return () => window.removeEventListener('tidal-sets-changed', check);
+  }, [trimmedUrl]);
+
   const playableTracks = useMemo(
     () => setTracks.map((row) => normalizeSetMatchedTrack(row)).filter(Boolean),
     [setTracks],
@@ -507,11 +518,14 @@ export default function SetAnalyzer() {
           className="btn-secondary"
           onClick={saveToLibrary}
           disabled={!trimmedUrl}
-          style={{ borderRadius: '24px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
-          title={t('saveToLibrary')}
+          style={{
+            borderRadius: '24px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0,
+            color: savedToLibrary ? 'var(--accent-solid)' : undefined,
+          }}
+          title={savedToLibrary ? t('setSavedToLibrary') : t('saveToLibrary')}
         >
-          <Heart size={20} />
-          <span className="hide-on-mobile">{t('saveToLibrary')}</span>
+          <Heart size={20} fill={savedToLibrary ? 'currentColor' : 'none'} />
+          <span className="hide-on-mobile">{savedToLibrary ? t('setSavedToLibrary') : t('saveToLibrary')}</span>
         </button>
       </motion.div>
 

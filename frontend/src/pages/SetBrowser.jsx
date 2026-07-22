@@ -25,7 +25,7 @@ import { messageForApiError } from '../utils/apiClient';
 import {
   searchSets, fetchQuickTracklist, fetchSimilarSets, fetchSetRecommendations,
 } from '../utils/setSearchApi';
-import { analyzerQueryForSet } from '../utils/setLibrary';
+import { analyzerQueryForSet, normalizeSetUrl, readSetLibrary } from '../utils/setLibrary';
 import { upsertSetLibraryEntryAsync } from '../utils/setLibraryApi';
 import { setBrowserDict } from '../locales/setBrowserDict';
 
@@ -169,6 +169,17 @@ export default function SetBrowser() {
     if (!canPlaySet || !trimmedUrl || embedUrl) return;
     loadSetEmbed(trimmedUrl);
   }, [canPlaySet, trimmedUrl, embedUrl, loadSetEmbed]);
+
+  const [savedToLibrary, setSavedToLibrary] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const norm = normalizeSetUrl(trimmedUrl);
+      setSavedToLibrary(!!norm && readSetLibrary().some((entry) => normalizeSetUrl(entry.url) === norm));
+    };
+    check();
+    window.addEventListener('tidal-sets-changed', check);
+    return () => window.removeEventListener('tidal-sets-changed', check);
+  }, [trimmedUrl]);
 
   const sortedResults = useMemo(() => {
     if (sortBy === 'views') return [...results].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
@@ -549,11 +560,14 @@ export default function SetBrowser() {
               <button
                 type="button"
                 onClick={saveToLibrary}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-secondary)', padding: 0 }}
-                title={t('saveToLibrary')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', padding: 0,
+                  color: savedToLibrary ? 'var(--accent-solid)' : 'var(--text-secondary)',
+                }}
+                title={savedToLibrary ? t('setSavedToLibrary') : t('saveToLibrary')}
               >
-                <Heart size={14} />
-                {t('saveToLibrary')}
+                <Heart size={14} fill={savedToLibrary ? 'currentColor' : 'none'} />
+                {savedToLibrary ? t('setSavedToLibrary') : t('saveToLibrary')}
               </button>
               <a href={selected.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>
                 <ExternalLink size={14} />
