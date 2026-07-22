@@ -54,7 +54,16 @@ class TestDownloadSyncProviderError:
 
 class TestWorkerSettings:
     def test_functions_registered(self):
-        assert len(WorkerSettings.functions) == 4
+        # Checked by name (not just count) so adding a task doesn't silently
+        # need a magic-number bump here without anyone noticing what changed.
+        names = {f.__name__ for f in WorkerSettings.functions}
+        assert names == {
+            "download_url",
+            "analyze_set",
+            "download_set_audio",
+            "subscription_expiry_notify",
+            "subscription_expire_due",
+        }
 
     def test_cron_jobs_configured(self):
         assert len(WorkerSettings.cron_jobs) == 3
