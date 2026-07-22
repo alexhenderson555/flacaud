@@ -10,8 +10,11 @@ from tidal_dl_ru.server import jobs as job_state
 logger = logging.getLogger(__name__)
 
 # How many segments to recognize concurrently. Shazam calls are network-bound, so
-# batching them cuts scan wall-time ~N× while a modest cap avoids hammering the API.
-SHAZAM_CONCURRENCY = 6
+# batching them cuts scan wall-time ~N×. Raised from 6 -> 10 for faster scans;
+# ShazamAPI is unofficial/reverse-engineered, so pushing this further risks the
+# same class of rate-limit/ban trouble hit earlier with the Tidal account pool -
+# watch for a spike in recognizeSong() failures if this ever needs to go back down.
+SHAZAM_CONCURRENCY = 10
 
 # Kept as thin aliases so the rest of this module (and any external callers) don't
 # need to change; the real implementation lives in set_track_match so the
