@@ -253,7 +253,7 @@ export default function SetLibrary() {
                   </div>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                    {hasTracks && (
+                    {hasTracks ? (
                       <button
                         type="button"
                         className="btn-primary"
@@ -263,16 +263,17 @@ export default function SetLibrary() {
                       >
                         <ListChecks size={16} /> {t('viewTracklist')}
                       </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        data-testid="set-library-analyze"
+                        onClick={() => goAnalyzer(set.url, { analyze: true })}
+                        style={{ borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
+                      >
+                        <Search size={16} /> {t('analyze')}
+                      </button>
                     )}
-                    <button
-                      type="button"
-                      className={hasTracks ? 'btn-secondary' : 'btn-primary'}
-                      data-testid="set-library-analyze"
-                      onClick={() => goAnalyzer(set.url, { analyze: true })}
-                      style={{ borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
-                    >
-                      <Search size={16} /> {hasTracks ? t('reanalyze') : t('analyze')}
-                    </button>
                     {set.serverId && (
                       <button
                         type="button"
