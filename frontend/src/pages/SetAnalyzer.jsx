@@ -133,21 +133,35 @@ export default function SetAnalyzer() {
     sessionStorage.setItem('tidal-analyzer-url', url);
   }, [url]);
 
+  const prevUrlParamRef = useRef(null);
   useEffect(() => {
     const urlParam = searchParams.get('url');
     if (!urlParam) return;
     const decoded = decodeURIComponent(urlParam);
     setUrl(decoded);
     const shouldAnalyze = searchParams.get('analyze') === '1';
-    if (!shouldAnalyze) {
-      const saved = readSetLibrary().find(
-        (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(decoded),
-      );
-      if (saved?.setTracks?.length) {
-        setSetTracks(dedupeSetTracks(saved.setTracks));
-        setStatus('done');
-      }
+    if (shouldAnalyze) return;
+
+    // Only reset when the URL actually changed to a different set - navigating
+    // straight from one Library entry to another (SPA nav, component doesn't
+    // remount) previously left the FIRST set's tracklist showing under the
+    // SECOND set's URL whenever the second one had no saved tracks yet.
+    if (prevUrlParamRef.current === decoded) return;
+    prevUrlParamRef.current = decoded;
+
+    const saved = readSetLibrary().find(
+      (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(decoded),
+    );
+    if (saved?.setTracks?.length) {
+      setSetTracks(dedupeSetTracks(saved.setTracks));
+      setStatus('done');
+    } else {
+      setSetTracks([]);
+      setStatus('idle');
     }
+    setAnalysisMeta(null);
+    setAnalysisProgress(null);
+    setError(null);
   }, [searchParams]);
 
   // Playing a matched Tidal track releases the embed session (mutual
@@ -161,13 +175,25 @@ export default function SetAnalyzer() {
   useEffect(() => {
     if (!trimmedUrl) return;
     const active = loadActiveAnalyzerJob(trimmedUrl);
-    if (active?.jobId) {
-      setJobId(active.jobId);
-      setStatus('running');
-      if (!resumeToastShown.current) {
-        resumeToastShown.current = true;
-        showToast(t('analysisResumed'));
-      }
+    if (!active?.jobId) return;
+    // A job that died mid-flight (server restart, worker crash) without ever
+    // clearing its own "active" marker would otherwise clobber an already
+    // -completed, saved tracklist with a stale "resuming…" state forever.
+    // Only resume if this marker is newer than the last successful save.
+    const savedEntry = readSetLibrary().find(
+      (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(trimmedUrl),
+    );
+    const staleMarker = savedEntry?.setTracks?.length > 0
+      && (savedEntry.updatedAt || 0) >= (active.savedAt || 0);
+    if (staleMarker) {
+      clearActiveAnalyzerJob(trimmedUrl);
+      return;
+    }
+    setJobId(active.jobId);
+    setStatus('running');
+    if (!resumeToastShown.current) {
+      resumeToastShown.current = true;
+      showToast(t('analysisResumed'));
     }
   }, [trimmedUrl, t]);
 

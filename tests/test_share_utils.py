@@ -42,6 +42,13 @@ def test_track_duration_seconds_various_keys():
     assert track_duration_seconds({"duration": "abc"}) == 0
 
 
+def test_track_duration_seconds_falls_back_to_matched_track():
+    assert track_duration_seconds({"artist": "A", "title": "B", "matched_track": {"duration_s": 240}}) == 240
+    assert track_duration_seconds({"matched_track": {"duration": 120}}) == 120
+    assert track_duration_seconds({"matched_track": None}) == 0
+    assert track_duration_seconds({"matched_track": {}}) == 0
+
+
 def test_sum_track_durations():
     tracks = [
         {"duration": 30},

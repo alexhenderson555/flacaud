@@ -21,16 +21,21 @@ def parse_tracks_json(raw: str | None) -> list[dict[str, Any]]:
 
 
 def track_duration_seconds(track: dict[str, Any]) -> int:
-    for key in ("duration", "duration_s", "duration_seconds"):
-        val = track.get(key)
-        if val is None:
-            continue
-        try:
-            n = int(val)
-            if n > 0:
-                return n
-        except (TypeError, ValueError):
-            continue
+    # Analyzer/quick-tracklist rows nest the Tidal match's own metadata (including
+    # duration) under "matched_track" rather than at the row's top level.
+    matched = track.get("matched_track")
+    sources = [track, matched] if isinstance(matched, dict) else [track]
+    for source in sources:
+        for key in ("duration", "duration_s", "duration_seconds"):
+            val = source.get(key)
+            if val is None:
+                continue
+            try:
+                n = int(val)
+                if n > 0:
+                    return n
+            except (TypeError, ValueError):
+                continue
     return 0
 
 

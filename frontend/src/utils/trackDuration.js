@@ -1,11 +1,16 @@
 /** Seconds from a track row (library, playlist, set cache). */
 export function trackDurationSeconds(track) {
   if (!track) return 0;
-  for (const key of ['duration', 'duration_s', 'duration_seconds']) {
-    const val = track[key];
-    if (val == null) continue;
-    const n = Number(val);
-    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  // Analyzer/quick-tracklist rows nest the Tidal match's own metadata (including
+  // duration) under matched_track rather than at the row's top level.
+  const sources = track.matched_track ? [track, track.matched_track] : [track];
+  for (const source of sources) {
+    for (const key of ['duration', 'duration_s', 'duration_seconds']) {
+      const val = source[key];
+      if (val == null) continue;
+      const n = Number(val);
+      if (Number.isFinite(n) && n > 0) return Math.floor(n);
+    }
   }
   return 0;
 }

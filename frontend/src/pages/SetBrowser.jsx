@@ -70,11 +70,13 @@ function SetResultCard({ set, onSelect, t, lang }) {
         borderRadius: '16px', overflow: 'hidden', border: 'none', cursor: 'pointer', background: 'var(--bg-surface)',
       }}
     >
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', flexShrink: 0 }}>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', flexShrink: 0, overflow: 'hidden' }}>
         {set.thumbnail ? (
-          <img src={set.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          // Absolutely positioned so the image's own (often square/SoundCloud)
+          // intrinsic size can never stretch this box past its 16:9 aspect ratio.
+          <img src={set.thumbnail} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Music2 size={32} color="var(--text-muted)" />
           </div>
         )}
@@ -474,7 +476,7 @@ export default function SetBrowser() {
                     <Sparkles size={20} />
                     {t('recommendedSets')}
                   </h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px', paddingBottom: '16px' }}>
                     {recommended.map((set) => (
                       <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                     ))}
@@ -518,7 +520,7 @@ export default function SetBrowser() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px', paddingBottom: '16px' }}>
             {sortedResults.map((set) => (
               <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
             ))}
@@ -672,7 +674,7 @@ export default function SetBrowser() {
                 <Radio size={20} />
                 {t('similarSets')}
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px', paddingBottom: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px', paddingBottom: '24px' }}>
                 {similarSets.map((set) => (
                   <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                 ))}

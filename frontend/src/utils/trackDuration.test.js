@@ -29,4 +29,15 @@ describe('trackDuration', () => {
     expect(trackDurationSeconds({ duration: 200 })).toBe(200);
     expect(trackDurationSeconds({})).toBe(0);
   });
+
+  it('falls back to matched_track duration for analyzer/quick-tracklist rows', () => {
+    expect(trackDurationSeconds({
+      artist: 'A', title: 'B', matched_track: { duration_s: 240 },
+    })).toBe(240);
+    expect(sumTrackDurations([
+      { matched_track: { duration_s: 240 } },
+      { matched_track: { duration: 120 } },
+      { matched_track: null },
+    ])).toBe(360);
+  });
 });
