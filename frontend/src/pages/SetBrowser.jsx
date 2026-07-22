@@ -20,6 +20,7 @@ import {
   searchSets, fetchQuickTracklist, fetchSimilarSets, fetchSetRecommendations,
 } from '../utils/setSearchApi';
 import { analyzerQueryForSet } from '../utils/setLibrary';
+import { upsertSetLibraryEntryAsync } from '../utils/setLibraryApi';
 import { setBrowserDict } from '../locales/setBrowserDict';
 
 function formatMinutes(seconds, t) {
@@ -144,6 +145,11 @@ export default function SetBrowser() {
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   const [recommended, setRecommended] = useState([]);
   const [recommendedLoading, setRecommendedLoading] = useState(false);
+  const [resultsLimit, setResultsLimit] = useState(12);
+  const [recommendedLimit, setRecommendedLimit] = useState(12);
+  const [loadingMoreResults, setLoadingMoreResults] = useState(false);
+  const [loadingMoreRecommended, setLoadingMoreRecommended] = useState(false);
+  const PAGE_SIZE = 12;
 
   const trimmedUrl = selected?.url || '';
   const canPlaySet = canPlaySetUrl(trimmedUrl);
@@ -164,7 +170,7 @@ export default function SetBrowser() {
     if (!hasAuthSession()) return;
     let cancelled = false;
     setRecommendedLoading(true);
-    fetchSetRecommendations({ lang })
+    fetchSetRecommendations({ lang, limit: PAGE_SIZE })
       .then((rows) => { if (!cancelled) setRecommended(rows); })
       .catch(() => { if (!cancelled) setRecommended([]); })
       .finally(() => { if (!cancelled) setRecommendedLoading(false); });
@@ -196,8 +202,9 @@ export default function SetBrowser() {
     }
     setSearching(true);
     setSearchError(null);
+    setResultsLimit(PAGE_SIZE);
     try {
-      const rows = await searchSets(q, { lang });
+      const rows = await searchSets(q, { lang, limit: PAGE_SIZE });
       setResults(rows);
     } catch (err) {
       setSearchError(messageForApiError(err, lang) || t('errGeneric'));
@@ -205,6 +212,37 @@ export default function SetBrowser() {
       setSearching(false);
     }
   }, [query, lang, t]);
+
+  const loadMoreResults = useCallback(async () => {
+    const q = query.trim();
+    if (!q || loadingMoreResults) return;
+    const nextLimit = resultsLimit + PAGE_SIZE;
+    setLoadingMoreResults(true);
+    try {
+      const rows = await searchSets(q, { lang, limit: nextLimit });
+      setResults(rows);
+      setResultsLimit(nextLimit);
+    } catch (err) {
+      showToast(messageForApiError(err, lang) || t('errGeneric'));
+    } finally {
+      setLoadingMoreResults(false);
+    }
+  }, [query, lang, t, resultsLimit, loadingMoreResults]);
+
+  const loadMoreRecommended = useCallback(async () => {
+    if (loadingMoreRecommended) return;
+    const nextLimit = recommendedLimit + PAGE_SIZE;
+    setLoadingMoreRecommended(true);
+    try {
+      const rows = await fetchSetRecommendations({ lang, limit: nextLimit });
+      setRecommended(rows);
+      setRecommendedLimit(nextLimit);
+    } catch (err) {
+      showToast(messageForApiError(err, lang) || t('errGeneric'));
+    } finally {
+      setLoadingMoreRecommended(false);
+    }
+  }, [lang, t, recommendedLimit, loadingMoreRecommended]);
 
   // Opening a set pushes a browser-history entry (via the `set` query param) so
   // the native Back button returns here to the results instead of skipping
@@ -252,6 +290,24 @@ export default function SetBrowser() {
       setSimilarSets([]);
     }
   }, [lang, loadSetEmbed, t, setSearchParams]);
+
+  const saveToLibrary = async () => {
+    if (!selected?.url) return;
+    if (!hasAuthSession()) {
+      showToast(t('authRequired'));
+      return;
+    }
+    try {
+      await upsertSetLibraryEntryAsync({
+        url: selected.url,
+        title: selected.title,
+        setTracks: setTracks.length ? setTracks : undefined,
+      }, lang);
+      showToast(t('setSavedToLibrary'));
+    } catch (err) {
+      showToast(messageForApiError(err, lang) || t('errGeneric'));
+    }
+  };
 
   const backToResults = () => {
     // Pop the history entry selectSet pushed, rather than resetting state
@@ -391,10 +447,22 @@ export default function SetBrowser() {
                     <Sparkles size={20} />
                     {t('recommendedSets')}
                   </h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '24px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '16px' }}>
                     {recommended.map((set) => (
                       <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                     ))}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '24px' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={loadMoreRecommended}
+                      disabled={loadingMoreRecommended}
+                      style={{ borderRadius: '20px', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      {loadingMoreRecommended ? <Loader2 className="spinner" size={16} /> : null}
+                      {t('loadMore')}
+                    </button>
                   </div>
                 </>
               )}
@@ -423,11 +491,25 @@ export default function SetBrowser() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', paddingBottom: '16px' }}>
             {sortedResults.map((set) => (
               <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
             ))}
           </div>
+          {results.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '24px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={loadMoreResults}
+                disabled={loadingMoreResults}
+                style={{ borderRadius: '20px', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                {loadingMoreResults ? <Loader2 className="spinner" size={16} /> : null}
+                {t('loadMore')}
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -447,10 +529,21 @@ export default function SetBrowser() {
               <h2 style={{ fontSize: '1.3rem', margin: '0 0 6px' }}>{selected.title}</h2>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{selected.channel}</div>
             </div>
-            <a href={selected.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)', textDecoration: 'none', flexShrink: 0 }}>
-              <ExternalLink size={14} />
-              {t('openSource')}
-            </a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={saveToLibrary}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-secondary)', padding: 0 }}
+                title={t('saveToLibrary')}
+              >
+                <Heart size={14} />
+                {t('saveToLibrary')}
+              </button>
+              <a href={selected.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                <ExternalLink size={14} />
+                {t('openSource')}
+              </a>
+            </div>
           </div>
 
           {tracklistLoading && (

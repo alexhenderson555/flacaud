@@ -185,7 +185,7 @@ async def search_sets_endpoint(
     q = q.strip()
     if not q:
         return {"results": []}
-    limit = max(1, min(limit, 24))
+    limit = max(1, min(limit, 48))
     results = await asyncio.to_thread(search_sets, q, limit)
     return {"results": results}
 
@@ -325,7 +325,7 @@ async def set_recommendations_endpoint(
 ):
     """Sets to discover without typing a query — like the track Recommendations
     page, seeded from artists in the user's library and blended radio-style."""
-    limit = max(1, min(limit, 24))
+    limit = max(1, min(limit, 48))
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
         picked = random.sample(artist_names, min(3, len(artist_names)))

@@ -22,6 +22,7 @@ import { fetchJobStatus } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
 import { normalizeSetUrl, readSetLibrary, deriveSetTitle } from '../utils/setLibrary';
+import { upsertSetLibraryEntryAsync } from '../utils/setLibraryApi';
 import {
   ANALYZER_MAX_ATTEMPTS,
   ANALYZER_POLL_MS,
@@ -320,6 +321,24 @@ export default function SetAnalyzer() {
     };
   }, [jobId, status, trimmedUrl, lang, t]);
 
+  const saveToLibrary = async () => {
+    if (!trimmedUrl) return;
+    if (!hasAuthSession()) {
+      showToast(t('authRequired'));
+      return;
+    }
+    try {
+      await upsertSetLibraryEntryAsync({
+        url: trimmedUrl,
+        title: deriveSetTitle(trimmedUrl),
+        setTracks: setTracks.length ? setTracks : undefined,
+      }, lang);
+      showToast(t('setSavedToLibrary'));
+    } catch (e) {
+      showToast(e.message || t('analysisFailed'));
+    }
+  };
+
   const downloadSet = async () => {
     if (!trimmedUrl || downloadingSet) return;
     if (!hasAuthSession()) {
@@ -473,6 +492,18 @@ export default function SetAnalyzer() {
         >
           {downloadingSet ? <Loader2 className="spinner" size={20} /> : <DownloadCloud size={20} />}
           <span className="hide-on-mobile">{t('downloadSet')}</span>
+        </button>
+
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={saveToLibrary}
+          disabled={!trimmedUrl}
+          style={{ borderRadius: '24px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
+          title={t('saveToLibrary')}
+        >
+          <Heart size={20} />
+          <span className="hide-on-mobile">{t('saveToLibrary')}</span>
         </button>
       </motion.div>
 
