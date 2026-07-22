@@ -1,7 +1,8 @@
 import asyncio
-import io
 import logging
 import os
+import shutil
+import subprocess
 import tempfile
 
 from tidal_dl_ru.core.set_track_match import clean_title_for_query, dedupe_key, match_tidal_track
@@ -133,7 +134,7 @@ async def analyze_set_task(
     interval: int = 60
 ) -> dict:
     import yt_dlp
-    from pydub import AudioSegment
+    from pydub.utils import mediainfo
     from ShazamAPI import Shazam
 
 
@@ -212,24 +213,35 @@ async def analyze_set_task(
             job_id,
             phase="process",
             percent=16,
-            label="Loading audio…",
+            label="Reading set duration…",
         )
 
+        # Previously decoded the WHOLE file to PCM via pydub before scanning
+        # anything - for a long set that single blocking call was the "process
+        # audio" stage users saw stall with no feedback. A duration probe is a
+        # metadata-only ffprobe read (near-instant), and each 10s Shazam clip is
+        # extracted on demand via ffmpeg seek in the scan loop below instead -
+        # so this stage now finishes in well under a second.
+        ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+
         try:
-            def _load_audio():
-                return AudioSegment.from_mp3(audio_file)
-            audio = await asyncio.to_thread(_load_audio)
+            def _probe_duration():
+                info = mediainfo(audio_file)
+                return float(info.get("duration") or 0)
+            duration_sec = await asyncio.to_thread(_probe_duration)
+            if duration_sec <= 0:
+                raise RuntimeError("Could not read audio duration")
         except Exception as e:
-            job_state.mark_failed(job_id, f"Failed to load audio: {e}")
+            job_state.mark_failed(job_id, f"Failed to read audio: {e}")
             job_state.update_analysis(
                 job_id,
                 phase="failed",
                 percent=0,
-                label=f"Failed to load audio: {e}",
+                label=f"Failed to read audio: {e}",
             )
             return {"ok": False, "error": str(e)}
 
-        total_segments = len(audio) // (interval * 1000)
+        total_segments = int(duration_sec // interval)
         last_confirmed = None
         pending_track = None
         pending_timestamp = None
@@ -243,10 +255,25 @@ async def analyze_set_task(
             segments_total=total_segments,
         )
 
-        def _shazam_segment(seg):
-            buffer = io.BytesIO()
-            seg.export(buffer, format='wav')
-            wav_bytes = buffer.getvalue()
+        def _extract_segment_wav(start_sec: float, clip_sec: float = 10) -> bytes:
+            result = subprocess.run(
+                [
+                    ffmpeg_path, "-v", "quiet",
+                    "-ss", str(start_sec), "-t", str(clip_sec),
+                    "-i", audio_file, "-f", "wav", "-",
+                ],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30,
+            )
+            return result.stdout
+
+        def _shazam_segment(start_sec):
+            try:
+                wav_bytes = _extract_segment_wav(start_sec)
+            except (subprocess.TimeoutExpired, OSError):
+                logger.debug("set_analyzer: ffmpeg segment extraction failed", exc_info=True)
+                return None, None, None
+            if not wav_bytes:
+                return None, None, None
             shazam = Shazam(wav_bytes)
             try:
                 res = next(shazam.recognizeSong(), None)
@@ -285,9 +312,8 @@ async def analyze_set_task(
                 return {"ok": False, "error": "cancelled", "count": len(results)}
 
             batch = list(range(batch_start, min(batch_start + SHAZAM_CONCURRENCY, total_segments)))
-            segments = [audio[j * interval * 1000: j * interval * 1000 + 10000] for j in batch]
             detections = await asyncio.gather(
-                *[asyncio.to_thread(_shazam_segment, seg) for seg in segments]
+                *[asyncio.to_thread(_shazam_segment, j * interval) for j in batch]
             )
 
             for j, (current_track, current_artist, current_title) in zip(batch, detections):
