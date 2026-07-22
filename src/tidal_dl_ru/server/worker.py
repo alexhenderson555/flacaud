@@ -286,7 +286,11 @@ class WorkerSettings:
         subscription_expiry_notify, subscription_expire_due,
     ]
     cron_jobs = [
-        cron(disk_cleanup_task, hour={3, 15}, minute=0),  # type: ignore[arg-type]
+        # run_at_startup too - the worker container restarts on every deploy,
+        # so relying solely on the fixed hours meant a long stretch of restarts
+        # (deploys) could pass without ever landing on 03:00/15:00, letting the
+        # stream-cache volume grow well past its cap unnoticed.
+        cron(disk_cleanup_task, hour={3, 15}, minute=0, run_at_startup=True),  # type: ignore[arg-type]
         cron(subscription_expiry_notify, hour={10}, minute=0),
         cron(subscription_expire_due, hour={4}, minute=30),
     ]
