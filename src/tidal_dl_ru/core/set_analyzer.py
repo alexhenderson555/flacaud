@@ -245,6 +245,9 @@ async def analyze_set_task(
         last_confirmed = None
         pending_track = None
         pending_timestamp = None
+        pending_seg_idx = None
+        refinement_tasks: list[asyncio.Task] = []
+        refinement_sem = asyncio.Semaphore(SHAZAM_CONCURRENCY)
 
         job_state.update_analysis(
             job_id,
@@ -286,7 +289,30 @@ async def analyze_set_task(
                 logger.debug("set_analyzer: Shazam recognition failed for segment", exc_info=True)
             return None, None, None
 
-        async def _confirm(artist, title, timestamp):
+        def _format_timestamp(seconds: float) -> str:
+            s = int(seconds)
+            return f"{s // 60}:{s % 60:02d}"
+
+        async def _refine_boundary(result_index: int, window_start: float, window_end: float, target_key: str):
+            """Binary-search the true transition point within the coarse
+            [window_start, window_end) interval-window down to ~10-15s precision,
+            using a couple of extra Shazam probes. Runs after the main scan so it
+            never slows down track discovery itself."""
+            async with refinement_sem:
+                lo, hi = window_start, window_end
+                for _ in range(2):
+                    if hi - lo <= 12:
+                        break
+                    mid = lo + (hi - lo) / 2
+                    current_track, _, _ = await asyncio.to_thread(_shazam_segment, mid)
+                    if current_track == target_key:
+                        hi = mid
+                    else:
+                        lo = mid
+                if result_index < len(results):
+                    results[result_index]["timestamp"] = _format_timestamp(hi)
+
+        async def _confirm(artist, title, timestamp, window=None, target_key=None):
             """Append a confirmed track (deduping the same recording seen back-to-back)."""
             nonlocal last_confirmed
             info = {
@@ -303,6 +329,11 @@ async def analyze_set_task(
                 return
             results.append(info)
             job_state.update_set_tracks(job_id, results)
+            if window is not None and target_key is not None:
+                idx = len(results) - 1
+                refinement_tasks.append(
+                    asyncio.create_task(_refine_boundary(idx, window[0], window[1], target_key))
+                )
 
         # Recognize segments in ordered batches: Shazam calls within a batch run
         # concurrently (network-bound), but confirmation stays sequential so the
@@ -323,14 +354,21 @@ async def analyze_set_task(
                     if current_track == last_confirmed:
                         pass
                     elif current_track == pending_track:
-                        await _confirm(current_artist, current_title or pending_track, pending_timestamp)
+                        window = (max(0, (pending_seg_idx - 1) * interval), pending_seg_idx * interval)
+                        await _confirm(
+                            current_artist, current_title or pending_track, pending_timestamp,
+                            window=window, target_key=pending_track,
+                        )
                         last_confirmed = current_track
                         pending_track = None
+                        pending_seg_idx = None
                     else:
                         pending_track = current_track
                         pending_timestamp = timestamp
+                        pending_seg_idx = j
                 else:
                     pending_track = None
+                    pending_seg_idx = None
 
             done = min(batch_start + SHAZAM_CONCURRENCY, total_segments)
             pct = int((done / max(total_segments, 1)) * 100)
@@ -346,6 +384,19 @@ async def analyze_set_task(
 
         if pending_track and pending_track != last_confirmed:
             await _confirm("Unknown", pending_track, pending_timestamp)
+
+        if refinement_tasks:
+            job_state.update_analysis(
+                job_id,
+                phase="scan",
+                percent=97,
+                label="Refining timestamps…",
+                segments_done=total_segments,
+                segments_total=total_segments,
+                tracks_found=len(results),
+            )
+            await asyncio.gather(*refinement_tasks, return_exceptions=True)
+            job_state.update_set_tracks(job_id, results)
 
         job_state.update_analysis(
             job_id,
