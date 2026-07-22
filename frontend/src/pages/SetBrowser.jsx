@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { motion } from 'framer-motion';
 import {
   Search, Loader2, ListMusic, DownloadCloud, Heart, ExternalLink,
-  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, ArrowUpDown, Play, Pause,
+  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, ArrowUpDown,
 } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { usePlayer } from '../store/usePlayerStore';
@@ -12,7 +12,6 @@ import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
 import PlaylistModal from '../components/PlaylistModal';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
 import { normalizeSetMatchedTrack, parseSetTimestamp } from '../utils/setAnalyzerUtils';
-import { normalizeSetUrl } from '../utils/setLibrary';
 import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
 import { SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
 
@@ -130,8 +129,7 @@ export default function SetBrowser() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
-    loadSetEmbed, pauseSetEmbed, seekSetEmbed, playSetEmbed, resumeSetEmbed,
-    embedUrl, embedPlaying, embedEngaged,
+    loadSetEmbed, pauseSetEmbed, seekSetEmbed, embedUrl,
   } = usePlayer();
 
   // Query + results survive navigating away and back (e.g. to a set's
@@ -300,31 +298,6 @@ export default function SetBrowser() {
       setSimilarSets([]);
     }
   }, [lang, loadSetEmbed, t, setSearchParams]);
-
-  const isSetPlaying = (url) => (
-    embedPlaying && normalizeSetUrl(embedUrl) === normalizeSetUrl(url)
-  );
-
-  const isSetEngaged = (url) => (
-    embedEngaged && normalizeSetUrl(embedUrl) === normalizeSetUrl(url)
-  );
-
-  const handleListen = (set) => {
-    const normalized = normalizeSetUrl(set.url);
-    if (!canPlaySetUrl(normalized)) {
-      showToast(t('invalidUrl'));
-      return;
-    }
-    if (isSetPlaying(normalized)) {
-      pauseSetEmbed();
-      return;
-    }
-    if (isSetEngaged(normalized)) {
-      resumeSetEmbed();
-      return;
-    }
-    playSetEmbed(0, normalized, { title: set.title });
-  };
 
   const saveToLibrary = async () => {
     if (!selected?.url) return;
@@ -565,17 +538,6 @@ export default function SetBrowser() {
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{selected.channel}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => handleListen(selected)}
-                style={{ borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', padding: '8px 16px' }}
-              >
-                {isSetPlaying(selected.url)
-                  ? <Pause size={16} fill="currentColor" />
-                  : <Play size={16} fill="currentColor" />}
-                {isSetPlaying(selected.url) ? t('pauseSet') : t('listenSet')}
-              </button>
               <button
                 type="button"
                 onClick={saveToLibrary}

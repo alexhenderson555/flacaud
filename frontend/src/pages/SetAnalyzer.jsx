@@ -3,7 +3,7 @@ import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { showToast } from '../utils/toast';
 import {
   Search, ListMusic, Link as LinkIcon, Loader2, List,
-  DownloadCloud, Library, Heart, Play, Pause,
+  DownloadCloud, Library, Heart,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../store/usePlayerStore';
@@ -67,11 +67,7 @@ export default function SetAnalyzer() {
     loadSetEmbed,
     pauseSetEmbed,
     seekSetEmbed,
-    playSetEmbed,
-    resumeSetEmbed,
     embedUrl,
-    embedPlaying,
-    embedEngaged,
   } = usePlayer();
 
   const [searchParams] = useSearchParams();
@@ -329,26 +325,6 @@ export default function SetAnalyzer() {
   }, [jobId, status, trimmedUrl, lang, t]);
 
   const isSoundCloudEmbed = /soundcloud\.com|snd\.sc/i.test(embedUrl || '');
-  const isSetPlaying = canPlaySet
-    && embedPlaying && normalizeSetUrl(embedUrl) === normalizeSetUrl(trimmedUrl);
-  const isSetEngaged = canPlaySet
-    && embedEngaged && normalizeSetUrl(embedUrl) === normalizeSetUrl(trimmedUrl);
-
-  const handleListen = () => {
-    if (!canPlaySet) {
-      showToast(t('invalidUrl'));
-      return;
-    }
-    if (isSetPlaying) {
-      pauseSetEmbed();
-      return;
-    }
-    if (isSetEngaged) {
-      resumeSetEmbed();
-      return;
-    }
-    playSetEmbed(0, trimmedUrl, { title: deriveSetTitle(trimmedUrl) });
-  };
 
   const saveToLibrary = async () => {
     if (!trimmedUrl) return;
@@ -509,18 +485,6 @@ export default function SetAnalyzer() {
           style={{ borderRadius: '24px', padding: '12px 28px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
         >
           {isAnalyzing ? <><Loader2 className="spinner" size={20} /> {t('analyzing')}</> : <><Search size={20} /> {t('analyze')}</>}
-        </button>
-
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={handleListen}
-          disabled={!trimmedUrl || !canPlaySet}
-          style={{ borderRadius: '24px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
-          title={isSetPlaying ? t('pauseSet') : t('listenSet')}
-        >
-          {isSetPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
-          <span className="hide-on-mobile">{isSetPlaying ? t('pauseSet') : t('listenSet')}</span>
         </button>
 
         <button
