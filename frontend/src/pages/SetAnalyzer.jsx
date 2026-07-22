@@ -518,7 +518,7 @@ export default function SetAnalyzer() {
         </div>
       )}
 
-      {canPlaySet && (
+      {embedUrl && canPlaySetUrl(embedUrl) && (
         <SetEmbedAnchor
           style={{
             width: '100%',

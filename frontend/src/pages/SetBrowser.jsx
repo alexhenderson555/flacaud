@@ -554,7 +554,7 @@ export default function SetBrowser() {
             </div>
           </div>
 
-          {canPlaySetUrl(selected.url) && (
+          {embedUrl && canPlaySetUrl(embedUrl) && (
             <SetEmbedAnchor
               style={{
                 maxWidth: '760px',
