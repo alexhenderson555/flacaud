@@ -522,7 +522,7 @@ export default function SetAnalyzer() {
         <SetEmbedAnchor
           style={{
             width: '100%',
-            maxWidth: '560px',
+            maxWidth: '760px',
             margin: '0 auto 24px',
             borderRadius: '16px',
             overflow: 'hidden',
