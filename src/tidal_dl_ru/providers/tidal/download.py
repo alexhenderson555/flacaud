@@ -209,7 +209,12 @@ def _remux(src: Path, dest: Path) -> Path:
         src.unlink(missing_ok=True)
         return dest
     except subprocess.CalledProcessError:
-        # ffmpeg failed — fall back to keeping the mp4 container
+        # ffmpeg failed (e.g. disk full mid-write) - it may have left a
+        # partial/truncated file at dest despite the nonzero exit. Remove it
+        # before falling back, otherwise a caller that only checks
+        # dest.is_file() to decide "already cached" would serve that
+        # truncated file forever instead of ever seeing this fallback.
+        dest.unlink(missing_ok=True)
         fallback = dest.with_suffix(".m4a") if dest.suffix == ".flac" else dest
         src.rename(fallback)
         return fallback

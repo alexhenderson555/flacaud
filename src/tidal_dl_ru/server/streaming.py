@@ -393,6 +393,12 @@ async def _download_dash_segments(
         tmp_path.unlink(missing_ok=True)
         meta_path.unlink(missing_ok=True)
         fmp4_path.unlink(missing_ok=True)
+        # A remux failure partway through writing final_path (e.g. disk full)
+        # otherwise leaves a truncated file behind - callers only check
+        # final_path.is_file() to decide the cache is complete, so a half
+        # -written file would be served as "done" forever after.
+        final_path.unlink(missing_ok=True)
+        final_path.with_suffix(".m4a").unlink(missing_ok=True)
         raise
 
 
