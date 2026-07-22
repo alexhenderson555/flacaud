@@ -351,6 +351,16 @@ export default function SetAnalyzer() {
         if (outcome.status === 'done' || outcome.status === 'failed' || outcome.status === 'cancelled') {
           clearActiveAnalyzerJob(trimmedUrl);
         }
+        // Auto-save on completion - the job record itself only lives ~24h
+        // (Redis TTL), so without this a finished analysis silently vanishes
+        // unless the user remembers to click "Save to Library" themselves.
+        if (outcome.status === 'done' && tracks.length && hasAuthSession()) {
+          upsertSetLibraryEntryAsync({
+            url: trimmedUrl,
+            title: deriveSetTitle(trimmedUrl),
+            setTracks: tracks,
+          }, lang).catch(() => {});
+        }
       } catch (e) {
         console.error(e);
       }
