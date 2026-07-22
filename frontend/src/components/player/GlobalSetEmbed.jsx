@@ -28,7 +28,7 @@ export default function GlobalSetEmbed() {
     setAudioRef,
     setAudioSrc,
     anchorEl,
-    playerRef,
+    setEmbedPlayerRef: playerRef,
     resumeSetEmbed,
     releaseSetEmbed,
     handleEmbedReady,
