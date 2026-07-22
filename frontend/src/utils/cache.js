@@ -106,8 +106,13 @@ export const cacheAudioTrack = async (track, quality = 'HIGH') => {
     if (!isFetchCompleteResponse(response, blob) || !isBlobCompleteEnough(blob, track, quality)) {
       return false;
     }
-    await localforage.setItem(cacheKey, blob);
+    // Metadata first: if the tab gets torn down between these two writes (e.g.
+    // a PWA service-worker update reloading the page mid-deploy — exactly
+    // when users reported it happening), a meta-with-no-blob is silently
+    // skipped by listCachedTracks; a blob-with-no-meta showed up as a
+    // permanent unnamed "tidal_<id>_HIGH" row instead.
     await localforage.setItem(metaKeyFor(cacheKey), trackMeta(track, quality));
+    await localforage.setItem(cacheKey, blob);
     notifyOfflineCacheUpdated();
     return true;
   } catch (error) {
@@ -245,6 +250,20 @@ export async function downloadCachedTrackByKey(cacheKey, meta) {
   } catch (error) {
     console.error('Failed to download cached track', error);
     return false;
+  }
+}
+
+/** Playable object URL for a cached track by its cache key — works even for
+ * legacy blobs with no matching __meta (unlike getCachedAudioUrl, which needs
+ * a real track object to recompute the key). Used by the offline-cache list. */
+export async function getCachedBlobUrlByKey(cacheKey) {
+  try {
+    const blob = await localforage.getItem(cacheKey);
+    if (!(blob instanceof Blob)) return null;
+    return trackObjectUrl(URL.createObjectURL(blob));
+  } catch (error) {
+    console.error('Failed to read cached track for playback', error);
+    return null;
   }
 }
 

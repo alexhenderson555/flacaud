@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { HardDrive, Download, Trash2, ChevronDown, ChevronUp, Music } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  HardDrive, Download, Trash2, ChevronDown, ChevronUp, Music, Play, Pause,
+} from 'lucide-react';
 import {
   clearOfflineCache, listCachedTracks, downloadCachedTrackByKey, removeCachedAudioByKey,
+  getCachedBlobUrlByKey,
 } from '../../utils/cache';
 import { showToast } from '../../utils/toast';
 import { coverImgSrc } from '../../utils/coverUrl';
@@ -27,6 +30,12 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
   const [expanded, setExpanded] = useState(false);
   const [tracks, setTracks] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
+  const [playingKey, setPlayingKey] = useState(null);
+  const audioRef = useRef(null);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+  }, []);
 
   if (!isLoggedIn) return null;
 
@@ -44,7 +53,33 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
     }
   };
 
+  const togglePlay = async (row) => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playingKey === row.cacheKey) {
+      el.pause();
+      setPlayingKey(null);
+      return;
+    }
+    const url = await getCachedBlobUrlByKey(row.cacheKey);
+    if (!url) {
+      showToast(t('offlineCachePlayFailed'));
+      return;
+    }
+    el.src = url;
+    setPlayingKey(row.cacheKey);
+    try {
+      await el.play();
+    } catch {
+      setPlayingKey(null);
+    }
+  };
+
   const removeOne = async (row) => {
+    if (playingKey === row.cacheKey) {
+      audioRef.current?.pause();
+      setPlayingKey(null);
+    }
     await removeCachedAudioByKey(row.cacheKey);
     setTracks((cur) => cur.filter((r) => r.cacheKey !== row.cacheKey));
     await onCleared();
@@ -134,6 +169,17 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
               </div>
               <button
                 type="button"
+                title={playingKey === row.cacheKey ? t('offlineCachePause') : t('offlineCachePlay')}
+                onClick={() => togglePlay(row)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '6px', flexShrink: 0,
+                  color: playingKey === row.cacheKey ? 'var(--accent-solid)' : 'var(--text-secondary)',
+                }}
+              >
+                {playingKey === row.cacheKey ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+              </button>
+              <button
+                type="button"
                 title={t('offlineCacheDownload')}
                 onClick={() => downloadCachedTrackByKey(row.cacheKey, row)}
                 style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px', flexShrink: 0 }}
@@ -152,6 +198,7 @@ export default function OfflineCacheCard({ t, isLoggedIn, offlineCacheStats, onC
           ))}
         </div>
       )}
+      <audio ref={audioRef} onEnded={() => setPlayingKey(null)} style={{ display: 'none' }} />
     </div>
   );
 }
