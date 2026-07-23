@@ -306,8 +306,22 @@ export function usePlayerProgressLoop({
     setIsLoading(true);
     const startedAt = performance.now();
     seekBufferWaitRef.current = setInterval(() => {
+      if (el.error) { clearSeekBufferWait(); setIsLoading(false); return; }
       const cur = getMainAudioEl?.() ?? audioRef.current;
-      if (cur !== el || el.error) { clearSeekBufferWait(); setIsLoading(false); return; }
+      if (cur !== el) {
+        // A legitimate abandonment (newer seek, track change, or pause)
+        // already clears this interval via its own path before this can
+        // fire -- reaching here with a different current element means the
+        // audio-element identity changed underneath the wait for some other
+        // reason (e.g. an internal slot swap), not that this wait is stale.
+        // Silently giving up here previously stranded playback paused until
+        // the user manually paused/resumed; retarget onto whatever's
+        // current instead.
+        clearSeekBufferWait();
+        if (cur && !cur.error) playAfterSeekBuffered(cur);
+        else setIsLoading(false);
+        return;
+      }
       if (enough() || performance.now() - startedAt >= SEEK_PREBUFFER_TIMEOUT_MS) go();
     }, 200);
   }, [trackDuration, setIsLoading, getMainAudioEl, audioRef, pendingPlayAfterSeekRef, clearSeekBufferWait]);
