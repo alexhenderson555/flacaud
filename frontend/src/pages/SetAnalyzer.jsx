@@ -25,6 +25,7 @@ import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
 import { normalizeSetUrl, readSetLibrary, deriveSetTitle } from '../utils/setLibrary';
 import { upsertSetLibraryEntryAsync } from '../utils/setLibraryApi';
+import { fetchQuickTracklist } from '../utils/setSearchApi';
 import {
   ANALYZER_MAX_ATTEMPTS,
   ANALYZER_POLL_MS,
@@ -67,11 +68,6 @@ export default function SetAnalyzer() {
   // every render was re-running that effect and firing an immediate poll()
   // every time, on top of the interval, in a tight feedback loop with each
   // poll's own setState calls (hundreds of requests/sec, not 1-per-interval).
-  // Stable reference across renders (memoized on lang only) -- this function is
-  // a dependency of the job-status polling effect below; a fresh reference on
-  // every render was re-running that effect and firing an immediate poll()
-  // every time, on top of the interval, in a tight feedback loop with each
-  // poll's own setState calls (hundreds of requests/sec, not 1-per-interval).
   const t = useCallback(
     (key) => setAnalyzerDict[lang]?.[key] || setAnalyzerDict.en[key] || key,
     [lang],
@@ -88,6 +84,17 @@ export default function SetAnalyzer() {
   const autoAnalyzeStarted = useRef(false);
 
   const [url, setUrl] = useState(() => sessionStorage.getItem('tidal-analyzer-url') || '');
+  // Real title (from the source's own metadata) for save/export filenames --
+  // without it, deriveSetTitle falls back to guessing from the URL slug,
+  // which for hosts like SoundCloud (no word separators in the permalink)
+  // produces unreadable names like "Djkittyamor — Kittymontreuxjazzfest".
+  const [realTitle, setRealTitle] = useState('');
+  // Read via ref (not the reactive state var) inside the polling effect below --
+  // that effect's own dependency array is deliberately minimal (a runaway
+  // re-poll bug lived here before), so it must not gain a new dependency just
+  // to read the latest title once, on completion.
+  const realTitleRef = useRef('');
+  useEffect(() => { realTitleRef.current = realTitle; }, [realTitle]);
   const [jobId, setJobId] = useState(null);
   const [status, setStatus] = useState('idle');
   const [setTracks, setSetTracks] = useState([]);
@@ -103,6 +110,23 @@ export default function SetAnalyzer() {
 
   const trimmedUrl = url.trim();
   const canPlaySet = canPlaySetUrl(trimmedUrl);
+
+  useEffect(() => {
+    setRealTitle('');
+    if (!trimmedUrl) return undefined;
+    let cancelled = false;
+    const saved = readSetLibrary().find(
+      (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(trimmedUrl),
+    );
+    if (saved?.title) {
+      setRealTitle(saved.title);
+      return undefined;
+    }
+    fetchQuickTracklist(trimmedUrl, { lang })
+      .then((info) => { if (!cancelled && info?.title) setRealTitle(info.title); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [trimmedUrl, lang]);
 
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   useEffect(() => {
@@ -385,7 +409,7 @@ export default function SetAnalyzer() {
         if (outcome.status === 'done' && tracks.length && hasAuthSession()) {
           upsertSetLibraryEntryAsync({
             url: trimmedUrl,
-            title: deriveSetTitle(trimmedUrl),
+            title: deriveSetTitle(trimmedUrl, realTitleRef.current),
             setTracks: tracks,
           }, lang).catch(() => {});
         }
@@ -413,7 +437,7 @@ export default function SetAnalyzer() {
     try {
       await upsertSetLibraryEntryAsync({
         url: trimmedUrl,
-        title: deriveSetTitle(trimmedUrl),
+        title: deriveSetTitle(trimmedUrl, realTitle),
         setTracks: setTracks.length ? setTracks : undefined,
       }, lang);
       showToast(t('setSavedToLibrary'));
@@ -431,7 +455,7 @@ export default function SetAnalyzer() {
     setDownloadingSet(true);
     showToast(t('downloadSetPreparing'));
     try {
-      const filename = `${deriveSetTitle(trimmedUrl)}.mp3`.replace(/[<>:"/\\|?*]+/g, '_');
+      const filename = `${deriveSetTitle(trimmedUrl, realTitle)}.mp3`.replace(/[<>:"/\\|?*]+/g, '_');
       await downloadSetAudio(trimmedUrl, { lang, filename });
       showToast(t('downloadStarted'));
     } catch (e) {
@@ -467,13 +491,13 @@ export default function SetAnalyzer() {
   };
 
   const copyTracklist = () => {
-    const header = `${deriveSetTitle(trimmedUrl)}\n${trimmedUrl}\n\n`;
+    const header = `${deriveSetTitle(trimmedUrl, realTitle)}\n${trimmedUrl}\n\n`;
     const text = header + setTracks.map((row) => `${row.timestamp} - ${row.artist} - ${row.title}`).join('\n');
     navigator.clipboard.writeText(text);
   };
 
   const downloadTracklistM3U8 = () => {
-    const setTitle = deriveSetTitle(trimmedUrl);
+    const setTitle = deriveSetTitle(trimmedUrl, realTitle);
     const lines = [
       '#EXTM3U',
       `# ${setTitle} - ${trimmedUrl}`,
