@@ -93,6 +93,13 @@ class TidalClient:
             self._access = self._tokens.access_token
             self._http.headers["Authorization"] = f"Bearer {self._access}"
             resp = self._http.get(f"{API_BASE}{path}", params=params)
+            if resp.status_code == 401 and self._on_auth_error:
+                # The refresh call itself didn't raise, but Tidal still rejects
+                # the retried request -- the account's grant is revoked/banned
+                # rather than just having a stale access token. Without this,
+                # such an account is never reported and the pool keeps retrying
+                # it forever instead of routing around it.
+                self._on_auth_error(401)
         if resp.status_code == 429 and self._on_auth_error:
             self._on_auth_error(resp.status_code)
         resp.raise_for_status()
