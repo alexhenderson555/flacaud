@@ -7,6 +7,7 @@ factored out so the two paths dedupe/match identically.
 import asyncio
 import logging
 import re
+from difflib import SequenceMatcher
 
 from tidal_dl_ru.core.router import get_provider_by_name
 
@@ -75,17 +76,61 @@ def _search_query_candidates(artist: str, title: str) -> list[str]:
     return queries
 
 
+_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_for_score(text: str) -> str:
+    return _NORMALIZE_RE.sub(" ", (text or "").lower()).strip()
+
+
+def _match_score(candidate_title: str, candidate_artists: list, target_artist: str, target_title: str) -> float:
+    """0..1 similarity of a Tidal search hit against the wanted (artist, title).
+    Blindly trusting the API's #1 result was wrong often enough to matter: a
+    multi-artist query like "Robin M Tromlitz" returned an unrelated "Show Me
+    Love" as its first hit, with the actual correct track second."""
+    title_score = SequenceMatcher(
+        None,
+        _normalize_for_score(clean_title_for_query(target_title)),
+        _normalize_for_score(candidate_title),
+    ).ratio()
+
+    target_tokens = set(_normalize_for_score(target_artist).split())
+    cand_tokens = set(_normalize_for_score(" ".join(candidate_artists or [])).split())
+    artist_overlap = (len(target_tokens & cand_tokens) / len(target_tokens)) if target_tokens else 0.0
+
+    return title_score * 0.7 + artist_overlap * 0.3
+
+
+# A hit this close to perfect is worth stopping early for, instead of trying
+# progressively noisier fallback queries that are more likely to surface a
+# false positive.
+_GOOD_ENOUGH_SCORE = 0.85
+# Below this, a query "hit" is more likely an unrelated track that happened to
+# share a word than the real match -- treat it the same as no result.
+_MIN_ACCEPT_SCORE = 0.5
+
+
 async def match_tidal_track(artist: str, title: str) -> dict | None:
-    """Search Tidal for the best match; None if no provider or no hit."""
+    """Search Tidal for the best-scoring match across fallback queries; None if
+    no provider or nothing scores above the acceptance threshold."""
     provider = get_provider_by_name("tidal")
     if not provider:
         return None
+    best = None
+    best_score = 0.0
     for query in _search_query_candidates(artist, title):
         try:
-            tidal_tracks = await asyncio.to_thread(provider.search, query, 1)
+            tidal_tracks = await asyncio.to_thread(provider.search, query, 5)
         except Exception:
             logger.debug("set_track_match: Tidal match lookup failed for %r", query, exc_info=True)
             continue
-        if tidal_tracks:
-            return tidal_tracks[0].model_dump()
+        for candidate in tidal_tracks:
+            score = _match_score(candidate.title, candidate.artists, artist, title)
+            if score > best_score:
+                best_score = score
+                best = candidate
+        if best_score >= _GOOD_ENOUGH_SCORE:
+            break
+    if best is not None and best_score >= _MIN_ACCEPT_SCORE:
+        return best.model_dump()
     return None
