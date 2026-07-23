@@ -297,9 +297,20 @@ export function usePlayerProgressLoop({
     };
     const go = () => {
       clearSeekBufferWait();
-      setIsLoading(false);
-      el.play().catch(() => {
+      el.play().then(() => {
+        setIsLoading(false);
+      }).catch(() => {
+        // Don't clear the spinner on a failed attempt -- GlobalAudio's own
+        // retry effect (watching pendingPlayRef, ~160ms ticks over a 14s
+        // window) is what actually retries play() here; it was previously
+        // never armed because only pendingPlayAfterSeekRef got set, which
+        // nothing reads for this path. Clearing isLoading unconditionally
+        // (before this fix, even before the play() attempt) is exactly what
+        // made the spinner disappear while playback was still silently
+        // retrying, reading as "stuck" and prompting a manual pause+resume.
+        if (pendingPlayRef) pendingPlayRef.current = true;
         if (pendingPlayAfterSeekRef) pendingPlayAfterSeekRef.current = true;
+        setIsLoading(true);
       });
     };
     if (enough()) { go(); return; }
@@ -324,7 +335,7 @@ export function usePlayerProgressLoop({
       }
       if (enough() || performance.now() - startedAt >= SEEK_PREBUFFER_TIMEOUT_MS) go();
     }, 200);
-  }, [trackDuration, setIsLoading, getMainAudioEl, audioRef, pendingPlayAfterSeekRef, clearSeekBufferWait]);
+  }, [trackDuration, setIsLoading, getMainAudioEl, audioRef, pendingPlayRef, pendingPlayAfterSeekRef, clearSeekBufferWait]);
 
   // Cancel a pending post-seek buffer wait when playback is paused or the track changes.
   useEffect(() => {
