@@ -40,6 +40,7 @@ import {
   parseSetTimestamp,
   resolveAnalyzerJobOutcome,
   dedupeSetTracks,
+  setTrackRowDurationSeconds,
 } from '../utils/setAnalyzerUtils';
 
 export default function SetAnalyzer() {
@@ -61,7 +62,20 @@ export default function SetAnalyzer() {
     radioLoadingTrackId,
     t: tApp,
   } = useOutletContext();
-  const t = (key) => setAnalyzerDict[lang]?.[key] || setAnalyzerDict.en[key] || key;
+  // Stable reference across renders (memoized on lang only) -- this function is
+  // a dependency of the job-status polling effect below; a fresh reference on
+  // every render was re-running that effect and firing an immediate poll()
+  // every time, on top of the interval, in a tight feedback loop with each
+  // poll's own setState calls (hundreds of requests/sec, not 1-per-interval).
+  // Stable reference across renders (memoized on lang only) -- this function is
+  // a dependency of the job-status polling effect below; a fresh reference on
+  // every render was re-running that effect and firing an immediate poll()
+  // every time, on top of the interval, in a tight feedback loop with each
+  // poll's own setState calls (hundreds of requests/sec, not 1-per-interval).
+  const t = useCallback(
+    (key) => setAnalyzerDict[lang]?.[key] || setAnalyzerDict.en[key] || key,
+    [lang],
+  );
 
   const {
     loadSetEmbed,
@@ -453,8 +467,30 @@ export default function SetAnalyzer() {
   };
 
   const copyTracklist = () => {
-    const text = setTracks.map((row) => `${row.timestamp} - ${row.artist} - ${row.title}`).join('\n');
+    const header = `${deriveSetTitle(trimmedUrl)}\n${trimmedUrl}\n\n`;
+    const text = header + setTracks.map((row) => `${row.timestamp} - ${row.artist} - ${row.title}`).join('\n');
     navigator.clipboard.writeText(text);
+  };
+
+  const downloadTracklistM3U8 = () => {
+    const setTitle = deriveSetTitle(trimmedUrl);
+    const lines = [
+      '#EXTM3U',
+      `# ${setTitle} - ${trimmedUrl}`,
+    ];
+    for (const row of setTracks) {
+      const durationSec = setTrackRowDurationSeconds(row, null, normalizeSetMatchedTrack(row)) || -1;
+      lines.push(`#EXTINF:${durationSec},${row.artist} - ${row.title}`);
+      const fallbackSearchUrl = `https://music.youtube.com/search?q=${encodeURIComponent(`${row.artist || ''} ${row.title || ''}`.trim())}`;
+      lines.push(row.matched_track?.source_url || fallbackSearchUrl);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'application/vnd.apple.mpegurl' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${setTitle}.m3u8`.replace(/[<>:"/\\|?*]+/g, '_');
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const addAllToLibrary = () => {
@@ -646,6 +682,11 @@ export default function SetAnalyzer() {
                 <List size={16} />
                 {' '}
                 {t('copyText')}
+              </button>
+              <button type="button" className="btn-secondary" onClick={downloadTracklistM3U8} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 20px' }}>
+                <DownloadCloud size={16} />
+                {' '}
+                {t('downloadM3U8')}
               </button>
               <button type="button" className="btn-secondary" onClick={addAllToLibrary} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '20px', padding: '8px 20px' }}>
                 <Heart size={16} />
