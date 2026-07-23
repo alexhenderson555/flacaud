@@ -185,7 +185,12 @@ function QueueReorderRow({ trackId, track, onPlay, onRemove, onDragEnd }) {
       dragControls={dragControls}
       onDragEnd={onDragEnd}
       whileDrag={{ scale: 1.02, boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}
-      style={{ marginBottom: '8px', listStyle: 'none', touchAction: 'none' }}
+      // touchAction: 'none' here (rather than just on the drag handle below)
+      // blocked native touch-scroll for the WHOLE row on mobile -- with
+      // dragListener={false}, dragging is only ever started from the handle's
+      // own onPointerDown (which already sets its own touchAction: 'none'),
+      // so the row itself doesn't need to give up touch gestures at all.
+      style={{ marginBottom: '8px', listStyle: 'none' }}
     >
       <QueueRow
         track={track}
