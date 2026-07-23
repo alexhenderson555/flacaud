@@ -172,30 +172,37 @@ export default function SetAnalyzer() {
     loadSetEmbed(trimmedUrl);
   }, [trimmedUrl, canPlaySet, embedUrl, loadSetEmbed]);
 
-  useEffect(() => {
-    if (!trimmedUrl) return;
-    const active = loadActiveAnalyzerJob(trimmedUrl);
-    if (!active?.jobId) return;
-    // A job that died mid-flight (server restart, worker crash) without ever
-    // clearing its own "active" marker would otherwise clobber an already
-    // -completed, saved tracklist with a stale "resuming…" state forever.
-    // Only resume if this marker is newer than the last successful save.
+  // Shared by the resume effect below AND the auto-analyze effect further down:
+  // a job that died mid-flight (server restart, worker crash) without ever
+  // clearing its own "active" marker would otherwise clobber an already
+  // -completed, saved tracklist with a stale "resuming…" state forever, so a
+  // marker only counts as resumable if it's newer than the last successful save.
+  const getResumableActiveJob = useCallback((forUrl) => {
+    const active = loadActiveAnalyzerJob(forUrl);
+    if (!active?.jobId) return null;
     const savedEntry = readSetLibrary().find(
-      (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(trimmedUrl),
+      (entry) => normalizeSetUrl(entry.url) === normalizeSetUrl(forUrl),
     );
     const staleMarker = savedEntry?.setTracks?.length > 0
       && (savedEntry.updatedAt || 0) >= (active.savedAt || 0);
     if (staleMarker) {
-      clearActiveAnalyzerJob(trimmedUrl);
-      return;
+      clearActiveAnalyzerJob(forUrl);
+      return null;
     }
+    return active;
+  }, []);
+
+  useEffect(() => {
+    if (!trimmedUrl) return;
+    const active = getResumableActiveJob(trimmedUrl);
+    if (!active) return;
     setJobId(active.jobId);
     setStatus('running');
     if (!resumeToastShown.current) {
       resumeToastShown.current = true;
       showToast(t('analysisResumed'));
     }
-  }, [trimmedUrl, t]);
+  }, [trimmedUrl, t, getResumableActiveJob]);
 
   const seekSetAt = useCallback((timestamp) => {
     if (!canPlaySet) return;
@@ -289,8 +296,15 @@ export default function SetAnalyzer() {
     if (searchParams.get('analyze') !== '1') return;
     if (autoAnalyzeStarted.current || !trimmedUrl || isAnalyzing) return;
     autoAnalyzeStarted.current = true;
+    // `isAnalyzing` reflects `status` from THIS render, which can still be
+    // stale ('idle') on the very render where the resume effect above is
+    // about to flip it to 'running' -- both effects run off the same render's
+    // values, so without this extra check a fresh startAnalysis() here would
+    // win the race and overwrite the resumable job's sessionStorage marker,
+    // orphaning the still-running server-side job with no way to find it again.
+    if (getResumableActiveJob(trimmedUrl)) return;
     void startAnalysis();
-  }, [searchParams, trimmedUrl, isAnalyzing]);
+  }, [searchParams, trimmedUrl, isAnalyzing, getResumableActiveJob]);
 
   const cancelAnalysis = async () => {
     if (!jobId) return;
