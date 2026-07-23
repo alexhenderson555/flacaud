@@ -20,7 +20,15 @@ _FLAT_OPTS = {
 
 
 def _entry_to_result(entry: dict, source: str) -> dict | None:
-    url = entry.get("url") or entry.get("webpage_url") or entry.get("original_url")
+    # webpage_url first, NOT url: for SoundCloud's flat-extraction search
+    # results, entry["url"] is the internal API resource form
+    # (https://api.soundcloud.com/tracks/soundcloud:tracks:ID) -- not a
+    # fetchable page. It resolves fine for oEmbed/metadata previews but 401s
+    # or 429s every single time yt-dlp tries to actually download/analyze it
+    # later. entry["webpage_url"] is the real public soundcloud.com page.
+    # YouTube's flat entries have webpage_url=None and a already-correct
+    # url, so this ordering is safe for both sources.
+    url = entry.get("webpage_url") or entry.get("original_url") or entry.get("url")
     if not url:
         return None
     if source == "youtube" and entry.get("id") and not url.startswith("http"):

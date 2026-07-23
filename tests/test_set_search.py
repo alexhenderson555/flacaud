@@ -1,4 +1,47 @@
-from tidal_dl_ru.core.set_search import MIN_SET_DURATION_SECONDS, build_similar_queries, search_sets
+from tidal_dl_ru.core.set_search import (
+    MIN_SET_DURATION_SECONDS,
+    _entry_to_result,
+    build_similar_queries,
+    search_sets,
+)
+
+
+class TestEntryToResult:
+    def test_soundcloud_prefers_webpage_url_over_api_url(self):
+        # entry["url"] for SoundCloud's flat search results is the internal
+        # API resource form -- not downloadable, 401s/429s every time. The
+        # real public page lives in webpage_url and must win.
+        entry = {
+            "id": "2361184544",
+            "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A2361184544",
+            "webpage_url": "https://soundcloud.com/kayo/moeaike-live-performance",
+            "title": "Moeaike Live Performance",
+            "duration": 3600,
+        }
+        row = _entry_to_result(entry, "soundcloud")
+        assert row["url"] == "https://soundcloud.com/kayo/moeaike-live-performance"
+
+    def test_youtube_keeps_working_url_with_no_webpage_url(self):
+        # YouTube's flat entries have webpage_url=None and an already-correct url.
+        entry = {
+            "id": "abc123",
+            "url": "https://www.youtube.com/watch?v=abc123",
+            "webpage_url": None,
+            "title": "Some DJ Set",
+            "duration": 3600,
+        }
+        row = _entry_to_result(entry, "youtube")
+        assert row["url"] == "https://www.youtube.com/watch?v=abc123"
+
+    def test_youtube_reconstructs_url_when_url_is_a_bare_id(self):
+        # Some yt-dlp modes/versions put a bare (non-http) value in url.
+        entry = {"id": "abc123", "url": "abc123", "title": "Some DJ Set", "duration": 3600}
+        row = _entry_to_result(entry, "youtube")
+        assert row["url"] == "https://www.youtube.com/watch?v=abc123"
+
+    def test_returns_none_without_any_url(self):
+        entry = {"title": "No URL Here", "duration": 3600}
+        assert _entry_to_result(entry, "soundcloud") is None
 
 
 def test_similar_queries_prefer_artist_over_festival_channel():
