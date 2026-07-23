@@ -1432,6 +1432,15 @@ button.nav-item {
 .player-bar--set-mode .player-transport-row {
   justify-content: center;
 }
+/* In set-audio mode the info column no longer needs the extra space it gets
+   in normal playback (quality picker, artist link, badges) -- with the
+   normal 1.55fr/0.95fr split, "centered in its own column" still lands well
+   right of the bar's true middle. Balance the two flexible columns instead. */
+.player-bar.player-bar--set-mode {
+  /* Higher specificity than the >=769px .player-bar override in
+     player-bar.css so this wins regardless of stylesheet import order. */
+  grid-template-columns: minmax(320px, 1fr) minmax(240px, 1fr) max-content max-content;
+}
 .player-bar {
   bottom: 0;
   left: var(--layout-sidebar-width);

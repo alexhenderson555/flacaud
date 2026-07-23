@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Play, Music } from 'lucide-react';
+import { Play, Music, ExternalLink } from 'lucide-react';
 import { coverImgSrc } from '../../utils/coverUrl';
 import TrackRowActions from '../TrackRowActions';
 import ArtistLine from '../ArtistLine';
@@ -103,7 +103,20 @@ export default function SetTracklistRow({
             testIdPrefix="set-analyzer"
           />
         ) : (
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('notFound')}</span>
+          <a
+            href={`https://music.youtube.com/search?q=${encodeURIComponent(`${row.artist || ''} ${row.title || ''}`.trim())}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={t('searchYouTubeMusic')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem',
+              color: 'var(--text-secondary)', textDecoration: 'none', whiteSpace: 'nowrap',
+            }}
+          >
+            {t('notFound')}
+            <ExternalLink size={13} aria-hidden />
+          </a>
         )}
       </div>
     </motion.div>

@@ -553,26 +553,30 @@ export default function PlayerBar({
           <Shuffle size={transportMinorSize} />
         </button>
       )}
-      <button
-        type="button"
-        aria-label={t('playerPrevious')}
-        disabled={setActive || !currentTrack}
-        onClick={playPrevious}
-        className="player-transport-icon"
-      >
-        <SkipBack size={transportSkipSize} />
-      </button>
+      {!setActive && (
+        <button
+          type="button"
+          aria-label={t('playerPrevious')}
+          disabled={!currentTrack}
+          onClick={playPrevious}
+          className="player-transport-icon"
+        >
+          <SkipBack size={transportSkipSize} />
+        </button>
+      )}
       {transportBtn(transportPlaySize)}
-      <button
-        type="button"
-        data-testid="player-next-btn"
-        aria-label={t('playerNext')}
-        disabled={setActive || !(playlist.length > 0 && currentTrack)}
-        onClick={playNext}
-        className="player-transport-icon"
-      >
-        <SkipForward size={transportSkipSize} />
-      </button>
+      {!setActive && (
+        <button
+          type="button"
+          data-testid="player-next-btn"
+          aria-label={t('playerNext')}
+          disabled={!(playlist.length > 0 && currentTrack)}
+          onClick={playNext}
+          className="player-transport-icon"
+        >
+          <SkipForward size={transportSkipSize} />
+        </button>
+      )}
       {!setActive && (
         <button
           type="button"
