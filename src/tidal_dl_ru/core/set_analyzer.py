@@ -4,11 +4,52 @@ import os
 import shutil
 import subprocess
 import tempfile
+from typing import Optional
 
 from tidal_dl_ru.core.set_track_match import clean_title_for_query, dedupe_key, match_tidal_track
 from tidal_dl_ru.server import jobs as job_state
 
 logger = logging.getLogger(__name__)
+
+# A 429 from the source (SoundCloud/YouTube) is typically a transient burst
+# limit, not a permanent block -- retrying after a short backoff turns a brief
+# provider hiccup into a successful job instead of a fully failed one the user
+# has to notice and manually retry themselves.
+_RATE_LIMIT_RETRIES = 2
+_RATE_LIMIT_BACKOFF_SECONDS = 20
+
+
+def _is_rate_limited(exc: Exception) -> bool:
+    text = str(exc)
+    return "429" in text or "Too Many Requests" in text
+
+
+def _friendly_download_error(exc: Exception) -> str:
+    if _is_rate_limited(exc):
+        return "The source is rate-limiting requests right now. Please try again in a few minutes."
+    return f"Failed to download audio: {exc}"
+
+
+async def _run_yt_dlp_download(job_id: str, download_fn) -> Optional[Exception]:
+    """Run a yt-dlp download, retrying on a provider rate-limit before giving
+    up. Returns None on success, or the final exception on failure/cancel."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(_RATE_LIMIT_RETRIES + 1):
+        if job_state.is_cancelled(job_id):
+            return RuntimeError("cancelled")
+        try:
+            await asyncio.to_thread(download_fn)
+            return None
+        except Exception as e:  # noqa: BLE001
+            last_exc = e
+            if job_state.is_cancelled(job_id) or not _is_rate_limited(e) or attempt == _RATE_LIMIT_RETRIES:
+                return e
+            logger.info(
+                "yt-dlp rate-limited (attempt %s/%s), retrying in %ss: %s",
+                attempt + 1, _RATE_LIMIT_RETRIES, _RATE_LIMIT_BACKOFF_SECONDS, e,
+            )
+            await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
+    return last_exc
 
 # How many segments to recognize concurrently. Shazam calls are network-bound, so
 # batching them cuts scan wall-time ~N×. Raised from 6 -> 10 for faster scans;
@@ -93,13 +134,12 @@ async def download_set_audio_task(job_id: str, url: str) -> dict:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
 
-        try:
-            await asyncio.to_thread(_download)
-        except Exception as e:
+        err = await _run_yt_dlp_download(job_id, _download)
+        if err is not None:
             if job_state.is_cancelled(job_id):
                 return {"ok": False, "error": "cancelled"}
-            job_state.mark_failed(job_id, f"Failed to download audio: {e}")
-            return {"ok": False, "error": str(e)}
+            job_state.mark_failed(job_id, _friendly_download_error(err))
+            return {"ok": False, "error": str(err)}
 
         if not os.path.exists(audio_file):
             candidates = [
@@ -170,19 +210,19 @@ async def analyze_set_task(
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
 
-        try:
-            await asyncio.to_thread(_download)
-        except Exception as e:
+        err = await _run_yt_dlp_download(job_id, _download)
+        if err is not None:
             if job_state.is_cancelled(job_id):
                 return {"ok": False, "error": "cancelled"}
-            job_state.mark_failed(job_id, f"Failed to download audio: {e}")
+            friendly = _friendly_download_error(err)
+            job_state.mark_failed(job_id, friendly)
             job_state.update_analysis(
                 job_id,
                 phase="failed",
                 percent=0,
-                label=f"Failed to download audio: {e}",
+                label=friendly,
             )
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": str(err)}
 
         if not os.path.exists(audio_file):
             # yt-dlp may leave intermediate ext before ffmpeg

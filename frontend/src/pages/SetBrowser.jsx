@@ -199,11 +199,11 @@ export default function SetBrowser() {
     return () => window.removeEventListener('tidal-sets-changed', check);
   }, [trimmedUrl]);
 
-  const sortedResults = useMemo(() => {
-    let rows = results;
+  const applySetFilters = useCallback((rows) => {
+    let filtered = rows;
     if (durationFilter !== 'any') {
       const [min, max] = DURATION_RANGES[durationFilter];
-      rows = rows.filter((r) => {
+      filtered = filtered.filter((r) => {
         const dur = r.duration_seconds || 0;
         return dur >= min && dur < max;
       });
@@ -211,12 +211,15 @@ export default function SetBrowser() {
     if (uploadedFilter !== 'any') {
       const maxAge = UPLOADED_MAX_AGE_SEC[uploadedFilter];
       const cutoff = Date.now() / 1000 - maxAge;
-      rows = rows.filter((r) => (r.upload_timestamp || 0) >= cutoff);
+      filtered = filtered.filter((r) => (r.upload_timestamp || 0) >= cutoff);
     }
-    if (sortBy === 'views') return [...rows].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-    if (sortBy === 'date') return [...rows].sort((a, b) => (b.upload_timestamp || 0) - (a.upload_timestamp || 0));
-    return rows;
-  }, [results, sortBy, durationFilter, uploadedFilter]);
+    if (sortBy === 'views') return [...filtered].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    if (sortBy === 'date') return [...filtered].sort((a, b) => (b.upload_timestamp || 0) - (a.upload_timestamp || 0));
+    return filtered;
+  }, [sortBy, durationFilter, uploadedFilter]);
+
+  const sortedResults = useMemo(() => applySetFilters(results), [results, applySetFilters]);
+  const sortedRecommended = useMemo(() => applySetFilters(recommended), [recommended, applySetFilters]);
 
   const setTracks = useMemo(() => tracklist?.tracks || [], [tracklist]);
   const playableTracks = useMemo(
@@ -505,8 +508,34 @@ export default function SetBrowser() {
                     <Sparkles size={20} />
                     {t('recommendedSets')}
                   </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <GlassDropdown
+                      testId="set-browser-recommended-sort"
+                      align="left"
+                      minWidth={150}
+                      value={sortBy}
+                      onChange={setSortBy}
+                      options={SORT_OPTIONS.map((opt) => ({ value: opt, label: t(`sort_${opt}`) }))}
+                    />
+                    <GlassDropdown
+                      testId="set-browser-recommended-duration"
+                      align="left"
+                      minWidth={140}
+                      value={durationFilter}
+                      onChange={setDurationFilter}
+                      options={DURATION_OPTIONS.map((opt) => ({ value: opt, label: t(`duration_${opt}`) }))}
+                    />
+                    <GlassDropdown
+                      testId="set-browser-recommended-uploaded"
+                      align="left"
+                      minWidth={140}
+                      value={uploadedFilter}
+                      onChange={setUploadedFilter}
+                      options={UPLOADED_OPTIONS.map((opt) => ({ value: opt, label: t(`uploaded_${opt}`) }))}
+                    />
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px', paddingBottom: '16px' }}>
-                    {recommended.map((set) => (
+                    {sortedRecommended.map((set) => (
                       <SetResultCard key={set.url} set={set} onSelect={selectSet} t={t} lang={lang} />
                     ))}
                   </div>
