@@ -4,7 +4,10 @@ import { useParams, useOutletContext, useNavigate, Link } from 'react-router-dom
 import { Play, ChevronLeft, Heart } from 'lucide-react';
 import PlaylistModal from '../components/PlaylistModal';
 import LibraryTrackRow from '../components/LibraryTrackRow';
-import { apiGetJson } from '../utils/apiClient';
+import { apiGetJson, messageForApiError } from '../utils/apiClient';
+import { useLibraryDataContext } from '../context/LibraryDataContext';
+import { addAlbumToLibraryApi, removeAlbumFromLibraryApi } from '../utils/libraryApi';
+import { hasAuthSession } from '../utils/hasAuthSession';
 
 export default function AlbumView() {
   const { id } = useParams();
@@ -13,6 +16,8 @@ export default function AlbumView() {
   const [loading, setLoading] = useState(true);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   
+  const { albums = [], setAlbums } = useLibraryDataContext() || {};
+
   const {
     togglePlay,
     currentTrackId,
@@ -22,9 +27,10 @@ export default function AlbumView() {
     toggleLike,
     handleDownload,
     downloadedTracks,
-    t: globalT,
     startTrackRadio,
     radioLoadingTrackId,
+    t: globalT,
+    lang,
   } = useOutletContext();
 
   const rowT = globalT || ((k) => k);
@@ -64,6 +70,31 @@ export default function AlbumView() {
   }
 
   const { album, tracks } = data;
+  const isSaved = albums && albums.some((a) => String(a.provider_id) === String(album.id));
+
+  const toggleSaveAlbum = async () => {
+    if (!hasAuthSession()) {
+      showToast(lang === 'ru' ? 'Сначала войдите в аккаунт' : 'Login to save albums');
+      return;
+    }
+    
+    try {
+      if (isSaved) {
+        const savedAlbum = albums.find((a) => String(a.provider_id) === String(album.id));
+        if (savedAlbum) {
+          await removeAlbumFromLibraryApi(savedAlbum.id, lang);
+          if (setAlbums) setAlbums((prev) => prev.filter((a) => a.id !== savedAlbum.id));
+          showToast(lang === 'ru' ? 'Альбом удален из медиатеки' : 'Album removed from library');
+        }
+      } else {
+        const res = await addAlbumToLibraryApi(album, lang);
+        if (setAlbums) setAlbums((prev) => [res, ...prev]);
+        showToast(lang === 'ru' ? 'Альбом добавлен в медиатеку' : 'Album saved to library');
+      }
+    } catch (err) {
+      showToast(messageForApiError(err, lang));
+    }
+  };
 
   return (
     <div style={{ padding: '0 20px', paddingBottom: '40px', overflowY: 'auto', height: '100%' }} className="hide-scrollbar">
@@ -88,8 +119,12 @@ export default function AlbumView() {
                 {album.artist.name}
               </Link>
             )}
-            <span>•</span>
-            <span>{album.releaseDate ? album.releaseDate.split('-')[0] : ''}</span>
+            {album.releaseDate && album.releaseDate.trim().length > 0 && album.releaseDate.split('-')[0] !== '0000' && (
+              <>
+                <span>•</span>
+                <span>{album.releaseDate.split('-')[0]}</span>
+              </>
+            )}
             <span>•</span>
             <span>{tracks.length} tracks</span>
           </div>
@@ -107,21 +142,10 @@ export default function AlbumView() {
             </button>
             <button 
               className="btn-secondary" 
-              style={{ borderRadius: '24px', padding: '12px 24px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', cursor: 'pointer' }}
-              onClick={() => {
-                const saved = localStorage.getItem('tidal-playlists');
-                let playlists = saved ? JSON.parse(saved) : [];
-                playlists.push({
-                  id: Date.now().toString(),
-                  name: album.title,
-                  tracks: tracks,
-                  createdAt: new Date().toISOString()
-                });
-                localStorage.setItem('tidal-playlists', JSON.stringify(playlists));
-                showToast(`Album saved to Library as Playlist: ${album.title}`);
-              }}
+              style={{ borderRadius: '24px', padding: '12px 24px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', background: isSaved ? 'var(--accent-solid)' : 'rgba(255,255,255,0.1)', border: 'none', color: isSaved ? 'black' : 'white', cursor: 'pointer' }}
+              onClick={toggleSaveAlbum}
             >
-              <Heart size={20} /> Save to Library
+              <Heart size={20} fill={isSaved ? "currentColor" : "none"} /> {isSaved ? (lang === 'ru' ? 'В медиатеке' : 'Saved') : (lang === 'ru' ? 'Сохранить' : 'Save')}
             </button>
           </div>
         </div>
