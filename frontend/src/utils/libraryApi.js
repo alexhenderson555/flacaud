@@ -400,3 +400,27 @@ export function librarySortCompare(a, b, sortOrder) {
   if (sortOrder === 'oldest') return ta - tb;
   return tb - ta;
 }
+
+export async function fetchSavedAlbumsApi(lang = 'en') {
+  if (!hasAuthSession()) return [];
+  const res = await apiGetJson('/api/albums', { auth: true, lang });
+  return res || [];
+}
+
+export async function addAlbumToLibraryApi(album, lang = 'en') {
+  if (!hasAuthSession()) throw new Error('Must be logged in to save albums');
+  const payload = {
+    provider_id: String(album.id || album.provider_id),
+    title: album.title,
+    artists_json: JSON.stringify(album.artists || []),
+    cover_url: album.cover || album.cover_url || null,
+    release_date: album.releaseDate || album.release_date || null,
+    track_count: album.numberOfTracks || album.track_count || album.tracks?.length || 0,
+  };
+  return await apiPostJson('/api/albums', payload, { auth: true, lang });
+}
+
+export async function removeAlbumFromLibraryApi(albumId, lang = 'en') {
+  if (!hasAuthSession()) return;
+  return await apiDeleteJson(`/api/albums/${albumId}`, { auth: true, lang });
+}
