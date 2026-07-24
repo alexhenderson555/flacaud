@@ -145,7 +145,7 @@ export default function AlbumView() {
               style={{ borderRadius: '24px', padding: '12px 24px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', background: isSaved ? 'var(--accent-solid)' : 'rgba(255,255,255,0.1)', border: 'none', color: isSaved ? 'black' : 'white', cursor: 'pointer' }}
               onClick={toggleSaveAlbum}
             >
-              <Heart size={20} fill={isSaved ? "currentColor" : "none"} /> {isSaved ? (lang === 'ru' ? 'В медиатеке' : 'Saved') : (lang === 'ru' ? 'Сохранить' : 'Save')}
+              <Heart size={20} fill={isSaved ? "currentColor" : "none"} /> {isSaved ? (lang === 'ru' ? 'В медиатеке' : 'In Library') : (lang === 'ru' ? 'В медиатеку' : 'Add to Library')}
             </button>
           </div>
         </div>
