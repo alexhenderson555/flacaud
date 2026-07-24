@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.database import get_session
-from tidal_dl_ru.database.models import Playlist, PlaylistBase, SavedTrack, SavedTrackBase, User
+from tidal_dl_ru.database.models import Playlist, PlaylistBase, SavedTrack, SavedTrackBase, User, SavedAlbum, SavedAlbumBase
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -18,21 +18,28 @@ class PlaylistTracksUpdate(BaseModel):
 
 def _playlist_to_dict(p) -> dict:
     tracks = []
-    for t in sorted(p.track_rows, key=lambda x: x.position):
+    if p.track_rows:
+        for t in sorted(p.track_rows, key=lambda x: x.position):
+            try:
+                artists = json.loads(t.artists_json)
+            except Exception:
+                artists = []
+            tracks.append({
+                "provider": t.provider,
+                "provider_id": t.provider_id,
+                "title": t.title,
+                "artists": artists,
+                "album": t.album,
+                "duration_s": t.duration_s,
+                "cover_url": t.cover_url,
+                "quality": t.quality,
+            })
+    elif p.tracks_json:
         try:
-            artists = json.loads(t.artists_json)
+            tracks = json.loads(p.tracks_json)
         except Exception:
-            artists = []
-        tracks.append({
-            "provider": t.provider,
-            "provider_id": t.provider_id,
-            "title": t.title,
-            "artists": artists,
-            "album": t.album,
-            "duration_s": t.duration_s,
-            "cover_url": t.cover_url,
-            "quality": t.quality,
-        })
+            pass
+
     d = p.model_dump()
     d["tracks_json"] = json.dumps(tracks)
     return d
@@ -236,5 +243,53 @@ def delete_playlist(
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
     session.delete(playlist)
+    session.commit()
+    return {"ok": True}
+
+
+@router.get("/albums", response_model=List[SavedAlbum])
+def get_saved_albums(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    statement = (
+        select(SavedAlbum)
+        .where(SavedAlbum.user_id == current_user.id)
+        .order_by(SavedAlbum.saved_at.desc())
+    )
+    return list(session.exec(statement).all())
+
+
+@router.post("/albums", response_model=SavedAlbum)
+def add_saved_album(
+    album: SavedAlbumBase,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    existing = session.exec(
+        select(SavedAlbum).where(
+            SavedAlbum.user_id == current_user.id,
+            SavedAlbum.provider_id == album.provider_id,
+        )
+    ).first()
+    if existing:
+        return existing
+
+    db_album = SavedAlbum(**album.model_dump(), user_id=current_user.id)
+    session.add(db_album)
+    session.commit()
+    session.refresh(db_album)
+    return db_album
+
+
+@router.delete("/albums/{album_id}")
+def remove_saved_album(
+    album_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    album = session.exec(
+        select(SavedAlbum).where(SavedAlbum.id == album_id, SavedAlbum.user_id == current_user.id)
+    ).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+    session.delete(album)
     session.commit()
     return {"ok": True}
