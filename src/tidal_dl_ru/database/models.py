@@ -31,7 +31,6 @@ class User(UserBase, table=True):
     saved_tracks: List["SavedTrack"] = Relationship(back_populates="user")
     playlists: List["Playlist"] = Relationship(back_populates="user")
     saved_sets: List["SavedSet"] = Relationship(back_populates="user")
-    saved_albums: List["SavedAlbum"] = Relationship(back_populates="user")
 
     @property
     def effective_plan(self) -> str:
@@ -108,7 +107,6 @@ class Playlist(PlaylistBase, table=True):
     user_id: int = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=_utcnow)
     share_token: Optional[str] = Field(default=None, unique=True, index=True)
-    tracks_json: Optional[str] = Field(default=None)
 
     user: User = Relationship(back_populates="playlists")
     track_rows: List["PlaylistTrack"] = Relationship(back_populates="playlist")
@@ -188,23 +186,6 @@ class SavedSetRead(SavedSetBase):
     saved_at: datetime
     updated_at: datetime
     share_token: Optional[str] = None
-
-
-class SavedAlbumBase(SQLModel):
-    provider_id: str = Field(max_length=64, index=True)
-    title: str = Field(max_length=512)
-    artists_json: str = Field(default="[]")
-    cover_url: Optional[str] = Field(default=None, max_length=512)
-    release_date: Optional[str] = Field(default=None, max_length=16)
-    track_count: int = Field(default=0)
-
-
-class SavedAlbum(SavedAlbumBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
-    saved_at: datetime = Field(default_factory=_utcnow)
-
-    user: User = Relationship(back_populates="saved_albums")
 
 
 class ProcessedPayment(SQLModel, table=True):
