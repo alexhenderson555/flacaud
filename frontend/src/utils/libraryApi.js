@@ -1,4 +1,4 @@
-import { apiDelete, apiGetJson, apiPatchJson, apiPostJson, apiPutJson } from './apiClient';
+import { apiDelete, apiDeleteJson, apiGetJson, apiPatchJson, apiPostJson, apiPutJson } from './apiClient';
 import { hasAuthSession } from './hasAuthSession';
 import { mapPlaylistTrack, normalizeTrack, parseArtistIds, trackIdentityKey } from './trackNormalize';
 import { seedFeaturesFromLibraryRow } from './trackFeatures';
@@ -403,7 +403,7 @@ export function librarySortCompare(a, b, sortOrder) {
 
 export async function fetchSavedAlbumsApi(lang = 'en') {
   if (!hasAuthSession()) return [];
-  const res = await apiGetJson('/api/albums', { auth: true, lang });
+  const res = await apiGetJson('/api/library/albums', { auth: true, lang });
   return res || [];
 }
 
@@ -417,10 +417,10 @@ export async function addAlbumToLibraryApi(album, lang = 'en') {
     release_date: album.releaseDate || album.release_date || null,
     track_count: album.numberOfTracks || album.track_count || album.tracks?.length || 0,
   };
-  return await apiPostJson('/api/albums', payload, { auth: true, lang });
+  return await apiPostJson('/api/library/albums', payload, { auth: true, lang });
 }
 
 export async function removeAlbumFromLibraryApi(albumId, lang = 'en') {
   if (!hasAuthSession()) return;
-  return await apiDeleteJson(`/api/albums/${albumId}`, { auth: true, lang });
+  return await apiDeleteJson(`/api/library/albums/${albumId}`, { auth: true, lang });
 }
