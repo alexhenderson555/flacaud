@@ -384,13 +384,41 @@ export function useLibraryData(lang = 'en') {
     return created;
   }, [playlists, lang]);
 
+  const [albums, setAlbums] = useState([]);
+  const [albumsLoading, setAlbumsLoading] = useState(false);
+  const albumsLoadedRef = useRef(false);
+
+  const loadAlbums = useCallback(async () => {
+    if (!hasAuthSession() || albumsLoadedRef.current) return;
+    setAlbumsLoading(true);
+    try {
+      const { fetchSavedAlbumsApi } = await import('../utils/libraryApi');
+      const data = await fetchSavedAlbumsApi(lang);
+      setAlbums(data || []);
+      albumsLoadedRef.current = true;
+    } catch (err) {
+      console.error('Failed to load albums', err);
+    } finally {
+      setAlbumsLoading(false);
+    }
+  }, [lang]);
+
+  useEffect(() => {
+    if (hasAuthSession() && !albumsLoadedRef.current) {
+      void loadAlbums();
+    }
+  }, [loadAlbums]);
+
   return {
     library,
     setLibrary,
     playlists,
     setPlaylists,
+    albums,
+    setAlbums,
     libraryLoading,
     playlistsLoading,
+    albumsLoading,
     loadLibraryTracks,
     loadPlaylistsData,
     reloadAll,

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { showToast } from '../utils/toast';
-import { useParams, useOutletContext, useNavigate, Link } from 'react-router-dom';
+import { useParams, useOutletContext, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Play, ChevronLeft, Heart } from 'lucide-react';
 import PlaylistModal from '../components/PlaylistModal';
 import LibraryTrackRow from '../components/LibraryTrackRow';
@@ -12,9 +12,11 @@ import { hasAuthSession } from '../utils/hasAuthSession';
 export default function AlbumView() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
+  const autoplayedRef = useRef(false);
   
   const { albums = [], setAlbums } = useLibraryDataContext() || {};
 
@@ -52,6 +54,14 @@ export default function AlbumView() {
     fetchAlbum();
     return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    if (autoplayedRef.current) return;
+    if (searchParams.get('autoplay') !== '1') return;
+    if (!data?.tracks?.length) return;
+    autoplayedRef.current = true;
+    togglePlay(data.tracks[0], data.tracks);
+  }, [data, searchParams, togglePlay]);
 
   if (loading) {
     return (

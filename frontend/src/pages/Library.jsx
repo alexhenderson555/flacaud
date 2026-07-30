@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useOutletContext, useSearchParams } from 'react-router-dom';
+import { useOutletContext, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Download,
@@ -18,6 +18,7 @@ import { messageForApiError } from '../utils/apiClient';
 import GlassDropdown from '../components/GlassDropdown';
 import DjFiltersPanel from '../components/DjFiltersPanel';
 import PlaylistCard from '../components/PlaylistCard';
+import AlbumCard from '../components/AlbumCard';
 import PlaylistTrackList from '../components/PlaylistTrackList';
 import VirtualTrackList from '../components/VirtualTrackList';
 import PlaylistModal from '../components/PlaylistModal';
@@ -26,7 +27,7 @@ import TrackRowActions from '../components/TrackRowActions';
 import TrackDjMeta from '../components/TrackDjMeta';
 import { useLibraryDataContext } from '../context/LibraryDataContext';
 import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
-import { librarySortCompare, playlistIdsMatch } from '../utils/libraryApi';
+import { librarySortCompare, playlistIdsMatch, removeAlbumFromLibraryApi } from '../utils/libraryApi';
 import { normalizeTrack } from '../utils/trackNormalize';
 import { readRecentlyPlayed } from '../utils/recentlyPlayed';
 import { formatTrackCountAndDuration, sumTrackDurations } from '../utils/trackDuration';
@@ -68,6 +69,8 @@ export default function Library() {
   const {
     library,
     playlists,
+    albums = [],
+    setAlbums,
     libraryLoading,
     loadPlaylistsData,
     removeFromLibrary,
@@ -82,6 +85,7 @@ export default function Library() {
   const [activeTab, setActiveTab] = useState(() => {
     if (tabParam === 'playlists') return 'playlists';
     if (tabParam === 'recent') return 'recent';
+    if (tabParam === 'albums') return 'albums';
     return 'tracks';
   });
   const [recentTracks, setRecentTracks] = useState(() => readRecentlyPlayed());
@@ -112,6 +116,7 @@ export default function Library() {
     startTrackRadio,
     radioLoadingTrackId,
   } = useOutletContext();
+  const navigate = useNavigate();
 
   const { getFeatures, pendingCount } = useTrackFeaturesForList(library, {
     analyze: djFeaturesActive,
@@ -122,7 +127,7 @@ export default function Library() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    setActiveTab(tab === 'playlists' ? 'playlists' : tab === 'recent' ? 'recent' : 'tracks');
+    setActiveTab(tab === 'playlists' ? 'playlists' : tab === 'recent' ? 'recent' : tab === 'albums' ? 'albums' : 'tracks');
   }, [searchParams]);
 
   useEffect(() => {
@@ -203,6 +208,19 @@ export default function Library() {
       setSearchParams({ tab: 'playlists' }, { replace: true });
     }
     await deletePlaylist(playlistId);
+  };
+
+  const openAlbum = (providerId) => navigate(`/album/${providerId}`);
+
+  const playAlbum = (album) => navigate(`/album/${album.provider_id}?autoplay=1`);
+
+  const handleDeleteAlbum = async (albumId) => {
+    try {
+      await removeAlbumFromLibraryApi(albumId, lang);
+      if (setAlbums) setAlbums((prev) => prev.filter((a) => a.id !== albumId));
+    } catch (err) {
+      showToast(messageForApiError(err, lang));
+    }
   };
 
   const sharePlaylist = async () => {
@@ -542,6 +560,25 @@ export default function Library() {
             </button>
             <button
               type="button"
+              onClick={() => setTab('albums')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                color: activeTab === 'albums' ? 'var(--accent-solid)' : 'var(--text-secondary)',
+                transition: 'color 0.2s',
+              }}
+            >
+              {lang === 'ru' ? 'Альбомы' : 'Albums'}
+              {' '}
+              (
+              {albums.length}
+              )
+            </button>
+            <button
+              type="button"
               onClick={() => setTab('recent')}
               style={{
                 background: 'transparent',
@@ -777,6 +814,39 @@ export default function Library() {
                         onPlay={(p) => playTracks(p.tracks)}
                         onShuffle={(p) => shuffleTracks(p.tracks)}
                         onDelete={handleDeletePlaylist}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'albums' && (
+              <div>
+                {albums.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center',
+                    color: 'var(--text-muted)',
+                    marginTop: '40px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                  }}
+                  >
+                    <Disc size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
+                    <p>{lang === 'ru' ? 'Нет сохраненных альбомов' : 'No saved albums'}</p>
+                  </div>
+                ) : (
+                  <div className="library-playlist-grid">
+                    {albums.map((al) => (
+                      <AlbumCard
+                        key={al.id}
+                        album={al}
+                        t={t}
+                        lang={lang}
+                        onOpen={openAlbum}
+                        onPlay={playAlbum}
+                        onDelete={handleDeleteAlbum}
                       />
                     ))}
                   </div>
