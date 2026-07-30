@@ -67,3 +67,18 @@ pytest-last.txt
 
 # Legacy insecure deploy script (removed — use scripts/deploy.py)
 deploy_fast.py
+
+# One-off root-level ops/debug scripts (proxy/Docker/DB probing) — put
+# reusable tooling in scripts/ instead; these are throwaway and have
+# repeatedly ended up hardcoding server credentials by accident.
+/check_*.py
+/fix_*.py
+/rebuild*.py
+/recreate_*.py
+/restart_*.py
+/deploy_*.py
+/run_alembic*.py
+/upload_*.py
+/test_api*.py
+/out*.txt
+*.bundle
