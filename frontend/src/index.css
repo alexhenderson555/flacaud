@@ -154,17 +154,17 @@
   --lightningcss-light: initial;
   --lightningcss-dark: ;
   color-scheme: light;
-  --bg-main: #e6ebf1;
-  --bg-surface: #f8fafc;
-  --bg-surface-hover: #0f172a0d;
-  --border-subtle: #0f172a1a;
+  --bg-main: #c3ccd6;
+  --bg-surface: #d6dde5;
+  --bg-surface-hover: #0f172a14;
+  --border-subtle: #0f172a26;
   --text-primary: #0f172a;
   --text-secondary: #0f172aad;
   --text-muted: #0f172a73;
   --accent-solid: #2563eb;
   --accent-glow: #2563eb40;
   --accent-gradient: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
-  --sidebar-bg: #f8fafcd1;
+  --sidebar-bg: #d6dde5d1;
   --nav-account-bg: #0f172a0a;
   --nav-account-border: #0f172a14;
   --card-highlight: #2563eb0f;
@@ -173,17 +173,17 @@
   --lightningcss-light: initial;
   --lightningcss-dark: ;
   color-scheme: light;
-  --bg-main: #efeae2;
-  --bg-surface: #faf7f2;
-  --bg-surface-hover: #1c19170d;
-  --border-subtle: #1c19171a;
+  --bg-main: #ddd4c2;
+  --bg-surface: #ece4d4;
+  --bg-surface-hover: #1c191714;
+  --border-subtle: #1c191726;
   --text-primary: #1c1917;
   --text-secondary: #1c1917ad;
   --text-muted: #1c191773;
   --accent-solid: #d97706;
   --accent-glow: #d9770638;
   --accent-gradient: linear-gradient(135deg, #b45309 0%, #d97706 100%);
-  --sidebar-bg: #faf7f2d9;
+  --sidebar-bg: #ece4d4d9;
   --nav-account-bg: #1c19170a;
   --nav-account-border: #1c191714;
   --card-highlight: #d9770612;
@@ -192,12 +192,12 @@
   --lightningcss-light: initial;
   --lightningcss-dark: ;
   color-scheme: light;
-  --bg-main: #dceafc;
-  --bg-surface: #f5faff;
-  --bg-surface-hover: #0c4a6e0d;
-  --border-subtle: #0c4a6e1a;
+  --bg-main: #b8d4ef;
+  --bg-surface: #cde3f7;
+  --bg-surface-hover: #0c4a6e14;
+  --border-subtle: #0c4a6e26;
   --text-primary: #000;
-  --sidebar-bg: #f5faffcc;
+  --sidebar-bg: #cde3f7cc;
   --nav-account-bg: #0c4a6e0d;
   --nav-account-border: #0c4a6e1a;
   --card-highlight: #0284c712;
@@ -210,7 +210,7 @@
 [data-theme="snow"],
 [data-theme="cream"],
 [data-theme="sky"] {
-  --player-bar-bg: #f6f6f7f5;
+  --player-bar-bg: #dcdcdef5;
   --player-bar-border: #0f172a1a;
   --player-bar-shadow: 0 -8px 32px #0f172a14;
   --player-text: #000;
