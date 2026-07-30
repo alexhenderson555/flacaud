@@ -8,6 +8,7 @@ from typing import Optional
 
 from tidal_dl_ru.core.set_track_match import clean_title_for_query, dedupe_key, match_tidal_track
 from tidal_dl_ru.server import jobs as job_state
+from tidal_dl_ru.server.outbound_url import OutboundUrlError, validate_public_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,16 @@ async def download_set_audio_task(job_id: str, url: str) -> dict:
         if job_state.is_cancelled(job_id):
             return {"ok": False, "error": "cancelled"}
 
+        # The URL was already validated at job-creation time (routers/jobs.py), but this
+        # task may run much later off an arq queue — re-check right before the actual
+        # fetch so a DNS record that's since been rebound to a private/loopback address
+        # (or the cloud metadata IP) can't slip an SSRF fetch past the original check.
+        try:
+            validate_public_http_url(url)
+        except OutboundUrlError:
+            job_state.mark_failed(job_id, "This link is no longer safe to fetch.")
+            return {"ok": False, "error": "blocked host"}
+
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
@@ -205,6 +216,16 @@ async def analyze_set_task(
 
         if job_state.is_cancelled(job_id):
             return {"ok": False, "error": "cancelled"}
+
+        # See the matching comment in download_set_audio_task above — re-validate here
+        # too since this task can also run well after the original request-time check.
+        try:
+            validate_public_http_url(url)
+        except OutboundUrlError:
+            friendly = "This link is no longer safe to fetch."
+            job_state.mark_failed(job_id, friendly)
+            job_state.update_analysis(job_id, phase="failed", percent=0, label=friendly)
+            return {"ok": False, "error": "blocked host"}
 
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

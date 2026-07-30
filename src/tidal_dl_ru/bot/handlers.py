@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import re
 
@@ -373,7 +374,7 @@ async def cmd_analyze(message: Message, api: APIClient) -> None:
 
     lines = ["📋 <b>Распознанные треки:</b>\n"]
     for t in result.set_tracks:
-        lines.append(f"⏱ {t.timestamp} - <b>{t.artist}</b> — {t.title}")
+        lines.append(f"⏱ {t.timestamp} - <b>{html.escape(t.artist)}</b> — {html.escape(t.title)}")
         if t.matched_track:
             lines.append(f"   ✅ Найден в Tidal! (<code>/sync {t.matched_track.source_url}</code>)")
 
@@ -450,7 +451,7 @@ async def handle_url(message: Message, api: APIClient) -> None:
             content, filename = await api.download_file(track.file_token)
             if len(content) > bot_settings.tg_max_file_size:
                 await message.answer(
-                    f"⚠️ <b>{track.title}</b> слишком большой для Telegram "
+                    f"⚠️ <b>{html.escape(track.title)}</b> слишком большой для Telegram "
                     f"({len(content) // 1024 // 1024} МБ > 50 МБ).",
                     parse_mode="HTML",
                 )
@@ -532,7 +533,7 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
         return
 
     await status_msg.edit_text(
-        f"🎵 Распознано: <b>{result.artist} — {result.title}</b>\n"
+        f"🎵 Распознано: <b>{html.escape(result.artist)} — {html.escape(result.title)}</b>\n"
         f"⬇️ Ищу на Tidal...",
         parse_mode="HTML",
     )
@@ -567,7 +568,7 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
 
     if not tracks:
         await status_msg.edit_text(
-            f"🎵 Распознано: <b>{result.artist} — {result.title}</b>\n"
+            f"🎵 Распознано: <b>{html.escape(result.artist)} — {html.escape(result.title)}</b>\n"
             f"❌ Не найдено на Tidal.",
             parse_mode="HTML",
         )
@@ -580,7 +581,7 @@ async def handle_voice(message: Message, api: APIClient, bot: Bot) -> None:
         return
 
     await status_msg.edit_text(
-        f"🎵 <b>{result.artist} — {result.title}</b>\n⬇️ Скачиваю FLAC...",
+        f"🎵 <b>{html.escape(result.artist)} — {html.escape(result.title)}</b>\n⬇️ Скачиваю FLAC...",
         parse_mode="HTML",
     )
 
