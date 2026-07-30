@@ -848,6 +848,24 @@ def resolve_tidal_stream(
         if q != AudioQuality.HIGH and not _manifest_acceptable_for_request(
             manifest, q, plan
         ):
+            try:
+                from tidal_dl_ru.server.amz_fallback import fetch_amz_track
+                logger.info(f"Manifest for {q.name} rejected (DRM/Non-FLAC). Trying AMZ fallback...")
+                track_meta = p.get_track(track_id)
+                if track_meta:
+                    artist_name = track_meta.artists[0].name if track_meta.artists else (track_meta.artist.name if track_meta.artist else "")
+                    album_title = track_meta.album.title if track_meta.album else ""
+                    if artist_name and album_title:
+                        fallback_url = fetch_amz_track(
+                            title=track_meta.title,
+                            artist=artist_name,
+                            album=album_title,
+                            duration=track_meta.duration
+                        )
+                        if fallback_url:
+                            return {"type": "redirect", "url": fallback_url, "actual_quality": q.name}
+            except Exception as e:
+                logger.warning(f"Error during AMZ fallback: {e}")
             continue
 
         if manifest.manifest_mime_type == "application/vnd.tidal.bts":
