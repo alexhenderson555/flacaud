@@ -110,7 +110,15 @@ def _ranged_part_response(
         body = handle.read(length)
 
     headers = dict(headers)
-    headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+    # `total` falls back to bytes-downloaded-so-far when the real asset size
+    # isn't known yet (HEAD request still in flight) -- announcing THAT as the
+    # Content-Range total is wrong, not just imprecise: browsers derive the
+    # `<audio>` element's `duration` from it, so an early request can lock in
+    # a truncated duration the element never corrects, making a later seek
+    # past that point look like the track already ended. Use the unknown-
+    # length form (RFC 7233) instead of lying about the total.
+    total_str = str(total) if resource_total and resource_total >= size else "*"
+    headers["Content-Range"] = f"bytes {start}-{end}/{total_str}"
     headers["Content-Length"] = str(length)
     return Response(content=body, status_code=206, media_type=media_type, headers=headers)
 
@@ -203,7 +211,10 @@ async def streaming_part_response(
         )
 
     length = end - start + 1
-    headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+    # See the matching comment in _ranged_part_response — don't announce a
+    # downloaded-so-far byte count as the resource's total size.
+    total_str = str(total) if resource_total and resource_total >= size else "*"
+    headers["Content-Range"] = f"bytes {start}-{end}/{total_str}"
     headers["Content-Length"] = str(length)
 
     async def _generate():

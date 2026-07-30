@@ -70,6 +70,30 @@ def test_ranged_part_file_reports_full_total_for_seek():
         assert resp.headers["content-range"] == "bytes 10-19/1000"
 
 
+def test_ranged_part_file_reports_unknown_total_when_size_not_yet_known():
+    """When resource_total hasn't resolved yet, must not announce the
+    downloaded-so-far byte count as the resource's total size -- browsers
+    derive <audio>.duration from Content-Range and would lock in a truncated
+    duration that a later seek past it would look like the track ended."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "audio.flac.part"
+        path.write_bytes(b"\x00" * 200)
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "headers": [(b"range", b"bytes=10-19")],
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        request = Request(scope, receive)
+        resp = ranged_file_response(path, request, "audio/flac", resource_total=None)
+        assert resp.status_code == 206
+        assert resp.headers["content-range"] == "bytes 10-19/*"
+
+
 def test_ranged_part_waits_when_seek_beyond_buffer():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "audio.flac.part"
@@ -125,6 +149,32 @@ async def test_streaming_part_suffix_waits_for_tail_with_total():
         async for chunk in resp.body_iterator:
             body += chunk
         assert len(body) == 100
+
+
+@pytest.mark.asyncio
+async def test_streaming_part_reports_unknown_total_when_size_not_yet_known():
+    from tidal_dl_ru.server.range_file import streaming_part_response
+
+    with tempfile.TemporaryDirectory() as tmp:
+        part = Path(tmp) / "audio.flac.part"
+        final = Path(tmp) / "audio.flac"
+        part.write_bytes(b"\x00" * 200)
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "headers": [(b"range", b"bytes=10-19")],
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        request = Request(scope, receive)
+        resp = await streaming_part_response(
+            part, final, request, "audio/flac", resource_total=None,
+        )
+        assert resp.status_code == 206
+        assert resp.headers["content-range"] == "bytes 10-19/*"
 
 
 @pytest.mark.asyncio
