@@ -1,19 +1,25 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Repeat, Heart, Disc3 } from 'lucide-react';
+import {
+  Check, Repeat, Heart, Disc3, Search,
+} from 'lucide-react';
 import LandingProductFrame from './LandingProductFrame';
-import { TransferPanel, LibraryPanel, DjPanel } from './LandingShowcasePanels';
+import {
+  TransferPanel, LibraryPanel, DjPanel, DiscoverPanel,
+} from './LandingShowcasePanels';
 
 const TAB_ICONS = {
   transfer: Repeat,
   library: Heart,
   dj: Disc3,
+  discover: Search,
 };
 
 const ROUTE_BY_TAB = {
   transfer: 'transfer',
   library: 'library',
   dj: 'dj',
+  discover: 'search',
 };
 
 export default function LandingShowcase({ t, lang }) {
@@ -89,6 +95,7 @@ export default function LandingShowcase({ t, lang }) {
                 {tab === 'transfer' && <TransferPanel lang={lang} />}
                 {tab === 'library' && <LibraryPanel lang={lang} />}
                 {tab === 'dj' && <DjPanel lang={lang} />}
+                {tab === 'discover' && <DiscoverPanel lang={lang} />}
               </motion.div>
             </AnimatePresence>
           </LandingProductFrame>

@@ -1,4 +1,6 @@
-import { Disc3, Download, ListMusic } from 'lucide-react';
+import {
+  Disc3, Download, ListMusic, Search, Compass,
+} from 'lucide-react';
 
 export const LANDING_COPY = {
   en: {
@@ -40,6 +42,16 @@ export const LANDING_COPY = {
         title: 'For DJs',
         text: 'BPM, Camelot keys, harmonic analyzer, and built-in EQ. Everything you need to prep a set.',
       },
+      {
+        icon: Search,
+        title: 'Find your next favorite',
+        text: 'Shazam a track playing anywhere, get real recommendations, or tune into endless genre radio — no algorithm-fed shuffle.',
+      },
+      {
+        icon: Compass,
+        title: 'DJ set discovery',
+        text: 'Paste any DJ set from YouTube or SoundCloud — we identify the tracklist automatically and let you download each track on its own.',
+      },
     ],
     showcaseEyebrow: 'Preview',
     showcaseTitle: 'How it looks',
@@ -55,13 +67,19 @@ export const LANDING_COPY = {
         id: 'library',
         label: 'Library',
         desc: 'Local files with DJ tags',
-        highlights: ['FLAC & Hi-Res downloads', 'BPM and key visible instantly', 'Convenient browser player'],
+        highlights: ['FLAC & Hi-Res downloads', 'BPM and key visible instantly', 'Audio-reactive visualizer', 'Convenient browser player'],
       },
       {
         id: 'dj',
         label: 'DJs',
         desc: 'Harmonic mixing',
         highlights: ['Track compatibility analysis', 'Set speed curves', 'EQ and stem splitting'],
+      },
+      {
+        id: 'discover',
+        label: 'Discover',
+        desc: 'Shazam, radio, recommendations',
+        highlights: ['Audio recognition — Shazam any track', 'Endless genre radio', 'Recommendations from your own taste'],
       },
     ],
     compareTitle: 'Why is regular streaming worse?',
@@ -74,6 +92,8 @@ export const LANDING_COPY = {
       ['BPM, key, set tools', true, false, false],
       ['Move from 8 platforms', true, false, true],
       ['Browser player', true, true, false],
+      ['Audio recognition (Shazam)', true, false, false],
+      ['DJ set tracklist ID', true, false, false],
     ],
     comparePartial: 'Sometimes',
     proofTitle: 'Use cases',
@@ -186,6 +206,16 @@ export const LANDING_COPY = {
         title: 'Для диджеев',
         text: 'BPM, Camelot-ключи, анализатор гармонии и встроенный EQ. Всё, чтобы собрать идеальный сет.',
       },
+      {
+        icon: Search,
+        title: 'Найти новое любимое',
+        text: 'Шазамь трек, играющий где угодно, получай реальные рекомендации или включай бесконечное радио по жанру — без алгоритмического шаффла в стиле «и так сойдёт».',
+      },
+      {
+        icon: Compass,
+        title: 'Поиск DJ-сетов',
+        text: 'Кидаешь ссылку на любой сет с YouTube или SoundCloud — треклист распознаётся автоматически, каждый трек можно скачать отдельно.',
+      },
     ],
     showcaseEyebrow: 'Превью',
     showcaseTitle: 'Как это выглядит',
@@ -201,13 +231,19 @@ export const LANDING_COPY = {
         id: 'library',
         label: 'Библиотека',
         desc: 'Локальные файлы с DJ-тегами',
-        highlights: ['Закачка FLAC и Hi-Res', 'Сразу видно BPM и ключ', 'Удобный плеер прямо в браузере'],
+        highlights: ['Закачка FLAC и Hi-Res', 'Сразу видно BPM и ключ', 'Аудиореактивный визуализатор', 'Удобный плеер прямо в браузере'],
       },
       {
         id: 'dj',
         label: 'Диджеям',
         desc: 'Сведение по тональности',
         highlights: ['Анализ совместимости треков', 'Кривая скорости сета', 'EQ и деление на стемы'],
+      },
+      {
+        id: 'discover',
+        label: 'Обзор',
+        desc: 'Shazam, радио, рекомендации',
+        highlights: ['Распознавание аудио — шазамь любой трек', 'Бесконечное радио по жанрам', 'Рекомендации на основе твоего вкуса'],
       },
     ],
     compareTitle: 'Чем хуже обычный стриминг?',
@@ -220,6 +256,8 @@ export const LANDING_COPY = {
       ['BPM, тональность, сеты', true, false, false],
       ['Перенос с 8 платформ', true, false, true],
       ['Браузерный плеер', true, true, false],
+      ['Распознавание аудио (Shazam)', true, false, false],
+      ['Распознавание треклиста DJ-сета', true, false, false],
     ],
     comparePartial: 'Иногда',
     proofTitle: 'Сценарии',

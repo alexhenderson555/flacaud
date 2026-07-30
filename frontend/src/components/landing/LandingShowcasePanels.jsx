@@ -13,6 +13,12 @@ const LIBRARY_TRACKS = [
   { title: 'Rumble', artist: 'Skrillex', duration: 146, cover: 3, initials: 'RU', bpm: '140', key: '1A' },
 ];
 
+const DISCOVER_TRACKS = [
+  { title: 'So U Kno', artist: 'Overmono', duration: 214, cover: 2, initials: 'OV' },
+  { title: 'Free (Powder Edit)', artist: 'Fred again..', duration: 198, cover: 1, initials: 'FR' },
+  { title: 'Where You Are', artist: 'Bicep', duration: 245, cover: 3, initials: 'WY' },
+];
+
 const DJ_TRACKS = [
   { time: '00:00', title: 'GLUE', artist: 'BICEP', duration: 269, cover: 1, initials: 'GL', bpm: '130', key: '8A' },
   { time: '04:12', title: 'Good Lies', artist: 'Overmono', duration: 167, cover: 3, initials: 'GL', bpm: '130', key: '8A' },
@@ -279,6 +285,55 @@ export function DjPanel({ lang }) {
               <span>{tr.key}</span>
             </div>
           )}
+        />
+      ))}
+    </ShowcasePanelShell>
+  );
+}
+
+export function DiscoverPanel({ lang }) {
+  return (
+    <ShowcasePanelShell
+      title={lang === 'ru' ? 'Поиск и радио' : 'Discover'}
+      badge={lang === 'ru' ? 'Afro House радио' : 'Afro House radio'}
+      toolbar={(
+        <>
+          <div className="landing-preview__url-row">
+            <div className="landing-preview__input">
+              {lang === 'ru' ? 'Слушаю… ищу совпадение по звуку' : 'Listening… matching by audio'}
+            </div>
+          </div>
+          <div className="landing-preview__filters">
+            <span className="landing-preview__filter landing-preview__filter--on">Afro House</span>
+            <span className="landing-preview__filter">Deep House</span>
+            <span className="landing-preview__filter">Melodic Techno</span>
+          </div>
+        </>
+      )}
+      footer={(
+        <span className="landing-preview__btn landing-preview__btn--primary">
+          {lang === 'ru' ? 'Загрузить ещё' : 'Load more'}
+        </span>
+      )}
+      miniPlayer={(
+        <ShowcaseMiniPlayer
+          title="So U Kno"
+          artist="Overmono"
+          cover={2}
+          initials="OV"
+          current="00:47"
+          total="03:34"
+        />
+      )}
+    >
+      {DISCOVER_TRACKS.map((tr) => (
+        <ShowcaseTrackRow
+          key={tr.title}
+          title={tr.title}
+          artist={tr.artist}
+          duration={tr.duration}
+          cover={tr.cover}
+          initials={tr.initials}
         />
       ))}
     </ShowcasePanelShell>
