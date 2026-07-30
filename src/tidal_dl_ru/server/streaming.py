@@ -933,14 +933,6 @@ def delivered_stream_meta(
         if q != AudioQuality.HIGH and not _manifest_acceptable_for_request(
             manifest, q, plan
         ):
-            # DRM rejected, but we have AMZ fallback for LOSSLESS/HI_RES!
-            # Return mocked stats since AMZ typically delivers 16-bit 44.1kHz FLAC
-            if q == AudioQuality.LOSSLESS or q == AudioQuality.HI_RES_LOSSLESS:
-                return {
-                    "quality": q.name,
-                    "sample_rate": 44100,
-                    "bit_depth": 16,
-                }
             continue
         from tidal_dl_ru.providers.tidal.download import manifest_inspect
 

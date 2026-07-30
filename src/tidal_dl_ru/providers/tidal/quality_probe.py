@@ -88,8 +88,9 @@ def merge_catalog_quality_hint(
         return None
     catalog_tiers, _ = catalog_ui_tiers(meta_q)
     for ui_q in catalog_tiers:
-        # We now have an AMZ fallback for DRM-blocked LOSSLESS/HI_RES tracks, 
-        # so we trust the catalog hint to enable the UI buttons.
+        # Catalog metadata often says LOSSLESS while API only serves AAC — trust manifests only.
+        if ui_q in ("LOSSLESS", "HI_RES"):
+            continue
         if ui_q not in available:
             available.append(ui_q)
         if ui_q not in actual and meta_q:
