@@ -61,21 +61,33 @@ export default function GlobalSetEmbed() {
       setRect(null);
       return undefined;
     }
+    // Coalesced into rAF so a fast/inertial scroll can't queue more state
+    // updates than the browser can paint — without this, the fixed-position
+    // box (synced from the anchor's rect, since it can't live in normal
+    // document flow without breaking the no-reparent trick above) visibly
+    // lags a render behind the anchor and "catches up" in a jerky snap.
+    let rafId = null;
     const update = () => {
+      rafId = null;
       const r = anchorEl.getBoundingClientRect();
       setRect({
         top: r.top, left: r.left, width: r.width, height: r.height,
       });
     };
-    update();
-    const ro = new ResizeObserver(update);
+    const scheduleUpdate = () => {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(update);
+    };
+    scheduleUpdate();
+    const ro = new ResizeObserver(scheduleUpdate);
     ro.observe(anchorEl);
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    window.addEventListener('scroll', scheduleUpdate, true);
+    window.addEventListener('resize', scheduleUpdate);
     return () => {
+      if (rafId != null) cancelAnimationFrame(rafId);
       ro.disconnect();
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', scheduleUpdate, true);
+      window.removeEventListener('resize', scheduleUpdate);
     };
   }, [inlineAnchored, anchorEl]);
 
@@ -154,10 +166,14 @@ export default function GlobalSetEmbed() {
 
   const inlineStyle = rect ? {
     position: 'fixed',
-    top: rect.top,
-    left: rect.left,
+    top: 0,
+    left: 0,
     width: rect.width,
     height: rect.height,
+    // transform instead of top/left: the compositor can move this on its own
+    // thread without a main-thread layout pass, so it tracks the scroll
+    // gesture smoothly instead of trailing a render behind it.
+    transform: `translate3d(${rect.left}px, ${rect.top}px, 0)`,
     borderRadius: '16px',
     overflow: 'hidden',
     background: '#000',
