@@ -234,7 +234,7 @@ export default function Recommendations() {
                 onClick={loadMore}
                 disabled={isLoadingMore}
                 className="btn-secondary"
-                style={{ borderRadius: '20px', padding: '10px 24px', minWidth: '160px' }}
+                style={{ borderRadius: '20px', padding: '10px 24px', minWidth: '160px', justifyContent: 'center' }}
                 data-testid="recommendations-load-more"
               >
                 {isLoadingMore
