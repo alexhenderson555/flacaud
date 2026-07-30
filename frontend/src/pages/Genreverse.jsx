@@ -152,6 +152,12 @@ export default function Genreverse() {
         setStationTracks(normalized);
         setCurrentVibe(genreName);
         (playerContextPlayQueue || playerContextTogglePlay)(normalized[0], normalized);
+        // The genre grid above collapses into a short station header once
+        // stationTracks is populated, shrinking the page a lot -- left at
+        // whatever scroll offset picking a subgenre happened to be at, the
+        // browser clamps that to the new (much shorter) page's end, landing
+        // the user at the bottom looking at nothing in particular.
+        if (!refresh) window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         setError(t('errGen'));
       }
