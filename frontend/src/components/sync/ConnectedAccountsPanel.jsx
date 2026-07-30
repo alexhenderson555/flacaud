@@ -75,12 +75,51 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
     }
   };
 
+  // Popup instead of a same-tab redirect -- leaving the app entirely to go
+  // authorize on Spotify/etc and having to navigate all the way back was the
+  // clunky part. Poll the popup rather than window.open's onload (which never
+  // fires across the cross-origin hop) -- once it redirects back to our own
+  // /sync?connected=... callback it's same-origin again and readable.
+  const runRedirectPopup = (provider, authorizationUrl) => {
+    const popup = window.open(authorizationUrl, 'connect-account', 'width=520,height=680');
+    if (!popup) {
+      // Popup blocked -- fall back to the old same-tab flow rather than stall.
+      window.location.href = authorizationUrl;
+      return;
+    }
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer);
+        setBusy('');
+        return;
+      }
+      let search = null;
+      try {
+        if (popup.location.origin === window.location.origin) {
+          search = popup.location.search;
+        }
+      } catch {
+        return; // Still cross-origin on the provider's own domain.
+      }
+      if (search === null) return;
+      const p = new URLSearchParams(search);
+      const ok = p.get('connected');
+      const err = p.get('connect_error');
+      if (!ok && !err) return;
+      clearInterval(timer);
+      popup.close();
+      setBusy('');
+      showToast(ok ? t(`Connected ${ok}`, `${ok} подключён`) : t(`Could not connect ${err}`, `Не удалось подключить ${err}`));
+      if (ok) refresh();
+    }, 500);
+  };
+
   const connect = async (provider) => {
     setBusy(provider);
     try {
       const res = await authorizeAccount(provider, lang);
       if (res.flow === 'redirect' && res.authorization_url) {
-        window.location.href = res.authorization_url;
+        runRedirectPopup(provider, res.authorization_url);
         return;
       }
       if (res.flow === 'device') {
