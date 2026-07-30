@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AudioVisualizer from '../AudioVisualizer';
 import Titlebar from '../Titlebar';
 import ToastContainer from '../ToastContainer';
@@ -10,9 +10,12 @@ import LegalFooter from './LegalFooter';
 import { usePlayer } from '../../store/usePlayerStore';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { usePlayerCinemaMode } from '../../hooks/usePlayerCinemaMode';
+import { useScrollRestoration } from '../../hooks/useScrollRestoration';
 
 export default function AppShell({ shellPaddingTop = '0' }) {
   const location = useLocation();
+  const pageContainerRef = useRef(null);
+  useScrollRestoration(pageContainerRef);
   const {
   playerContext,
   mediaEnabled,
@@ -77,7 +80,7 @@ export default function AppShell({ shellPaddingTop = '0' }) {
       />
 
       <main className="main-content">
-        <div className="page-container">
+        <div className="page-container" ref={pageContainerRef}>
           {showAuthBanner && (
             <AuthRequiredBanner lang={lang} onDismiss={dismissAuthBanner} />
           )}
