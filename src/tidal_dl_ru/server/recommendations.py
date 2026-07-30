@@ -744,40 +744,65 @@ async def build_recommendations(
         await _expand_similar_graph(client, anchors, tracks, seen, artist_counts, limit)
 
         min_track_signal = max(6, int(limit * _MIN_TRACK_SIGNAL_RATIO))
-        if len(tracks) < min_track_signal and saved:
-            artist_ids: list[str] = []
-            for row in saved[:16]:
-                try:
-                    ids = json.loads(row.artist_ids_json or "[]")
-                except json.JSONDecodeError:
-                    ids = []
-                if ids:
-                    artist_ids.append(str(ids[0]))
-            for aid in list(dict.fromkeys(artist_ids))[:4]:
-                if len(tracks) >= limit:
-                    break
-                await _sparse_artist_radio_fallback(
-                    client, [aid], tracks, seen, artist_counts, limit,
-                )
+        # Both fallbacks below pull from the *listener's own library* or a fixed
+        # generic pop/EDM seed list — neither has any notion of the requested
+        # genre, so running them for a genre station defeats the whole point
+        # (ask for Afro House, get whatever's adjacent to the user's Indie Rock
+        # library, or to The Weeknd/Disclosure's Tidal neighbourhood graph).
+        # A thin genre station is better than a wrong one.
+        if genre:
+            if len(tracks) < min_track_signal:
+                remaining = [a for a in seed_artists if a not in chosen_artists]
+                if remaining:
+                    random.shuffle(remaining)
+                    topup_tracks = await _fetch_genre_seed_tracks(
+                        client, remaining, seen, per_artist=3, max_artists=len(remaining),
+                    )
+                    for t in topup_tracks:
+                        if len(tracks) >= limit:
+                            break
+                        tid = str(t.provider_id) if t.provider_id else None
+                        if not tid or tid in seen:
+                            continue
+                        seen.add(tid)
+                        await _collect_track_neighbourhood(
+                            client, tid, tracks, seen, artist_counts, limit,
+                        )
+        else:
+            if len(tracks) < min_track_signal and saved:
+                artist_ids: list[str] = []
+                for row in saved[:16]:
+                    try:
+                        ids = json.loads(row.artist_ids_json or "[]")
+                    except json.JSONDecodeError:
+                        ids = []
+                    if ids:
+                        artist_ids.append(str(ids[0]))
+                for aid in list(dict.fromkeys(artist_ids))[:4]:
+                    if len(tracks) >= limit:
+                        break
+                    await _sparse_artist_radio_fallback(
+                        client, [aid], tracks, seen, artist_counts, limit,
+                    )
 
-        if len(tracks) < min_track_signal:
-            seeds = list(_SEED_ARTISTS)
-            random.shuffle(seeds)
-            for name in seeds:
-                if len(tracks) >= limit:
-                    break
-                try:
-                    results = await asyncio.to_thread(p.search, name, 2)
-                except Exception:
-                    continue
-                if not results:
-                    continue
-                sid = str(results[0].provider_id)
-                if sid in seen:
-                    continue
-                await _collect_track_neighbourhood(
-                    client, sid, tracks, seen, artist_counts, limit,
-                )
+            if len(tracks) < min_track_signal:
+                seeds = list(_SEED_ARTISTS)
+                random.shuffle(seeds)
+                for name in seeds:
+                    if len(tracks) >= limit:
+                        break
+                    try:
+                        results = await asyncio.to_thread(p.search, name, 2)
+                    except Exception:
+                        continue
+                    if not results:
+                        continue
+                    sid = str(results[0].provider_id)
+                    if sid in seen:
+                        continue
+                    await _collect_track_neighbourhood(
+                        client, sid, tracks, seen, artist_counts, limit,
+                    )
 
         tracks = await _finalize_track_covers(client, tracks)
     finally:
