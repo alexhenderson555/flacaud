@@ -62,7 +62,7 @@ const dict = {
     djAnalysisDesc: 'Background track analysis and DJ filters in your library (Pro plan)',
     djPlanRequired: 'Available on Pro and Lifetime plans',
     offlineCache: 'Offline cache',
-    offlineCacheDesc: 'Tracks saved on this device for playback without network',
+    offlineCacheDesc: 'Tracks saved on this device for playback without network. Lossless/Hi-Res files are cached too and can use noticeably more disk space — clear the cache below anytime.',
     offlineCacheEmpty: 'No cached tracks',
     offlineCacheClear: 'Clear cache',
     offlineCacheCleared: 'Offline cache cleared',
@@ -115,7 +115,7 @@ const dict = {
     djAnalysisDesc: 'Фоновый анализ треков и DJ-фильтры в медиатеке (тариф Про)',
     djPlanRequired: 'Доступно на тарифах Про и Навсегда',
     offlineCache: 'Офлайн-кэш',
-    offlineCacheDesc: 'Треки на этом устройстве для прослушивания без сети',
+    offlineCacheDesc: 'Треки на этом устройстве для прослушивания без сети. Lossless/Hi-Res тоже кешируются и могут занимать заметно больше места — кеш можно очистить в любой момент ниже.',
     offlineCacheEmpty: 'Нет кэшированных треков',
     offlineCacheClear: 'Очистить кэш',
     offlineCacheCleared: 'Офлайн-кэш очищен',
@@ -376,20 +376,22 @@ export default function Account() {
           transition={{ delay: 0.2 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
         >
-          <DjAnalysisCard
-            t={t}
-            isLoggedIn={isLoggedIn}
-            djFeaturesAvailable={djFeaturesAvailable}
-            djAnalysisEnabled={djAnalysisEnabled}
-            onToggle={handleDjToggle}
-          />
+          <div className="hide-on-mobile" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <DjAnalysisCard
+              t={t}
+              isLoggedIn={isLoggedIn}
+              djFeaturesAvailable={djFeaturesAvailable}
+              djAnalysisEnabled={djAnalysisEnabled}
+              onToggle={handleDjToggle}
+            />
 
-          <VisualizerCard
-            t={t}
-            lang={lang}
-            visualizerEnabled={visualizerEnabled}
-            setVisualizerEnabled={setVisualizerEnabled}
-          />
+            <VisualizerCard
+              t={t}
+              lang={lang}
+              visualizerEnabled={visualizerEnabled}
+              setVisualizerEnabled={setVisualizerEnabled}
+            />
+          </div>
 
           <div className="glass-panel settings-panel settings-panel--appearance">
             <div className="settings-panel__header">

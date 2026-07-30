@@ -573,7 +573,7 @@ export function usePlaybackQuality({
             return;
           }
         }
-        if (!activelyPlaying && !pausedMidTrack && !LOSSLESS_TIERS.has(streamQuality)) {
+        if (!activelyPlaying && !pausedMidTrack) {
           void prefetchAudioToCache(
             { ...currentTrack, provider: currentTrack.provider || 'tidal' },
             streamQuality,
@@ -900,7 +900,7 @@ export function usePlaybackQuality({
     if (!url) {
       const bypass = downloadedTracksRef.current.has(String(nextTrack.provider_id)) ? 'false' : 'true';
       url = await buildStreamUrl(nextTrack, streamQuality, bypass);
-      if (url && !LOSSLESS_TIERS.has(streamQuality)) {
+      if (url) {
         void prefetchAudioToCache(
           { ...nextTrack, provider: nextTrack.provider || 'tidal' },
           streamQuality,
