@@ -890,6 +890,8 @@ export function usePlaybackQuality({
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
   }, []);
 
+  const PRELOAD_CACHE_AHEAD = 3;
+
   const updatePreloadForPlaylist = useCallback(async (playlist, currentTrackIndex) => {
     if (!qualitiesReady || !playlist?.length || currentTrackIndex < 0 || currentTrackIndex >= playlist.length - 1) {
       setPreloadAudioSrc('');
@@ -908,6 +910,15 @@ export function usePlaybackQuality({
       }
     }
     setPreloadAudioSrc(url || '');
+
+    // Beyond the immediate next track (which needs a resolved src for instant
+    // playback above), just warm a few more tracks into the offline cache in the
+    // background — no src resolution needed since nothing plays them yet.
+    const upcoming = playlist.slice(currentTrackIndex + 2, currentTrackIndex + 1 + PRELOAD_CACHE_AHEAD);
+    upcoming.forEach((track) => {
+      if (!track?.provider_id) return;
+      void prefetchAudioToCache({ ...track, provider: track.provider || 'tidal' }, streamQuality);
+    });
   }, [playbackQuality, streamQuality, qualitiesReady, downloadedTracksRef, buildStreamUrl, streamRetryNonce]);
 
   return {
