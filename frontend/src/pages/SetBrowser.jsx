@@ -281,7 +281,10 @@ export default function SetBrowser() {
     setLoadingMoreResults(true);
     try {
       const rows = await searchSets(q, { lang, limit: nextLimit });
-      setResults(rows);
+      setResults((prev) => {
+        const seen = new Set(prev.map((r) => r.url));
+        return [...prev, ...rows.filter((r) => !seen.has(r.url))];
+      });
       setResultsLimit(nextLimit);
     } catch (err) {
       showToast(messageForApiError(err, lang) || t('errGeneric'));
@@ -296,7 +299,10 @@ export default function SetBrowser() {
     setLoadingMoreRecommended(true);
     try {
       const rows = await fetchSetRecommendations({ lang, limit: nextLimit });
-      setRecommended(rows);
+      setRecommended((prev) => {
+        const seen = new Set(prev.map((r) => r.url));
+        return [...prev, ...rows.filter((r) => !seen.has(r.url))];
+      });
       setRecommendedLimit(nextLimit);
     } catch (err) {
       showToast(messageForApiError(err, lang) || t('errGeneric'));
