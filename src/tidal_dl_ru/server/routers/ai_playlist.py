@@ -647,7 +647,7 @@ Format:
                     }
                 })
             except Exception as e:
-                logger.info("Failed to parse imageBase64:", e)
+                logger.info("Failed to parse imageBase64: %s", e)
 
         payload = {
             "contents": [{"parts": parts}],

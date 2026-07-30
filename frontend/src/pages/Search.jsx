@@ -67,6 +67,11 @@ const dict = {
 function Search() {
   const [query, setQuery] = useState(() => sessionStorage.getItem('tidal_search_query') || '');
   const [aiQuery, setAiQuery] = useState(() => sessionStorage.getItem('tidal_search_aiQuery') || '');
+  // Snapshot of aiQuery at the moment results were actually generated -- the
+  // results header used to read the live aiQuery directly, so editing the
+  // input to prep a follow-up query (without regenerating yet) changed the
+  // heading on already-shown results that came from the *previous* query.
+  const [aiResultsQuery, setAiResultsQuery] = useState(() => sessionStorage.getItem('tidal_search_aiResultsQuery') || '');
   const [aiImageBase64, setAiImageBase64] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -112,6 +117,7 @@ function Search() {
     try {
       if ('query' in patch) sessionStorage.setItem('tidal_search_query', patch.query);
       if ('aiQuery' in patch) sessionStorage.setItem('tidal_search_aiQuery', patch.aiQuery);
+      if ('aiResultsQuery' in patch) sessionStorage.setItem('tidal_search_aiResultsQuery', patch.aiResultsQuery);
       if ('searchMode' in patch) sessionStorage.setItem('tidal_search_mode', patch.searchMode);
       if ('realResults' in patch) {
         if (patch.realResults) sessionStorage.setItem('tidal_search_realResults', JSON.stringify(patch.realResults));
@@ -128,6 +134,7 @@ function Search() {
 
   useEffect(() => { persistSearchState({ query }); }, [query, persistSearchState]);
   useEffect(() => { persistSearchState({ aiQuery }); }, [aiQuery, persistSearchState]);
+  useEffect(() => { persistSearchState({ aiResultsQuery }); }, [aiResultsQuery, persistSearchState]);
   useEffect(() => { persistSearchState({ searchMode }); }, [searchMode, persistSearchState]);
   useEffect(() => { persistSearchState({ realResults }); }, [realResults, persistSearchState]);
   useEffect(() => { persistSearchState({ aiResults }); }, [aiResults, persistSearchState]);
@@ -399,6 +406,7 @@ function Search() {
       );
       if (data.tracks?.length) {
         setAiResults(data.tracks);
+        setAiResultsQuery(aiQuery);
       } else {
         showToast('Failed to generate playlist: No tracks found');
       }
@@ -652,7 +660,7 @@ function Search() {
           style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1400px', marginTop: '40px' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{aiQuery} Mix</h2>
+            <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{aiResultsQuery} Mix</h2>
             <button
               type="button"
               className="btn-primary"

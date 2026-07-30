@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { motion } from 'framer-motion';
 import {
   Search, Loader2, ListMusic, DownloadCloud, Heart, ExternalLink,
-  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye,
+  ArrowLeft, Sparkles, Radio, Music2, Clock, Eye, X,
 } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { usePlayer } from '../store/usePlayerStore';
@@ -153,6 +153,13 @@ export default function SetBrowser() {
   // Search.jsx already uses, so re-searching isn't needed every time.
   const [query, setQuery] = useState(() => sessionStorage.getItem('tidal_set_browser_query') || '');
   const [searching, setSearching] = useState(false);
+  // Query text and results restore independently from sessionStorage (see
+  // effects below) -- a query left over from a session that got 0 results
+  // (or was cleared) could restore non-empty while results restored empty,
+  // showing "No sets found" on a fresh page load with no search actually run
+  // this visit. Only a real completed search in *this* session should be
+  // able to trigger that message.
+  const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [results, setResults] = useState(() => {
     try {
@@ -263,6 +270,7 @@ export default function SetBrowser() {
     }
     setSearching(true);
     setSearchError(null);
+    setHasSearched(true);
     setResultsLimit(PAGE_SIZE);
     try {
       const rows = await searchSets(q, { lang, limit: PAGE_SIZE });
@@ -273,6 +281,17 @@ export default function SetBrowser() {
       setSearching(false);
     }
   }, [query, lang, t]);
+
+  // Clearing the query text alone left `results` populated (it's only set
+  // inside runSearch), so the "Recommended for you" view -- gated on both
+  // being empty -- could never come back without a full page reload.
+  const clearSearch = useCallback(() => {
+    setQuery('');
+    setResults([]);
+    setSearchError(null);
+    setHasSearched(false);
+    setResultsLimit(PAGE_SIZE);
+  }, []);
 
   const loadMoreResults = useCallback(async () => {
     const q = query.trim();
@@ -483,6 +502,21 @@ export default function SetBrowser() {
                 onChange={(e) => setQuery(e.target.value)}
                 disabled={searching}
               />
+              {(query || results.length > 0) && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  title={t('clearSearch')}
+                  aria-label={t('clearSearch')}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+                    padding: '4px', flexShrink: 0,
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              )}
             </div>
             <button
               type="submit"
@@ -565,7 +599,7 @@ export default function SetBrowser() {
             </div>
           )}
 
-          {!searching && query.trim() && results.length === 0 && !searchError && (
+          {!searching && hasSearched && query.trim() && results.length === 0 && !searchError && (
             <p style={{ color: 'var(--text-secondary)' }}>{t('noResults')}</p>
           )}
 
