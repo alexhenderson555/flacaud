@@ -604,6 +604,21 @@ export default function SetBrowser() {
           )}
 
           {results.length > 0 && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px',
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                color: 'var(--accent-solid)', fontSize: '0.95rem', fontWeight: 600,
+              }}
+            >
+              <ArrowLeft size={16} />
+              {t('backToRecommendations')}
+            </button>
+          )}
+
+          {results.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
               <GlassDropdown
                 testId="set-browser-sort"
