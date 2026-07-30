@@ -60,6 +60,7 @@ class TidalClient:
         *,
         tokens: Optional[TokenSet] = None,
         on_auth_error: Optional[Callable[[int], None]] = None,
+        on_token_refresh: Optional[Callable[[TokenSet], None]] = None,
     ) -> None:
         self._http = http or httpx.Client(timeout=30.0)
         if tokens is None:
@@ -68,6 +69,12 @@ class TidalClient:
         self._access = tokens.access_token
         self._country = tokens.country_code or DEFAULT_COUNTRY
         self._on_auth_error = on_auth_error
+        # Called whenever a mid-session refresh (see _get) rotates the
+        # refresh_token, so the caller (pool) can persist it immediately.
+        # Tidal invalidates the old refresh_token as soon as a new one is
+        # issued, so skipping this callback silently kills the account on
+        # its next pool.acquire().
+        self._on_token_refresh = on_token_refresh
         self._http.headers["Authorization"] = f"Bearer {self._access}"
 
     def close(self) -> None:
@@ -90,6 +97,13 @@ class TidalClient:
                 if self._on_auth_error:
                     self._on_auth_error(401)
                 resp.raise_for_status()
+            else:
+                # Tidal rotates the refresh_token on every use — persist the
+                # new one immediately so the pool doesn't keep the now-dead
+                # old token around (it would 401 and get the account banned
+                # on the next acquire()).
+                if self._on_token_refresh:
+                    self._on_token_refresh(self._tokens)
             self._access = self._tokens.access_token
             self._http.headers["Authorization"] = f"Bearer {self._access}"
             resp = self._http.get(f"{API_BASE}{path}", params=params)

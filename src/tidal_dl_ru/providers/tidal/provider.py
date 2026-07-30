@@ -137,6 +137,9 @@ class TidalProvider(Provider):
                 on_auth_error=(lambda _id=acc.id: lambda status: tidal_pool.report_failure(
                     _id, status
                 ))(),
+                on_token_refresh=(lambda _id=acc.id: lambda toks: tidal_pool.update_refresh_token(
+                    _id, toks.refresh_token
+                ))(),
             )
         except tidal_pool.NoAccountAvailable:
             # Pool is empty — try single-account dev mode.
@@ -182,6 +185,9 @@ class TidalProvider(Provider):
                     tokens=tokens,
                     on_auth_error=(lambda _id=acc.id: lambda status: tidal_pool.report_failure(
                         _id, status
+                    ))(),
+                    on_token_refresh=(lambda _id=acc.id: lambda toks: tidal_pool.update_refresh_token(
+                        _id, toks.refresh_token
                     ))(),
                 )
             except tidal_pool.NoAccountAvailable:

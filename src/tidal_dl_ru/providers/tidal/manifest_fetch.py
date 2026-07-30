@@ -91,6 +91,9 @@ def fetch_playback_manifest(
                 http=own_http,
                 tokens=tokens,
                 on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                    _id, toks.refresh_token
+                ),
             )
             manifest, rate_limited = _fetch_once(rotating, track_id, enum_q)
         finally:

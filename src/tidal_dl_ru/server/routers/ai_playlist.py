@@ -256,7 +256,14 @@ async def _artist_focus_playlist(artist_name: str, limit: int) -> list:
         try:
             try:
                 acc, tokens = tidal_pool.acquire(http)
-                client = TidalClient(http=http, tokens=tokens)
+                client = TidalClient(
+                    http=http,
+                    tokens=tokens,
+                    on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                    on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                        _id, toks.refresh_token
+                    ),
+                )
             except tidal_pool.NoAccountAvailable:
                 client = TidalClient(http=http)
 
@@ -301,7 +308,14 @@ async def _artist_similar_playlist(artist_name: str, limit: int) -> list:
         try:
             try:
                 acc, tokens = tidal_pool.acquire(http)
-                client = TidalClient(http=http, tokens=tokens)
+                client = TidalClient(
+                    http=http,
+                    tokens=tokens,
+                    on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                    on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                        _id, toks.refresh_token
+                    ),
+                )
             except tidal_pool.NoAccountAvailable:
                 client = TidalClient(http=http)
 

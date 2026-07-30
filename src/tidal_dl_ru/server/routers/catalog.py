@@ -343,7 +343,14 @@ async def get_artist_api(artist_id: str):
     try:
         try:
             acc, tokens = tidal_pool.acquire(http)
-            client = TidalClient(http=http, tokens=tokens)
+            client = TidalClient(
+                http=http,
+                tokens=tokens,
+                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                    _id, toks.refresh_token
+                ),
+            )
         except tidal_pool.NoAccountAvailable:
             client = TidalClient(http=http)
 
@@ -417,7 +424,14 @@ async def get_artist_bio_api(
     try:
         try:
             acc, tokens = tidal_pool.acquire(http)
-            client = TidalClient(http=http, tokens=tokens)
+            client = TidalClient(
+                http=http,
+                tokens=tokens,
+                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                    _id, toks.refresh_token
+                ),
+            )
         except tidal_pool.NoAccountAvailable:
             client = TidalClient(http=http)
 
@@ -483,7 +497,14 @@ async def get_album_api(album_id: str):
     try:
         try:
             acc, tokens = tidal_pool.acquire(http)
-            client = TidalClient(http=http, tokens=tokens)
+            client = TidalClient(
+                http=http,
+                tokens=tokens,
+                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                    _id, toks.refresh_token
+                ),
+            )
         except tidal_pool.NoAccountAvailable:
             client = TidalClient(http=http)
 

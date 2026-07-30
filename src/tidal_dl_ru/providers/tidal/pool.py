@@ -181,6 +181,31 @@ def clear_cooldowns_for_tests() -> None:
         _cooldown_until.clear()
 
 
+# --- in-flight tracking (avoid two concurrent acquire()s picking the same
+# account and racing on Tidal's one-shot refresh-token rotation) -------------
+
+_inflight_lock = threading.Lock()
+_inflight_ids: set[int] = set()
+
+
+def _try_reserve_inflight(account_id: int) -> bool:
+    with _inflight_lock:
+        if account_id in _inflight_ids:
+            return False
+        _inflight_ids.add(account_id)
+        return True
+
+
+def _release_inflight(account_id: int) -> None:
+    with _inflight_lock:
+        _inflight_ids.discard(account_id)
+
+
+def clear_inflight_for_tests() -> None:
+    with _inflight_lock:
+        _inflight_ids.clear()
+
+
 # --- pool operations --------------------------------------------------------
 
 
@@ -254,6 +279,14 @@ def acquire(
                 continue
             if _is_on_cooldown(candidate.id):
                 continue
+            # Skip accounts another thread is currently refreshing: Tidal
+            # invalidates a refresh_token the instant it's used, so if two
+            # callers refreshed the same stored token concurrently, the
+            # second refresh would 401 and (incorrectly) ban a healthy
+            # account. Reserving in-flight IDs keeps refresh calls for a
+            # given account strictly serialized.
+            if candidate.id in _inflight_ids:
+                continue
             acc = candidate
             break
         if acc is None:
@@ -270,30 +303,56 @@ def acquire(
         s.commit()
         s.refresh(acc)
 
+    if not _try_reserve_inflight(acc.id):
+        # Lost the race to another thread between the SELECT above and here —
+        # treat as unavailable this round rather than refreshing a token
+        # someone else is already refreshing.
+        raise NoAccountAvailable(
+            f"Account {acc.id} is currently being refreshed by another request."
+        )
+
     own_http = http is None
     http = http or httpx.Client(timeout=30.0)
     try:
-        tokens = refresh_tidal_token(http, acc.refresh_token)
-    except AuthError:
-        # Refresh genuinely failed (revoked/expired token) — ban the dead account
-        # so it isn't handed out again. Transient/network errors raise other types
-        # and are left untouched. Re-raise so the caller can pick another account.
-        report_failure(acc.id, 401)
-        raise
+        stored_refresh_token = acc.refresh_token
+        try:
+            tokens = refresh_tidal_token(http, stored_refresh_token)
+        except AuthError:
+            # Refresh genuinely failed (revoked/expired token) — ban the dead
+            # account so it isn't handed out again. Transient/network errors
+            # raise other types and are left untouched. Re-raise so the
+            # caller can pick another account.
+            report_failure(acc.id, 401)
+            raise
+        # Tidal rotates the refresh_token on every use, so the new one must
+        # be persisted before we hand control back to the caller — otherwise
+        # a crash or missed callback leaves the DB holding an already-dead
+        # token that will 401 (and auto-ban the account) on the next acquire.
+        if tokens.refresh_token != stored_refresh_token:
+            update_refresh_token(acc.id, tokens.refresh_token)
+        return acc, tokens
     finally:
+        _release_inflight(acc.id)
         if own_http:
             http.close()
 
-    # If the refresh response gave us a new refresh_token, persist it.
-    if tokens.refresh_token != acc.refresh_token:
-        with session() as s:
-            s.execute(
-                update(TidalAccount)
-                .where(TidalAccount.id == acc.id)
-                .values(refresh_token_enc=_encrypt(tokens.refresh_token))
-            )
-            s.commit()
-    return acc, tokens
+
+def update_refresh_token(account_id: int, new_refresh_token: str) -> None:
+    """Persist a rotated refresh_token for `account_id`.
+
+    Tidal invalidates the previous refresh_token as soon as a new one is
+    issued, so any code path that calls the refresh endpoint outside of
+    `acquire()` (e.g. TidalClient's mid-session 401 retry) MUST call this
+    immediately with the new token — otherwise the pool DB keeps a dead
+    token that will fail (and auto-ban the account) on the next acquire().
+    """
+    with session() as s:
+        s.execute(
+            update(TidalAccount)
+            .where(TidalAccount.id == account_id)
+            .values(refresh_token_enc=_encrypt(new_refresh_token))
+        )
+        s.commit()
 
 
 def report_success(account_id: int) -> None:
