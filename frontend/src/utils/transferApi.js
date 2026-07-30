@@ -58,7 +58,7 @@ export async function previewTransfer(url, lang = 'en', { onProgress, signal } =
 
 export async function getConnectedAccounts(lang = 'en') {
   const data = await apiGetJson('/api/connected-accounts', { auth: true, lang });
-  return data?.accounts || [];
+  return { accounts: data?.accounts || [], connectDisabled: !!data?.connect_disabled };
 }
 
 export async function authorizeAccount(provider, lang = 'en') {

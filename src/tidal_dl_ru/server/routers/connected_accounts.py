@@ -35,6 +35,12 @@ from tidal_dl_ru.server.transfer_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/connected-accounts", tags=["connected-accounts"])
 
+# Kill switch for starting NEW connections while the OAuth flow is being
+# reworked (Spotify's dev-account-must-have-Premium block surfaced issues
+# here). Existing connections/imports are untouched — this only gates
+# authorize(). Flip back to False to re-enable.
+CONNECT_NEW_ACCOUNTS_DISABLED = True
+
 
 def _redirect_uri(provider: str) -> str:
     return f"{settings.public_base_url}/api/connected-accounts/{provider}/callback"
@@ -70,7 +76,7 @@ def list_connected_accounts(
             "note": cfg.note,
             "connected": c.provider in linked,
         })
-    return {"accounts": out}
+    return {"accounts": out, "connect_disabled": CONNECT_NEW_ACCOUNTS_DISABLED}
 
 
 # --- Connect (start flow) ---------------------------------------------------
@@ -80,6 +86,8 @@ def authorize(
     provider: str,
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    if CONNECT_NEW_ACCOUNTS_DISABLED:
+        raise HTTPException(status_code=409, detail="Connecting new accounts is temporarily disabled.")
     connector = _require_connector(provider)
     cfg = connector.oauth_config()
     if not cfg.configured:

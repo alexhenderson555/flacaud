@@ -22,6 +22,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export default function ConnectedAccountsPanel({ lang = 'en' }) {
   const t = (en, ru) => (lang === 'ru' ? ru : en);
   const [accounts, setAccounts] = useState([]);
+  const [connectDisabled, setConnectDisabled] = useState(false);
   const [busy, setBusy] = useState('');          // provider currently connecting
   const [device, setDevice] = useState(null);    // { provider, user_code, verification_url }
   const [picker, setPicker] = useState(null);    // { provider, name, playlists }
@@ -33,7 +34,9 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
   const refresh = useCallback(async () => {
     if (!authed) return;
     try {
-      setAccounts(await getConnectedAccounts(lang));
+      const { accounts: list, connectDisabled: disabled } = await getConnectedAccounts(lang);
+      setAccounts(list);
+      setConnectDisabled(disabled);
     } catch { /* not logged in / offline */ }
   }, [authed, lang]);
 
@@ -211,6 +214,13 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
           'Импортируйте свои приватные плейлисты и лайки напрямую — ссылка не нужна.')}
       </p>
 
+      {connectDisabled && (
+        <p className="connected-accounts__sub" style={{ color: 'var(--text-muted)' }}>
+          {t('Connecting new accounts is temporarily off while we polish it — already-connected accounts still work.',
+            'Подключение новых аккаунтов временно отключено, пока дорабатываем — уже подключённые аккаунты продолжают работать.')}
+        </p>
+      )}
+
       <div className="connected-accounts__grid">
         {visible.map((a) => (
           <div key={a.provider} className="connected-account-row">
@@ -236,7 +246,8 @@ export default function ConnectedAccountsPanel({ lang = 'en' }) {
                 <button
                   type="button"
                   className="btn-primary connected-account-row__btn"
-                  disabled={busy === a.provider}
+                  disabled={busy === a.provider || connectDisabled}
+                  title={connectDisabled ? t('Temporarily unavailable', 'Временно недоступно') : undefined}
                   onClick={() => connect(a.provider)}
                 >
                   {busy === a.provider ? <Loader2 size={15} className="spinner" /> : <Link2 size={15} />}
