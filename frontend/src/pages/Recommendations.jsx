@@ -68,7 +68,10 @@ export default function Recommendations() {
       if (data.tracks?.length > 0) {
         const mapped = applyListeningSignals(data.tracks.map((tr) => normalizeTrack(tr)).filter(Boolean));
         setTracks(mapped);
-        setHasMore(mapped.length >= PAGE_SIZE);
+        // The backend only guarantees a soft minimum track count, not a full
+        // page, so a short first page doesn't mean there's nothing more —
+        // assume there's more until a loadMore call actually comes back empty.
+        setHasMore(true);
       } else {
         setTracks([]);
         setError(lang === 'ru' ? 'Не удалось загрузить рекомендации.' : 'Could not load recommendations.');
