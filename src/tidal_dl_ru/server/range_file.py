@@ -78,9 +78,17 @@ def _ranged_part_response(
     """Serve a growing .part file with optional known full asset size (seek metadata)."""
     size = path.stat().st_size
     total = resource_total if resource_total and resource_total >= size else size
-    rh = request.headers.get("range")
-    if not rh or size == 0:
+    if size == 0:
         return FileResponse(path, media_type=media_type, headers=headers)
+    # A request with no Range header must NOT fall through to a plain
+    # FileResponse here: Starlette would set Content-Length to the file's
+    # CURRENT (still-growing) size with no signal that more data is coming,
+    # so a client either believes that's the whole resource (a fetch()-based
+    # cache download would wrongly treat it as complete) or the <audio>
+    # element locks in a truncated duration from it. Synthesize a full-file
+    # range instead, same as streaming_part_response, so this always goes
+    # through the unknown-length-aware Content-Range path below.
+    rh = request.headers.get("range") or f"bytes=0-{size - 1}"
 
     try:
         start, end = parse_byte_range(

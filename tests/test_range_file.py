@@ -70,6 +70,27 @@ def test_ranged_part_file_reports_full_total_for_seek():
         assert resp.headers["content-range"] == "bytes 10-19/1000"
 
 
+def test_ranged_part_no_range_header_does_not_claim_partial_file_is_complete():
+    """A plain GET (no Range header) on a still-growing .part file must not
+    fall through to a bare FileResponse -- that would set Content-Length to
+    the CURRENT partial size with no signal more is coming, so a client
+    (fetch()-based cache download, or the <audio> element itself) could
+    treat the partial download as the complete resource."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "audio.flac.part"
+        path.write_bytes(b"\x00" * 200)
+
+        scope = {"type": "http", "method": "GET", "headers": []}
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        request = Request(scope, receive)
+        resp = ranged_file_response(path, request, "audio/flac", resource_total=None)
+        assert resp.status_code == 206
+        assert resp.headers["content-range"] == "bytes 0-199/*"
+
+
 def test_ranged_part_file_reports_unknown_total_when_size_not_yet_known():
     """When resource_total hasn't resolved yet, must not announce the
     downloaded-so-far byte count as the resource's total size -- browsers
