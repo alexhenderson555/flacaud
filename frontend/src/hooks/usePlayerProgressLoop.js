@@ -56,6 +56,7 @@ export function usePlayerProgressLoop({
   endedGuardRef,
   seekCooldownUntilRef,
   seekScrubbingRef,
+  lastElapsedRef,
 }) {
   const initAudioEngine = useCallback(() => {
     const el = getMainAudioEl?.() ?? audioRef.current;
@@ -79,9 +80,12 @@ export function usePlayerProgressLoop({
   useEffect(() => {
     if (!isPlaying) {
       const main = getMainAudioEl?.() ?? audioRef.current;
-      if (main) setProgress(main.currentTime || 0);
+      if (main) {
+        setProgress(main.currentTime || 0);
+        if (lastElapsedRef) lastElapsedRef.current = main.currentTime || 0;
+      }
     }
-  }, [isPlaying, audioRef, getMainAudioEl, setProgress]);
+  }, [isPlaying, audioRef, getMainAudioEl, setProgress, lastElapsedRef]);
 
   useEffect(() => {
     let animationFrameId;
@@ -93,6 +97,7 @@ export function usePlayerProgressLoop({
       const main = getMainAudioEl?.() ?? audioRef.current;
       if (main && trackDuration > 0) {
         const ct = main.currentTime;
+        if (lastElapsedRef) lastElapsedRef.current = ct;
         const audioActive = !main.paused && !main.ended;
         const now = performance.now();
         if (now - lastProgressSync >= 250) {
@@ -273,6 +278,7 @@ export function usePlayerProgressLoop({
     pendingPlayRef, pendingSeekRef, pendingPlayAfterSeekRef, setIsPlaying, setIsLoading,
     modesRef, shuffleEnabled, repeatMode, setCurrentAudioSrc, setPreloadAudioSrc, swapAudioSlots,
     getPreloadAudioEl, initAudioEngine, endedGuardRef, seekCooldownUntilRef, seekScrubbingRef,
+    lastElapsedRef,
   ]);
 
   const seekBufferWaitRef = useRef(null);

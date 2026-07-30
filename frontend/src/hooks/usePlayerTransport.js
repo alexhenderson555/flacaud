@@ -13,11 +13,16 @@ export function usePlayerTransport(props) {
   const endedGuardRef = useRef(false);
   const seekCooldownUntilRef = useRef(0);
   const seekScrubbingRef = useRef(false);
+  // Elapsed seconds of the track currently loaded in the main audio element,
+  // refreshed every progress tick — read by the queue hook at track-switch time,
+  // before the switch itself resets the element's currentTime to 0.
+  const lastElapsedRef = useRef(0);
 
   const queue = usePlayerQueue({
     ...props,
     queueOriginRef,
     startTrackRadioRef,
+    lastElapsedRef,
   });
 
   const radio = usePlayerRadio({
@@ -36,6 +41,7 @@ export function usePlayerTransport(props) {
     endedGuardRef,
     seekCooldownUntilRef,
     seekScrubbingRef,
+    lastElapsedRef,
   });
 
   return {

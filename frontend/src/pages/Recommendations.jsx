@@ -7,6 +7,13 @@ import PlaylistModal from '../components/PlaylistModal';
 import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
 import { apiGetJson, messageForApiError } from '../utils/apiClient';
 import { normalizeTrack } from '../utils/trackNormalize';
+import { filterRecommendations, rankRecommendations } from '../utils/listeningSignals';
+
+/** Client-side implicit-feedback rerank — skip/completion history isn't known
+ * server-side, so this runs after every fetch rather than in the API call. */
+function applyListeningSignals(tracks) {
+  return rankRecommendations(filterRecommendations(tracks));
+}
 
 const PAGE_SIZE = 20;
 
@@ -59,7 +66,7 @@ export default function Recommendations() {
         { auth: true, lang, timeoutMs: 60_000, retries: 2 },
       );
       if (data.tracks?.length > 0) {
-        const mapped = data.tracks.map((tr) => normalizeTrack(tr)).filter(Boolean);
+        const mapped = applyListeningSignals(data.tracks.map((tr) => normalizeTrack(tr)).filter(Boolean));
         setTracks(mapped);
         setHasMore(mapped.length >= PAGE_SIZE);
       } else {
@@ -83,7 +90,7 @@ export default function Recommendations() {
         exclude,
       });
       const data = await apiGetJson(`/api/recommendations?${params}`, { auth: true, lang });
-      const incoming = (data.tracks || []).map((tr) => normalizeTrack(tr)).filter(Boolean);
+      const incoming = applyListeningSignals((data.tracks || []).map((tr) => normalizeTrack(tr)).filter(Boolean));
       if (!incoming.length) {
         setHasMore(false);
         return;

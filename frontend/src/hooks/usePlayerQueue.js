@@ -6,6 +6,7 @@ import { hasAuthSession } from '../utils/hasAuthSession';
 import { getTrackFeaturesSync } from '../utils/trackFeatures';
 import { tracksMatch } from '../utils/trackNormalize';
 import { pushRecentlyPlayed } from '../utils/recentlyPlayed';
+import { recordPlaybackSignal } from '../utils/listeningSignals';
 import { PRELOAD_ENABLED } from '../utils/playerConfig';
 import {
   getNextTrackIndex,
@@ -81,9 +82,31 @@ export function usePlayerQueue({
   startTrackRadioRef,
   pauseSetEmbed,
   releaseSetEmbed,
+  lastElapsedRef,
 }) {
   const playbackGenRef = useRef(0);
   const playNextInFlightRef = useRef(false);
+
+  // Log a listening-signal sample for whatever track is being replaced, using
+  // the elapsed time the progress loop last recorded for it (read before the
+  // switch resets the audio element's own currentTime to 0).
+  const recordOutgoingSignal = useCallback((newTrackId) => {
+    const prev = currentTrackRef?.current;
+    if (!prev || String(prev.provider_id) === String(newTrackId)) return;
+    recordPlaybackSignal(prev, lastElapsedRef?.current || 0);
+  }, [currentTrackRef, lastElapsedRef]);
+
+  // Flush the in-progress track's signal on tab close — otherwise a track that
+  // was never "replaced" by a later one (the app just closed mid-play) would
+  // silently lose its listening data.
+  useEffect(() => {
+    const flush = () => {
+      const cur = currentTrackRef?.current;
+      if (cur) recordPlaybackSignal(cur, lastElapsedRef?.current || 0);
+    };
+    window.addEventListener('beforeunload', flush);
+    return () => window.removeEventListener('beforeunload', flush);
+  }, [currentTrackRef, lastElapsedRef]);
 
   useEffect(() => {
     const pl = playlist || [];
@@ -105,6 +128,7 @@ export function usePlayerQueue({
     if (gen !== playbackGenRef.current) return false;
 
     const trackId = String(playable.provider_id);
+    recordOutgoingSignal(trackId);
     clearTrackSwitchState({ pendingSeekRef, pendingPlayAfterSeekRef, skipEndedRef });
     if (pendingSeekRef) pendingSeekRef.current = 0;
     crossfadingRef.current = false;
@@ -144,7 +168,7 @@ export function usePlayerQueue({
     volume, setCurrentTrack, setPlaylist, setCurrentTrackIndex,
     setIsPlaying, setIsLoading, setProgress, playlistRef, pendingPlayRef,
     pendingSeekRef, pendingPlayAfterSeekRef, skipEndedRef, crossfadingRef,
-    crossfadeStartedForRef, currentTrackRef, queueOriginRef,
+    crossfadeStartedForRef, currentTrackRef, queueOriginRef, recordOutgoingSignal,
   ]);
 
   const beginPlayback = useCallback((track, contextPlaylist = null) => {
@@ -340,6 +364,7 @@ export function usePlayerQueue({
     if (!track?.provider_id) return null;
     const normalized = normalizeTrack({ ...track, provider_id: String(track.provider_id) });
     if (!normalized) return null;
+    recordOutgoingSignal(normalized.provider_id);
     if (currentTrackRef) currentTrackRef.current = normalized;
     setCurrentTrack(normalized);
     pushRecentlyPlayed(normalized);
@@ -348,7 +373,7 @@ export function usePlayerQueue({
     if (idx >= 0) setCurrentTrackIndex(idx);
     setProgress(progress);
     return normalized;
-  }, [currentTrackRef, setCurrentTrack, setCurrentTrackIndex, setProgress, playlistRef]);
+  }, [currentTrackRef, setCurrentTrack, setCurrentTrackIndex, setProgress, playlistRef, recordOutgoingSignal]);
 
   const advanceToNextTrack = useCallback(() => {
     const pl = playlistRef.current || [];
