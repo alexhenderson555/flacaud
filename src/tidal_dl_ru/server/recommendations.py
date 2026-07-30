@@ -704,11 +704,11 @@ async def build_recommendations(
                 client, chosen_artists, seen, per_artist=3, max_artists=5,
             )
 
-            genre_tids: list[str] = []
-            for t in genre_tracks[:6]:
-                if t.provider_id and str(t.provider_id) not in seen:
-                    genre_tids.append(str(t.provider_id))
-                    seen.add(str(t.provider_id))
+            # _fetch_genre_seed_tracks already adds every id it returns to `seen`
+            # before handing them back -- re-checking `not in seen` here always
+            # fails (they were *just* added), which silently zeroed out every
+            # genre station's seed list. Take the results as-is.
+            genre_tids: list[str] = [str(t.provider_id) for t in genre_tracks[:6] if t.provider_id]
             # We do NOT blend the listener's own random library tracks into a genre station,
             # because if their library is Indie Rock and they ask for Afro House, they will get Indie Rock mixed in!
             seed_tids = genre_tids
@@ -758,13 +758,14 @@ async def build_recommendations(
                     topup_tracks = await _fetch_genre_seed_tracks(
                         client, remaining, seen, per_artist=3, max_artists=len(remaining),
                     )
+                    # Same as above -- topup_tracks' ids are already in `seen`
+                    # (added inside _fetch_genre_seed_tracks itself).
                     for t in topup_tracks:
                         if len(tracks) >= limit:
                             break
                         tid = str(t.provider_id) if t.provider_id else None
-                        if not tid or tid in seen:
+                        if not tid:
                             continue
-                        seen.add(tid)
                         await _collect_track_neighbourhood(
                             client, tid, tracks, seen, artist_counts, limit,
                         )
