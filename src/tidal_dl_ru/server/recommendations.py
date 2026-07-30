@@ -48,6 +48,19 @@ _SEED_ARTISTS = (
 _MAX_PER_ARTIST = 3
 _RADIO_MAX_PER_ARTIST = 3
 _MIN_TRACK_SIGNAL_RATIO = 0.45
+
+# How far past the requested `limit` the collection phase is allowed to grow
+# before we stop appending. Collecting only exactly `limit` tracks means the
+# very first seed (of the several randomly chosen ones) usually fills the
+# quota by itself, which (a) silently skips exploring the other seeds and
+# (b) leaves the second-hop similar-graph expansion nothing to do, since
+# `_append_unique` no-ops once `len(tracks) >= limit`. Oversampling the
+# internal collection cap keeps every chosen seed and both hops in play; the
+# public output is still trimmed to exactly `limit` right after shuffling,
+# before any further (costly) per-track enrichment runs, so this costs no
+# extra network calls.
+def _collection_cap(limit: int) -> int:
+    return max(limit, min(limit * 2, limit + 60))
 _JUNK_TITLE_FRAGMENTS = (
     "daily mix",
     "daily playlist",
@@ -545,6 +558,7 @@ async def build_track_radio(
     tracks: list[Track] = []
     seen: set[str] = set()
     artist_counts: dict[str, int] = defaultdict(int)
+    collect_limit = _collection_cap(limit)
 
     client, http = await _with_client()
     meta: TidalTrack | None = None
@@ -554,7 +568,7 @@ async def build_track_radio(
         seen.add(str(track_id))
 
         await _collect_track_neighbourhood(
-            client, str(track_id), tracks, seen, artist_counts, limit,
+            client, str(track_id), tracks, seen, artist_counts, collect_limit,
             max_per_artist=_RADIO_MAX_PER_ARTIST,
         )
 
@@ -563,7 +577,7 @@ async def build_track_radio(
             anchors.insert(0, str(track_id))
         random.shuffle(anchors)
         await _expand_similar_graph(
-            client, anchors, tracks, seen, artist_counts, limit,
+            client, anchors, tracks, seen, artist_counts, collect_limit,
             max_per_artist=_RADIO_MAX_PER_ARTIST,
         )
 
@@ -578,18 +592,18 @@ async def build_track_radio(
 
             affinity_results = await asyncio.gather(*[_fetch_affinity(tid) for tid in affinity])
             for radio, similar, mix in affinity_results:
-                if len(tracks) >= limit:
+                if len(tracks) >= collect_limit:
                     break
                 ordered_raw = _interleave_round_robin(radio, similar, mix)
                 _append_unique(
                     tracks, seen, artist_counts, ordered_raw,
-                    limit=limit, client=client, max_per_artist=2,
+                    limit=collect_limit, client=client, max_per_artist=2,
                 )
 
         min_track_signal = max(4, int(limit * _MIN_TRACK_SIGNAL_RATIO))
         if len(tracks) < min_track_signal and meta is not None:
             await _sparse_artist_radio_fallback(
-                client, _seed_artist_ids(meta), tracks, seen, artist_counts, limit,
+                client, _seed_artist_ids(meta), tracks, seen, artist_counts, collect_limit,
             )
 
         try:
@@ -597,14 +611,19 @@ async def build_track_radio(
                 seed_uni = _enrich_tidal_uni(client, _to_universal(meta))
         except Exception:
             seed_uni = None
-        tracks = await _finalize_track_covers(client, tracks)
+
+        # Trim to the requested `limit` *before* the per-track cover
+        # enrichment below — enriching the whole oversampled `collect_limit`
+        # pool would spend extra API calls on tracks we're about to discard.
+        body = list(tracks)
+        random.shuffle(body)
+        body = body[:limit]
+        body = await _finalize_track_covers(client, body)
         if seed_uni is not None:
             seed_uni = _enrich_tidal_uni(client, seed_uni)
     finally:
         http.close()
 
-    body = list(tracks)
-    random.shuffle(body)
     out = body[:limit]
     if seed_uni is not None:
         sid = str(seed_uni.provider_id)
@@ -686,6 +705,7 @@ async def build_recommendations(
     tracks: list[Track] = []
     seen: set[str] = set(exclude_ids)
     artist_counts: dict[str, int] = defaultdict(int)
+    collect_limit = _collection_cap(limit)
 
     saved: list[SavedTrack] = []
     if user and session:
@@ -715,7 +735,7 @@ async def build_recommendations(
             # before handing them back -- re-checking `not in seen` here always
             # fails (they were *just* added), which silently zeroed out every
             # genre station's seed list. Take the results as-is.
-            genre_tids: list[str] = [str(t.provider_id) for t in genre_tracks[:6] if t.provider_id]
+            genre_tids: list[str] = [str(t.provider_id) for t in genre_tracks[:9] if t.provider_id]
             # We do NOT blend the listener's own random library tracks into a genre station,
             # because if their library is Indie Rock and they ask for Afro House, they will get Indie Rock mixed in!
             seed_tids = genre_tids
@@ -724,10 +744,10 @@ async def build_recommendations(
             seed_tids = [str(r.provider_id) for r in seed_rows]
 
         for tid in seed_tids:
-            if len(tracks) >= limit:
+            if len(tracks) >= collect_limit:
                 break
             await _collect_track_neighbourhood(
-                client, tid, tracks, seen, artist_counts, limit,
+                client, tid, tracks, seen, artist_counts, collect_limit,
             )
 
             # Affinity expansion only if using personal library seeds
@@ -739,16 +759,16 @@ async def build_recommendations(
                 aff_sample = list(affinity_ids)
                 random.shuffle(aff_sample)
                 for aff_tid in aff_sample[: random.randint(2, 5)]:
-                    if len(tracks) >= limit:
+                    if len(tracks) >= collect_limit:
                         break
                     await _collect_track_neighbourhood(
-                        client, aff_tid, tracks, seen, artist_counts, limit,
+                        client, aff_tid, tracks, seen, artist_counts, collect_limit,
                         max_per_artist=2,
                     )
 
         anchors = [str(t.provider_id) for t in tracks[:16]]
         random.shuffle(anchors)
-        await _expand_similar_graph(client, anchors, tracks, seen, artist_counts, limit)
+        await _expand_similar_graph(client, anchors, tracks, seen, artist_counts, collect_limit)
 
         min_track_signal = max(6, int(limit * _MIN_TRACK_SIGNAL_RATIO))
         # Both fallbacks below pull from the *listener's own library* or a fixed
@@ -768,13 +788,13 @@ async def build_recommendations(
                     # Same as above -- topup_tracks' ids are already in `seen`
                     # (added inside _fetch_genre_seed_tracks itself).
                     for t in topup_tracks:
-                        if len(tracks) >= limit:
+                        if len(tracks) >= collect_limit:
                             break
                         tid = str(t.provider_id) if t.provider_id else None
                         if not tid:
                             continue
                         await _collect_track_neighbourhood(
-                            client, tid, tracks, seen, artist_counts, limit,
+                            client, tid, tracks, seen, artist_counts, collect_limit,
                         )
         else:
             if len(tracks) < min_track_signal and saved:
@@ -787,17 +807,17 @@ async def build_recommendations(
                     if ids:
                         artist_ids.append(str(ids[0]))
                 for aid in list(dict.fromkeys(artist_ids))[:4]:
-                    if len(tracks) >= limit:
+                    if len(tracks) >= collect_limit:
                         break
                     await _sparse_artist_radio_fallback(
-                        client, [aid], tracks, seen, artist_counts, limit,
+                        client, [aid], tracks, seen, artist_counts, collect_limit,
                     )
 
             if len(tracks) < min_track_signal:
                 seeds = list(_SEED_ARTISTS)
                 random.shuffle(seeds)
                 for name in seeds:
-                    if len(tracks) >= limit:
+                    if len(tracks) >= collect_limit:
                         break
                     try:
                         results = await asyncio.to_thread(p.search, name, 2)
@@ -809,14 +829,18 @@ async def build_recommendations(
                     if sid in seen:
                         continue
                     await _collect_track_neighbourhood(
-                        client, sid, tracks, seen, artist_counts, limit,
+                        client, sid, tracks, seen, artist_counts, collect_limit,
                     )
 
+        # Trim to the requested `limit` *before* the per-track cover
+        # enrichment below — enriching the whole oversampled `collect_limit`
+        # pool would spend extra API calls on tracks we're about to discard.
+        random.shuffle(tracks)
+        tracks = tracks[:limit]
         tracks = await _finalize_track_covers(client, tracks)
     finally:
         http.close()
 
-    random.shuffle(tracks)
     out = tracks[:limit]
     cache_set(user_key, limit, out)
     return out
