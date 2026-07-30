@@ -22,6 +22,8 @@ const dict = {
     tuning: 'Tuning In…',
     upNext: 'Up Next on Your Station',
     refresh: 'Refresh Station',
+    loadMore: 'Load more',
+    loadingMore: 'Loading…',
     errGen: 'Could not generate a radio mix right now.',
     errNet: 'Network error while tuning into the radio.',
     selectGenre: 'Select a Genre',
@@ -34,6 +36,8 @@ const dict = {
     tuning: 'Настраиваем…',
     upNext: 'Дальше на вашей станции',
     refresh: 'Обновить станцию',
+    loadMore: 'Загрузить ещё',
+    loadingMore: 'Загружаем…',
     errGen: 'Не удалось сгенерировать радио-микс.',
     errNet: 'Ошибка сети при подключении к радио.',
     selectGenre: 'Выберите Жанр',
@@ -46,6 +50,7 @@ export default function Genreverse() {
   const [loadingGenres, setLoadingGenres] = useState(true);
   const [stationTracks, setStationTracks] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoadingMoreStation, setIsLoadingMoreStation] = useState(false);
   const [error, setError] = useState(null);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   
@@ -55,6 +60,7 @@ export default function Genreverse() {
   const {
     togglePlay: playerContextTogglePlay,
     playQueue: playerContextPlayQueue,
+    appendToQueue,
     currentTrackId,
     isPlaying,
     isLoading,
@@ -147,6 +153,27 @@ export default function Genreverse() {
       setError(messageForApiError(err, lang) || t('errNet'));
     }
     setIsGenerating(false);
+  };
+
+  const loadMoreStation = async () => {
+    if (isLoadingMoreStation || !currentVibe) return;
+    setIsLoadingMoreStation(true);
+    setError(null);
+    try {
+      const excludeIds = stationTracks.map((tr) => String(tr.provider_id));
+      const incoming = await fetchVibeRadioBatch({ apiGetJson, lang, excludeIds, genre: currentVibe });
+      if (incoming.length > 0) {
+        const withGenre = incoming.map((tr) => ({ ...tr, __queue_genre: currentVibe }));
+        const enriched = await enrichTracksFromApi(withGenre, lang, { persistLibrary: false });
+        const merged = mergeVibeRadioTracks(stationTracks, enriched);
+        const added = merged.slice(stationTracks.length);
+        setStationTracks(merged);
+        if (added.length && appendToQueue) appendToQueue(added);
+      }
+    } catch (err) {
+      setError(messageForApiError(err, lang) || t('errNet'));
+    }
+    setIsLoadingMoreStation(false);
   };
 
   return (
@@ -464,6 +491,19 @@ export default function Genreverse() {
                 testIdPrefix="radio"
               />
             ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
+            <button
+              type="button"
+              onClick={loadMoreStation}
+              disabled={isLoadingMoreStation}
+              className="btn-secondary"
+              style={{ borderRadius: '20px', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              data-testid="genreverse-load-more"
+            >
+              {isLoadingMoreStation ? <Loader2 size={16} className="spin" /> : null}
+              {isLoadingMoreStation ? t('loadingMore') : t('loadMore')}
+            </button>
           </div>
         </motion.div>
       )}
