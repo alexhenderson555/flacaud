@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import PlatformIcon from '../components/sync/PlatformIcon';
 import SyncProgressPanel from '../components/sync/SyncProgressPanel';
-import ConnectedAccountsPanel from '../components/sync/ConnectedAccountsPanel';
 import MatchConfidenceBadge from '../components/MatchConfidenceBadge';
 import { syncDict, fmtSync } from '../locales/syncDict';
 import {
@@ -193,8 +192,6 @@ export default function Sync() {
         </h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>{t('syncSubtitle')}</p>
       </motion.header>
-
-      <ConnectedAccountsPanel lang={lang} />
 
       <div className="sync-page__layout">
         <section className="sync-page__sources">

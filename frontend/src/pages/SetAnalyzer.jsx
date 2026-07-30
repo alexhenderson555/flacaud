@@ -12,13 +12,10 @@ import SetEmbedAnchor from '../components/player/SetEmbedAnchor';
 import { SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
 import AnalyzerProgressPanel from '../components/setanalyzer/AnalyzerProgressPanel';
 import SetTracklistRow from '../components/setanalyzer/SetTracklistRow';
-import SetDjInsights from '../components/setanalyzer/SetDjInsights';
 import PlaylistModal from '../components/PlaylistModal';
-import { useTrackFeaturesForList } from '../hooks/useTrackFeaturesForList';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
 import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
 import { startDownloadJob, cancelJob, downloadSetAudio } from '../utils/downloadJobs';
-import { enableDjAnalysisPreference } from '../utils/enableDjAnalysis';
 import { apiPostJson } from '../utils/apiClient';
 import { fetchJobStatus } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
@@ -56,9 +53,6 @@ export default function SetAnalyzer() {
     lang,
     toggleLike,
     likedTracks,
-    djFeaturesActive,
-    djFeaturesAvailable,
-    setDjAnalysisEnabled,
     startTrackRadio,
     radioLoadingTrackId,
     t: tApp,
@@ -104,7 +98,6 @@ export default function SetAnalyzer() {
   const [error, setError] = useState(null);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
   const [bulkPlaylistOpen, setBulkPlaylistOpen] = useState(false);
-  const [djAnalyzeRequested, setDjAnalyzeRequested] = useState(false);
   const [downloadingSet, setDownloadingSet] = useState(false);
   const resumeToastShown = useRef(false);
 
@@ -249,45 +242,6 @@ export default function SetAnalyzer() {
     seekSetEmbed(seconds, { preferEmbed: true, url: trimmedUrl });
   }, [canPlaySet, trimmedUrl, loadSetEmbed, seekSetEmbed]);
 
-  const { pendingCount: djPendingCount, getFeatures: getDjFeatures } = useTrackFeaturesForList(
-    playableTracks,
-    {
-      enabled: djAnalyzeRequested && !!djFeaturesActive,
-      analyze: djAnalyzeRequested && !!djFeaturesActive,
-      maxAnalyze: Math.max(playableTracks.length, 40),
-    },
-  );
-
-  const handleDjAnalyzeBatch = useCallback(async () => {
-    if (!hasAuthSession()) {
-      showToast(t('authRequired'));
-      return false;
-    }
-    if (!djFeaturesAvailable) {
-      showToast(t('djAnalyzeNeedPro'));
-      return false;
-    }
-    if (!djFeaturesActive) {
-      try {
-        const enabled = await enableDjAnalysisPreference(setDjAnalysisEnabled);
-        if (!enabled) {
-          showToast(t('djAnalyzeNeedPro'));
-          return false;
-        }
-        showToast(t('djAnalyzeEnabledAuto'));
-      } catch {
-        showToast(t('djAnalyzeEnableFailed'));
-        return false;
-      }
-    }
-    setDjAnalyzeRequested(true);
-    return true;
-  }, [
-    djFeaturesActive,
-    djFeaturesAvailable,
-    setDjAnalysisEnabled,
-    t,
-  ]);
 
   const playTidalTrack = useCallback((track, list) => {
     if (!track?.provider_id) return;
@@ -680,15 +634,6 @@ export default function SetAnalyzer() {
 
       {setTracks.length > 0 && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, minHeight: 0, width: '100%' }}>
-          <SetDjInsights
-            rows={setTracks}
-            lang={lang}
-            pendingCount={djPendingCount}
-            totalToAnalyze={playableTracks.length}
-            getFeatures={getDjFeatures}
-            onAnalyzeBatch={handleDjAnalyzeBatch}
-          />
-
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
             <h2 style={{ fontSize: '1.5rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ListMusic size={24} />
