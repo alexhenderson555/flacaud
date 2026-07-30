@@ -56,6 +56,11 @@ export default function Genreverse() {
   
   const [activeGenre, setActiveGenre] = useState(null);
   const [currentVibe, setCurrentVibe] = useState(null);
+  // currentVibe only updates on a *successful* generation, so it can't drive a
+  // "this one is generating right now" indicator -- it still holds the old
+  // value (or null) for the whole request, making a click look like nothing
+  // happened. Tracked separately, cleared whether the request succeeds or not.
+  const [loadingGenre, setLoadingGenre] = useState(null);
 
   const {
     togglePlay: playerContextTogglePlay,
@@ -129,6 +134,7 @@ export default function Genreverse() {
 
   const generateVibe = async (genreName, refresh = false) => {
     setIsGenerating(true);
+    setLoadingGenre(genreName);
     setError(null);
     try {
       const excludeIds = refresh ? [] : stationTracks.map((tr) => String(tr.provider_id));
@@ -153,6 +159,7 @@ export default function Genreverse() {
       setError(messageForApiError(err, lang) || t('errNet'));
     }
     setIsGenerating(false);
+    setLoadingGenre(null);
   };
 
   const loadMoreStation = async () => {
@@ -337,8 +344,17 @@ export default function Genreverse() {
                     boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
                   }}
                 >
-                  {isGenerating && currentVibe === activeGenre.name ? <Loader2 size={24} className="spin" /> : <Play size={24} fill="currentColor" />}
-                  Play {activeGenre.name} Mix
+                  {isGenerating && loadingGenre === activeGenre.name ? (
+                    <>
+                      <Loader2 size={24} className="spin" />
+                      {t('tuning')}
+                    </>
+                  ) : (
+                    <>
+                      <Play size={24} fill="currentColor" />
+                      {`Play ${activeGenre.name} Mix`}
+                    </>
+                  )}
                 </motion.button>
               </div>
             </motion.div>
@@ -406,8 +422,15 @@ export default function Genreverse() {
                     </>
                   )}
                   <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: subImage ? '20px' : '0', width: '100%', height: '100%', justifyContent: subImage ? 'flex-end' : 'center' }}>
-                    {isGenerating && currentVibe === sub ? <Loader2 size={28} className="spin" /> : (!subImage && <Play size={28} style={{ opacity: 0.8 }} />)}
-                    <span style={{ textAlign: 'center', textShadow: subImage ? '0 2px 10px rgba(0,0,0,0.8)' : 'none' }}>{sub}</span>
+                    {isGenerating && loadingGenre === sub ? <Loader2 size={28} className="spin" /> : (!subImage && <Play size={28} style={{ opacity: 0.8 }} />)}
+                    <span style={{ textAlign: 'center', textShadow: subImage ? '0 2px 10px rgba(0,0,0,0.8)' : 'none' }}>
+                      {sub}
+                      {isGenerating && loadingGenre === sub && (
+                        <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 400, opacity: 0.8 }}>
+                          {t('tuning')}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   {/* subtle colored glow based on parent genre */}
                   {!subImage && (
