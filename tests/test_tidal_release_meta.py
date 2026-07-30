@@ -24,6 +24,25 @@ def test_stream_start_date_becomes_year():
     assert uni.release_date == "2017-12-05"
 
 
+def test_epoch_stream_start_date_is_treated_as_no_data():
+    """Tidal returns an unset streamStartDate as the Unix-epoch placeholder,
+    not an absent field -- must not surface as a bogus "1970" release year."""
+    t = TidalTrack.model_validate(
+        {
+            "id": 1,
+            "title": "Hit",
+            "duration": 200,
+            "trackNumber": 1,
+            "streamStartDate": "1970-01-01T00:00:00.000+0000",
+            "artists": [{"id": 9, "name": "Artist"}],
+            "album": {"id": 2, "title": "Album"},
+        }
+    )
+    uni = _to_universal(t)
+    assert uni.year is None
+    assert uni.release_date is None
+
+
 def test_album_fetch_when_stub_has_no_dates():
     t = TidalTrack.model_validate(
         {

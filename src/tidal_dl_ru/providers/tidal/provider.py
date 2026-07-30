@@ -53,7 +53,13 @@ def _release_meta_from_tidal(t: TidalTrack) -> tuple[str | None, int | None]:
     if t.album and t.album.release_date:
         return _parse_release_meta(t.album.release_date)
     if t.stream_start_date:
-        return _parse_release_meta(t.stream_start_date)
+        release_date, year = _parse_release_meta(t.stream_start_date)
+        # Tidal returns an unset streamStartDate as the Unix-epoch placeholder
+        # (1970-01-01T00:00:00.000+0000), not an absent field -- treat it the
+        # same as "no data" rather than showing a bogus "1970" release year.
+        if year == 1970:
+            return None, None
+        return release_date, year
     return None, None
 
 
