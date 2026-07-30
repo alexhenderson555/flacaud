@@ -505,7 +505,22 @@ async def ensure_dash_cache(
 
 
 def dash_stream_bytes_needed(request: Request) -> int:
-    """LOSSLESS/HI_RES DASH — wait for full remux; no partial .part streaming."""
+    """LOSSLESS/HI_RES DASH — wait for full remux; no partial .part streaming.
+
+    Deliberately kept at 0 (require_merged) rather than switched to a partial
+    threshold: the pre-remux file is a raw concatenation of fMP4 init + media
+    segments, and this codebase has already tried serving that intermediate
+    file once — see ``find_merged_dash_file``'s "never intermediate .fmp4
+    (causes play-then-restart)" comment. The remux step isn't just a container
+    label change (``_remux`` in providers/tidal/download.py demuxes the fMP4
+    to raw FLAC/M4A via ffmpeg -c copy), and the raw file's moov/duration
+    metadata is unreliable while still growing, so serving it progressively
+    risks reintroducing that regression. The safe fix for the ~10s wait is to
+    start the resolve+download+remux earlier (as soon as a track is selected,
+    see ``usePlaybackQuality``'s early ``warmStream`` effect) rather than
+    partially serving this file — see media.py's stream_track route, which
+    also explicitly rejects serving tmp_path/fmp4_path for this reason.
+    """
     return 0
 
 

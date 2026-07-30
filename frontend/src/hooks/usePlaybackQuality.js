@@ -275,6 +275,24 @@ export function usePlaybackQuality({
     }
   }, [lang]);
 
+  // Kick off the DASH resolve+download+remux the instant a track becomes
+  // `currentTrack` — not when resolveStreamUrl later needs actual bytes.
+  // LOSSLESS/HI_RES DASH remux is a flat ~10s cost (see streaming.py
+  // `ensure_dash_cache` / `_remux`) that cannot be safely shortened by serving
+  // the pre-remux fMP4 progressively — that was tried before and reverted
+  // (see `find_merged_dash_file`'s "never intermediate .fmp4, causes
+  // play-then-restart" comment in server/streaming.py). Starting the warm here,
+  // in parallel with the quality probe, lets the remux run during whatever
+  // idle time exists between track selection and the user actually pressing
+  // play, instead of serializing it after play is pressed.
+  useEffect(() => {
+    if (!enabled || !currentTrack?.provider_id) return undefined;
+    const capped = clampQualityToPlan(playbackQualityRef.current, effectivePlan);
+    if (!LOSSLESS_TIERS.has(capped)) return undefined;
+    void warmStream(currentTrack, capped);
+    return undefined;
+  }, [enabled, currentTrack?.provider_id, currentTrack?.provider, effectivePlan, warmStream]);
+
   useEffect(() => {
     if (!enabled || !planReady) {
       setCurrentAudioSrc('');
