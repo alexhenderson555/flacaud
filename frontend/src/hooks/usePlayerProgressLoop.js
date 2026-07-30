@@ -3,6 +3,7 @@ import { effectivePlaybackDuration } from '../utils/effectivePlaybackDuration';
 import { markSeekActivity } from '../utils/playbackPriority';
 import { PRELOAD_ENABLED, CROSSFADE_ENABLED } from '../utils/playerConfig';
 import { hasQueueSuccessor } from '../utils/playbackModes';
+import { sameStreamResource } from '../utils/qualityPrefs';
 import {
   shouldTriggerTrackEnd,
   canStartCrossfade,
@@ -46,6 +47,7 @@ export function usePlayerProgressLoop({
   shuffleEnabled = false,
   repeatMode = 'off',
   setCurrentAudioSrc,
+  currentAudioSrc,
   setPreloadAudioSrc,
   swapAudioSlots,
   getMainAudioEl,
@@ -118,9 +120,20 @@ export function usePlayerProgressLoop({
 
         const seeking = main.seeking;
         const seekCooldown = performance.now() < seekCooldownUntilRef.current;
-        const atNaturalEnd = isAtTrackEnd(main, trackDuration);
+        // `trackDuration`/`effectiveDuration` above come from React state (the
+        // just-updated `currentTrack`), which can flip to the NEW track before
+        // `main`'s actual src has swapped to it (the swap waits on an async
+        // stream-resolve). Comparing the OLD element's still-advancing
+        // currentTime against the NEW track's (possibly shorter) duration can
+        // then look like the new track already ended, firing an extra
+        // unrequested playNext(). Only evaluate end-detection once `main` is
+        // confirmed to actually be loaded with the resolved src for the
+        // current track.
+        const activeSrc = main.currentSrc || main.src || '';
+        const ownsCurrentTrack = !currentAudioSrc || sameStreamResource(activeSrc, currentAudioSrc);
+        const atNaturalEnd = ownsCurrentTrack && isAtTrackEnd(main, trackDuration);
 
-        if (shouldTriggerTrackEnd({
+        if (ownsCurrentTrack && shouldTriggerTrackEnd({
           isPlaying: isPlaying || audioActive || atNaturalEnd,
           currentTime: ct,
           effectiveDuration,
@@ -276,7 +289,7 @@ export function usePlayerProgressLoop({
     setProgress, audioRef, getMainAudioEl, preloadAudioRef, playlistRef, currentTrackRef,
     crossfadingRef, crossfadeStartedForRef, fadeInPendingRef, skipEndedRef, skipAudioSrcSyncRef,
     pendingPlayRef, pendingSeekRef, pendingPlayAfterSeekRef, setIsPlaying, setIsLoading,
-    modesRef, shuffleEnabled, repeatMode, setCurrentAudioSrc, setPreloadAudioSrc, swapAudioSlots,
+    modesRef, shuffleEnabled, repeatMode, setCurrentAudioSrc, currentAudioSrc, setPreloadAudioSrc, swapAudioSlots,
     getPreloadAudioEl, initAudioEngine, endedGuardRef, seekCooldownUntilRef, seekScrubbingRef,
     lastElapsedRef,
   ]);
