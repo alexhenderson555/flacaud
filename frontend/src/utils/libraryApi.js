@@ -409,13 +409,16 @@ export async function fetchSavedAlbumsApi(lang = 'en') {
 
 export async function addAlbumToLibraryApi(album, lang = 'en') {
   if (!hasAuthSession()) throw new Error('Must be logged in to save albums');
+  const artistNames = (album.artists || [])
+    .map((a) => (typeof a === 'string' ? a : a?.name))
+    .filter(Boolean);
   const payload = {
     provider_id: String(album.id || album.provider_id),
     title: album.title,
-    artists_json: JSON.stringify(album.artists || []),
-    cover_url: album.cover || album.cover_url || null,
-    release_date: album.releaseDate || album.release_date || null,
-    track_count: album.numberOfTracks || album.track_count || album.tracks?.length || 0,
+    artists_json: JSON.stringify(artistNames),
+    cover_url: album.cover_url || album.cover || null,
+    release_date: album.release_date || album.releaseDate || null,
+    track_count: album.number_of_tracks ?? album.numberOfTracks ?? album.track_count ?? album.tracks?.length ?? 0,
   };
   return await apiPostJson('/api/albums', payload, { auth: true, lang });
 }
