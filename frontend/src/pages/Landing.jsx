@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check } from 'lucide-react';
@@ -27,6 +27,7 @@ export default function Landing() {
   const cinema = useLandingCinemaMode();
   const t = LANDING_COPY[lang] || LANDING_COPY.en;
   const [billing, setBilling] = useState('monthly');
+  const heroRef = useRef(null);
 
   useEffect(() => {
     if (hasAuthSession()) {
@@ -46,7 +47,7 @@ export default function Landing() {
 
   return (
     <div className={`landing${cinema ? ' landing--cinema' : ''}`} style={{ position: 'relative' }}>
-      <LandingVideoBg cinema={cinema} />
+      <LandingVideoBg cinema={cinema} heroRef={heroRef} />
 
       {cinema && (
         <p className="landing__cinema-hint" aria-live="polite">
@@ -62,7 +63,7 @@ export default function Landing() {
       <LandingHeader t={t} onToggleLang={toggleLang} />
 
       <main className="landing__main">
-        <section className="landing__hero">
+        <section className="landing__hero" ref={heroRef}>
           <motion.div
             className="landing__hero-copy"
             initial={{ opacity: 0, y: 24 }}

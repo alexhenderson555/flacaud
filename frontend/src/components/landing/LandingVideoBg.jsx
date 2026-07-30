@@ -1,5 +1,28 @@
+import { useEffect, useRef } from 'react';
 
-export default function LandingVideoBg({ cinema = false }) {
+export default function LandingVideoBg({ cinema = false, heroRef = null }) {
+  const videoRef = useRef(null);
+
+  // The video sits `fixed` behind the whole scrollable page, not just the hero
+  // -- left playing, it keeps decoding/compositing full-viewport frames the
+  // entire time someone reads pricing/FAQ far below. Pause it once the hero
+  // scrolls out of view and resume if they scroll back up. Cinema mode is a
+  // deliberate full-screen visual, so it always plays there regardless.
+  useEffect(() => {
+    if (cinema || !heroRef?.current) return undefined;
+    const el = videoRef.current;
+    if (!el) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play?.().catch(() => {});
+        else el.pause?.();
+      },
+      { threshold: 0 },
+    );
+    observer.observe(heroRef.current);
+    return () => observer.disconnect();
+  }, [cinema, heroRef]);
+
   return (
     <div
       className={`landing__canvas-wrap${cinema ? ' landing__canvas-wrap--cinema' : ''}`}
@@ -9,6 +32,7 @@ export default function LandingVideoBg({ cinema = false }) {
       }}
     >
       <video
+        ref={videoRef}
         src="/videos/1.mp4"
         autoPlay
         muted

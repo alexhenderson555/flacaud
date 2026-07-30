@@ -1910,12 +1910,16 @@ button.nav-item {
   opacity: 0.6;
   z-index: 0;
   pointer-events: none;
-  filter: blur(72px);
+  /* Runs continuously on every app page (not just the landing page) --
+     kept modest since filter: blur() forces per-frame rasterization that
+     doesn't get the cheap transform/opacity compositor fast path. */
+  filter: blur(40px);
   border-radius: 50%;
-  width: 1200px;
-  height: 1200px;
+  width: 700px;
+  height: 700px;
   transition: opacity 1s;
   position: absolute;
+  will-change: transform;
 }
 .glow-1 {
   background: radial-gradient(circle, var(--accent-solid) 0%, transparent 60%);
@@ -1934,8 +1938,8 @@ button.nav-item {
 .glow-3 {
   opacity: 0.3;
   background: radial-gradient(circle, #ffffff1a 0%, #0000 60%);
-  width: 800px;
-  height: 800px;
+  width: 480px;
+  height: 480px;
   animation: 20s ease-in-out infinite alternate float3;
   top: 30%;
   left: 40%;
