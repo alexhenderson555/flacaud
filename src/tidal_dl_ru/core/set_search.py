@@ -116,8 +116,13 @@ def search_sets(
     # Overfetch since some results get filtered out by duration below. A
     # single-source search has no other platform to fill the quota, so it
     # needs a bigger overfetch to leave enough candidates for any additional
-    # client-side filtering (date/duration) on top.
-    per_source = max(6, limit) if len(sources) > 1 else max(12, limit * 2)
+    # client-side filtering on top. This matters most for the "uploaded
+    # within" date filter: SoundCloud's search API has no server-side date
+    # filter at all (yt-dlp's scsearch only forwards the query text), so the
+    # ONLY way to reliably surface anything from e.g. the last week is to
+    # pull a much bigger pool from the relevance-ranked results and pick the
+    # recent ones out of that -- 200 is yt-dlp's own per-search cap.
+    per_source = max(6, limit) if len(sources) > 1 else min(200, max(150, limit * 4))
     yt = _search_one(query, "ytsearch", "youtube", per_source) if "youtube" in sources else []
     sc = _search_one(query, "scsearch", "soundcloud", per_source) if "soundcloud" in sources else []
 
