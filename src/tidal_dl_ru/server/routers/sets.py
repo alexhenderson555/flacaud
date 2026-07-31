@@ -321,6 +321,12 @@ _FALLBACK_DISCOVER_QUERIES = [
     "tech house dj set",
     "melodic techno dj set",
     "deep house dj set",
+    "house dj set",
+    "organic house dj set",
+    "hard techno dj set",
+    "amapiano dj set",
+    "drum and bass dj set",
+    "progressive house dj set",
 ]
 
 
@@ -364,11 +370,20 @@ async def set_recommendations_endpoint(
     than just the user's own top few favorites.
     """
     limit = max(1, min(limit, 48))
+    # A specific artist's own upload volume in any given recent window is
+    # usually thin (someone you like might post a new set every few months),
+    # while a general genre query has far more monthly SoundCloud volume --
+    # so once the date filter is active (provider scoped to SoundCloud),
+    # lean genre-heavy instead of artist-heavy to actually surface enough
+    # results, at some cost to personalization.
+    date_filtered = provider is not None
+    artist_count = 3 if date_filtered else 6
+    genre_count = 6 if date_filtered else 2
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
-        picked = random.sample(artist_names, min(6, len(artist_names)))
+        picked = random.sample(artist_names, min(artist_count, len(artist_names)))
         queries = [f"{name} dj set" for name in picked]
-        queries += random.sample(_FALLBACK_DISCOVER_QUERIES, min(2, len(_FALLBACK_DISCOVER_QUERIES)))
+        queries += random.sample(_FALLBACK_DISCOVER_QUERIES, min(genre_count, len(_FALLBACK_DISCOVER_QUERIES)))
     else:
         queries = random.sample(_FALLBACK_DISCOVER_QUERIES, min(6, len(_FALLBACK_DISCOVER_QUERIES)))
 

@@ -72,6 +72,35 @@ def test_recommendations_sample_more_than_three_library_artists(client, monkeypa
     assert any(q in _FALLBACK_DISCOVER_QUERIES for q in queries)
 
 
+def test_recommendations_lean_genre_heavy_when_date_filtered(client, monkeypatch):
+    """A specific artist's own upload volume in a recent window is thin;
+    once the date filter is active (provider scoped to SoundCloud), lean
+    genre-heavy instead of artist-heavy so there's enough to actually find."""
+    headers, _uname = register_and_login(client, username="setrecuser3", email="setrec3@test.local")
+    me = client.get("/api/auth/me", headers=headers).json()
+    _seed_saved_tracks(me["id"], [f"Artist{i}" for i in range(10)])
+
+    captured = {}
+
+    def fake_blend_queries(queries, limit, exclude, sources=("youtube", "soundcloud")):
+        captured["queries"] = queries
+
+        async def _empty():
+            return []
+        return _empty()
+
+    import tidal_dl_ru.server.routers.sets as sets_mod
+    monkeypatch.setattr(sets_mod, "_blend_queries", fake_blend_queries)
+
+    resp = client.get("/api/sets/recommendations?provider=soundcloud", headers=headers)
+    assert resp.status_code == 200
+    queries = captured["queries"]
+    artist_queries = [q for q in queries if q not in _FALLBACK_DISCOVER_QUERIES]
+    genre_queries = [q for q in queries if q in _FALLBACK_DISCOVER_QUERIES]
+    assert len(artist_queries) == 3
+    assert len(genre_queries) == 6
+
+
 def test_recommendations_fallback_queries_without_library(client, monkeypatch):
     headers, _uname = register_and_login(client, username="setrecuser2", email="setrec2@test.local")
 
