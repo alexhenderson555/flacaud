@@ -89,6 +89,25 @@ def test_search_sets_filters_out_short_tracks(monkeypatch):
     assert all(r["duration_seconds"] >= MIN_SET_DURATION_SECONDS for r in results)
 
 
+def test_search_sets_restricts_to_requested_sources(monkeypatch):
+    import tidal_dl_ru.core.set_search as mod
+
+    calls = []
+
+    def fake_search_one(query, prefix, source, limit):
+        calls.append(source)
+        return [
+            {"url": f"https://{source}/1", "title": "Full DJ set", "channel": "A",
+             "duration_seconds": MIN_SET_DURATION_SECONDS + 60, "thumbnail": None,
+             "source": source, "view_count": 0, "upload_timestamp": None},
+        ]
+
+    monkeypatch.setattr(mod, "_search_one", fake_search_one)
+    results = search_sets("test query", sources=("soundcloud",))
+    assert calls == ["soundcloud"]
+    assert all(r["source"] == "soundcloud" for r in results)
+
+
 def test_search_sets_ranks_by_relevance_not_source_order(monkeypatch):
     """A SoundCloud result ranked #1 on its own platform must not lose to a
     YouTube result ranked #1 there just because YouTube was queried first —

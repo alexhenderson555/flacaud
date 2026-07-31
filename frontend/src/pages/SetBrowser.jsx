@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -293,13 +295,20 @@ export default function SetBrowser() {
     setResultsLimit(PAGE_SIZE);
   }, []);
 
+  // Only SoundCloud's search exposes a real upload timestamp, so once the
+  // "uploaded within" filter is active every fetch (initial + load-more)
+  // should be scoped to SoundCloud alone with a bigger limit -- otherwise
+  // half the fetched results are YouTube items the client-side date filter
+  // immediately throws away, making the filter look broken/empty.
+  const uploadedProvider = uploadedFilter !== 'any' ? 'soundcloud' : undefined;
+
   const loadMoreResults = useCallback(async () => {
     const q = query.trim();
     if (!q || loadingMoreResults) return;
     const nextLimit = resultsLimit + PAGE_SIZE;
     setLoadingMoreResults(true);
     try {
-      const rows = await searchSets(q, { lang, limit: nextLimit });
+      const rows = await searchSets(q, { lang, limit: nextLimit, provider: uploadedProvider });
       setResults((prev) => {
         const seen = new Set(prev.map((r) => r.url));
         return [...prev, ...rows.filter((r) => !seen.has(r.url))];
@@ -310,14 +319,14 @@ export default function SetBrowser() {
     } finally {
       setLoadingMoreResults(false);
     }
-  }, [query, lang, t, resultsLimit, loadingMoreResults]);
+  }, [query, lang, t, resultsLimit, loadingMoreResults, uploadedProvider]);
 
   const loadMoreRecommended = useCallback(async () => {
     if (loadingMoreRecommended) return;
     const nextLimit = recommendedLimit + PAGE_SIZE;
     setLoadingMoreRecommended(true);
     try {
-      const rows = await fetchSetRecommendations({ lang, limit: nextLimit });
+      const rows = await fetchSetRecommendations({ lang, limit: nextLimit, provider: uploadedProvider });
       setRecommended((prev) => {
         const seen = new Set(prev.map((r) => r.url));
         return [...prev, ...rows.filter((r) => !seen.has(r.url))];
@@ -328,7 +337,45 @@ export default function SetBrowser() {
     } finally {
       setLoadingMoreRecommended(false);
     }
-  }, [lang, t, recommendedLimit, loadingMoreRecommended]);
+  }, [lang, t, recommendedLimit, loadingMoreRecommended, uploadedProvider]);
+
+  // Re-fetch (SoundCloud-scoped, bigger limit) whenever the "uploaded within"
+  // filter changes, instead of just re-filtering whatever's already loaded --
+  // that old set is mostly YouTube results with no timestamp at all, so the
+  // filter would silently throw almost everything away instead of actually
+  // finding SoundCloud sets from the selected period.
+  const uploadedFilterMountedRef = useRef(false);
+  useEffect(() => {
+    if (!uploadedFilterMountedRef.current) {
+      uploadedFilterMountedRef.current = true;
+      return;
+    }
+    if (!hasAuthSession()) return;
+    const q = query.trim();
+    const scopedLimit = uploadedProvider ? PAGE_SIZE * 3 : PAGE_SIZE;
+    if (q && hasSearched) {
+      setSearching(true);
+      setSearchError(null);
+      searchSets(q, { lang, limit: scopedLimit, provider: uploadedProvider })
+        .then((rows) => {
+          setResults(rows);
+          setResultsLimit(scopedLimit);
+        })
+        .catch((err) => setSearchError(messageForApiError(err, lang) || t('errGeneric')))
+        .finally(() => setSearching(false));
+    } else if (!q) {
+      setRecommendedLoading(true);
+      fetchSetRecommendations({ lang, limit: scopedLimit, provider: uploadedProvider })
+        .then((rows) => {
+          setRecommended(rows);
+          setRecommendedLimit(scopedLimit);
+        })
+        .catch(() => setRecommended([]))
+        .finally(() => setRecommendedLoading(false));
+    }
+    // Only the filter itself should trigger this re-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedFilter]);
 
   // Opening a set pushes a browser-history entry (via the `set` query param) so
   // the native Back button returns here to the results instead of skipping

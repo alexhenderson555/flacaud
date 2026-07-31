@@ -175,18 +175,30 @@ def share_set(
     return {"token": row.share_token, "path": f"/s/{row.share_token}"}
 
 
+def _resolve_sources(provider: str | None) -> tuple[str, ...]:
+    if provider in ("youtube", "soundcloud"):
+        return (provider,)
+    return ("youtube", "soundcloud")
+
+
 @router.get("/sets/search")
 async def search_sets_endpoint(
     q: str,
     limit: int = 12,
+    provider: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
-    """Search YouTube + SoundCloud for DJ sets/mixes (Set Browser search)."""
+    """Search YouTube + SoundCloud for DJ sets/mixes (Set Browser search).
+
+    `provider` restricts to one platform (youtube|soundcloud) -- used when
+    the "uploaded within" filter is active, since only SoundCloud's search
+    exposes a real upload timestamp.
+    """
     q = q.strip()
     if not q:
         return {"results": []}
     limit = max(1, min(limit, 48))
-    results = await asyncio.to_thread(search_sets, q, limit)
+    results = await asyncio.to_thread(search_sets, q, limit, _resolve_sources(provider))
     return {"results": results}
 
 
@@ -236,13 +248,18 @@ async def quick_tracklist_endpoint(
     }
 
 
-async def _blend_queries(queries: list[str], limit: int, exclude: set[str]) -> list[dict]:
+async def _blend_queries(
+    queries: list[str],
+    limit: int,
+    exclude: set[str],
+    sources: tuple[str, ...] = ("youtube", "soundcloud"),
+) -> list[dict]:
     """Run several search queries in parallel and interleave them round-robin
     (instead of exhausting one query first) so the result reads like a radio
     blend rather than "query 1's results, then maybe some of query 2's"."""
     per_query = max(4, (limit // max(1, len(queries))) + 2)
     batches = await asyncio.gather(
-        *[asyncio.to_thread(search_sets, q, per_query) for q in queries]
+        *[asyncio.to_thread(search_sets, q, per_query, sources) for q in queries]
     )
     seen = set(exclude)
     blended: list[dict] = []
@@ -320,6 +337,7 @@ def _library_artist_names(session: Session, user_id: int, limit: int = 60) -> li
 @router.get("/sets/recommendations")
 async def set_recommendations_endpoint(
     limit: int = 12,
+    provider: str | None = None,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -333,7 +351,7 @@ async def set_recommendations_endpoint(
     else:
         queries = random.sample(_FALLBACK_DISCOVER_QUERIES, 3)
 
-    blended = await _blend_queries(queries, limit, exclude=set())
+    blended = await _blend_queries(queries, limit, exclude=set(), sources=_resolve_sources(provider))
     return {"queries": queries, "results": blended}
 
 

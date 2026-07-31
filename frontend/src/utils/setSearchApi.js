@@ -3,8 +3,9 @@
 
 import { apiGetJson } from './apiClient';
 
-export async function searchSets(query, { lang, limit = 12 } = {}) {
+export async function searchSets(query, { lang, limit = 12, provider } = {}) {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (provider) params.set('provider', provider);
   const data = await apiGetJson(`/api/sets/search?${params.toString()}`, { auth: true, lang });
   return data?.results || [];
 }
@@ -21,8 +22,9 @@ export async function fetchSimilarSets(url, { lang, limit = 10 } = {}) {
 }
 
 /** Discover sets without a query — seeded from the user's library, radio-blended. */
-export async function fetchSetRecommendations({ lang, limit = 12 } = {}) {
+export async function fetchSetRecommendations({ lang, limit = 12, provider } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (provider) params.set('provider', provider);
   const data = await apiGetJson(`/api/sets/recommendations?${params.toString()}`, { auth: true, lang });
   return data?.results || [];
 }

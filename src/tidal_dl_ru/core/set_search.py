@@ -96,16 +96,30 @@ def _relevance_score(row: dict, rank: int) -> float:
     return rank_score * (0.7 + 0.3 * recency)
 
 
-def search_sets(query: str, limit: int = 12) -> list[dict]:
+def search_sets(
+    query: str,
+    limit: int = 12,
+    sources: tuple[str, ...] = ("youtube", "soundcloud"),
+) -> list[dict]:
     """Search YouTube + SoundCloud for DJ sets/mixes matching `query`,
-    blended by relevance (not "all of YouTube's results, then SoundCloud's")."""
+    blended by relevance (not "all of YouTube's results, then SoundCloud's").
+
+    `sources` restricts which platform(s) to query -- e.g. the "uploaded
+    within" filter only has real data for SoundCloud (YouTube's flat search
+    doesn't expose an upload timestamp), so a caller filtering by date should
+    search SoundCloud alone with a bigger limit rather than split it with
+    YouTube results that will mostly get filtered out client-side anyway.
+    """
     query = (query or "").strip()
     if not query:
         return []
-    # Overfetch since some results get filtered out by duration below.
-    per_source = max(6, limit)
-    yt = _search_one(query, "ytsearch", "youtube", per_source)
-    sc = _search_one(query, "scsearch", "soundcloud", per_source)
+    # Overfetch since some results get filtered out by duration below. A
+    # single-source search has no other platform to fill the quota, so it
+    # needs a bigger overfetch to leave enough candidates for any additional
+    # client-side filtering (date/duration) on top.
+    per_source = max(6, limit) if len(sources) > 1 else max(12, limit * 2)
+    yt = _search_one(query, "ytsearch", "youtube", per_source) if "youtube" in sources else []
+    sc = _search_one(query, "scsearch", "soundcloud", per_source) if "soundcloud" in sources else []
 
     scored = [
         (_relevance_score(row, rank), row)
