@@ -9,7 +9,7 @@ from sqlmodel import SQLModel, create_engine
 from tests.conftest import register_and_login
 from tidal_dl_ru.database.models import SavedTrack
 from tidal_dl_ru.server.app import app
-from tidal_dl_ru.server.routers.sets import _FALLBACK_DISCOVER_QUERIES
+from tidal_dl_ru.server.routers.sets import _FALLBACK_DISCOVER_QUERIES, _blend_queries
 
 
 @pytest.fixture(autouse=True)
@@ -90,3 +90,25 @@ def test_recommendations_fallback_queries_without_library(client, monkeypatch):
     resp = client.get("/api/sets/recommendations", headers=headers)
     assert resp.status_code == 200
     assert all(q in _FALLBACK_DISCOVER_QUERIES for q in captured["queries"])
+
+
+@pytest.mark.asyncio
+async def test_blend_queries_keeps_a_big_per_query_slice_for_single_source(monkeypatch):
+    """Blending many queries for a date-filtered (single-source) call must not
+    shrink each query's own result count too far -- search_sets' relevance
+    ranking only weights recency, it doesn't guarantee it, so a tiny
+    per-query slice can discard every genuinely-recent item before the
+    caller's hard date cutoff ever sees them."""
+    import tidal_dl_ru.server.routers.sets as sets_mod
+
+    captured_limits = []
+
+    def fake_search_sets(query, limit, sources=("youtube", "soundcloud")):
+        captured_limits.append(limit)
+        return []
+
+    monkeypatch.setattr(sets_mod, "search_sets", fake_search_sets)
+    queries = [f"artist{i} dj set" for i in range(8)]
+    await _blend_queries(queries, 36, exclude=set(), sources=("soundcloud",))
+    # Each of the 8 queries must keep a large slice (not limit // 8).
+    assert all(lim >= 36 for lim in captured_limits)

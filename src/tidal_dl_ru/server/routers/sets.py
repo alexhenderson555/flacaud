@@ -257,7 +257,19 @@ async def _blend_queries(
     """Run several search queries in parallel and interleave them round-robin
     (instead of exhausting one query first) so the result reads like a radio
     blend rather than "query 1's results, then maybe some of query 2's"."""
-    per_query = max(4, (limit // max(1, len(queries))) + 2)
+    if len(sources) == 1:
+        # Single-source (date-filter-scoped) calls: search_sets already pulls
+        # a big pool (up to 200) per query, but only recency-*weighted* (not
+        # date-guaranteed) relevance ranking decides what survives its own
+        # internal truncation to `limit`. With N queries splitting a small
+        # blended `limit` N ways, each query's slice was too thin for any
+        # genuinely-recent item to survive that ranking before the caller's
+        # hard date cutoff ever saw it -- results looked empty even though
+        # recent sets existed in the fetched pool. Let each query keep far
+        # more of its own pool so the date filter has real candidates.
+        per_query = max(limit, 40)
+    else:
+        per_query = max(4, (limit // max(1, len(queries))) + 2)
     batches = await asyncio.gather(
         *[asyncio.to_thread(search_sets, q, per_query, sources) for q in queries]
     )
