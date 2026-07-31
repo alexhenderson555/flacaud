@@ -342,14 +342,23 @@ async def set_recommendations_endpoint(
     session: Session = Depends(get_session),
 ):
     """Sets to discover without typing a query — like the track Recommendations
-    page, seeded from artists in the user's library and blended radio-style."""
+    page, seeded from artists in the user's library and blended radio-style.
+
+    Only 3 artists got queried before, so whenever the same 2-3 big names got
+    sampled, the whole grid was just "several sets by exactly those people" —
+    round-robin blending across only 3 queries is inherently that repetitive.
+    Sampling more distinct artists, and always mixing in a couple of
+    genre/event discovery queries alongside them, spreads results across more
+    than just the user's own top few favorites.
+    """
     limit = max(1, min(limit, 48))
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
-        picked = random.sample(artist_names, min(3, len(artist_names)))
+        picked = random.sample(artist_names, min(6, len(artist_names)))
         queries = [f"{name} dj set" for name in picked]
+        queries += random.sample(_FALLBACK_DISCOVER_QUERIES, min(2, len(_FALLBACK_DISCOVER_QUERIES)))
     else:
-        queries = random.sample(_FALLBACK_DISCOVER_QUERIES, 3)
+        queries = random.sample(_FALLBACK_DISCOVER_QUERIES, min(6, len(_FALLBACK_DISCOVER_QUERIES)))
 
     blended = await _blend_queries(queries, limit, exclude=set(), sources=_resolve_sources(provider))
     return {"queries": queries, "results": blended}
