@@ -66,10 +66,11 @@ def test_recommendations_sample_more_than_three_library_artists(client, monkeypa
     queries = captured["queries"]
     # Up to 6 distinct library artists, not just 3.
     artist_queries = [q for q in queries if q not in _FALLBACK_DISCOVER_QUERIES]
+    genre_queries = [q for q in queries if q in _FALLBACK_DISCOVER_QUERIES]
     assert len(artist_queries) == 6
-    # Plus a couple of genre/event discovery queries mixed in for variety
-    # beyond the user's own top artists.
-    assert any(q in _FALLBACK_DISCOVER_QUERIES for q in queries)
+    # Plus several genre/event discovery queries mixed in for variety beyond
+    # the user's own top artists.
+    assert len(genre_queries) == 5
 
 
 def test_recommendations_lean_genre_heavy_when_date_filtered(client, monkeypatch):

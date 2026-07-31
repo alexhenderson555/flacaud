@@ -365,9 +365,9 @@ async def set_recommendations_endpoint(
     Only 3 artists got queried before, so whenever the same 2-3 big names got
     sampled, the whole grid was just "several sets by exactly those people" —
     round-robin blending across only 3 queries is inherently that repetitive.
-    Sampling more distinct artists, and always mixing in a couple of
-    genre/event discovery queries alongside them, spreads results across more
-    than just the user's own top few favorites.
+    Sampling more distinct artists, and mixing in several genre/event
+    discovery queries alongside them, spreads results across more than just
+    the user's own top few favorites.
     """
     limit = max(1, min(limit, 48))
     # A specific artist's own upload volume in any given recent window is
@@ -378,14 +378,14 @@ async def set_recommendations_endpoint(
     # results, at some cost to personalization.
     date_filtered = provider is not None
     artist_count = 3 if date_filtered else 6
-    genre_count = 6 if date_filtered else 2
+    genre_count = 6 if date_filtered else 5
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
         picked = random.sample(artist_names, min(artist_count, len(artist_names)))
         queries = [f"{name} dj set" for name in picked]
         queries += random.sample(_FALLBACK_DISCOVER_QUERIES, min(genre_count, len(_FALLBACK_DISCOVER_QUERIES)))
     else:
-        queries = random.sample(_FALLBACK_DISCOVER_QUERIES, min(6, len(_FALLBACK_DISCOVER_QUERIES)))
+        queries = random.sample(_FALLBACK_DISCOVER_QUERIES, min(8, len(_FALLBACK_DISCOVER_QUERIES)))
 
     blended = await _blend_queries(queries, limit, exclude=set(), sources=_resolve_sources(provider))
     return {"queries": queries, "results": blended}
