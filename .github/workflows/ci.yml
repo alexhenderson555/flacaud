@@ -125,7 +125,26 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit --audit-level=high
+
+          # GHSA-qwww-vcr4-c8h2: react-router RSC-mode CSRF bypass. Only
+          # exploitable in RSC/framework mode; this app is a plain Vite SPA
+          # using <BrowserRouter>, so it doesn't apply here. No non-breaking
+          # fix exists yet -- `npm audit fix --force` would downgrade past
+          # 7.12.0, which un-fixes four other advisories already resolved by
+          # the current version. Allowlisted below; re-check when a real fix
+          # ships and drop this once `npm audit` is clean without it.
+          ALLOWLIST="GHSA-qwww-vcr4-c8h2"
+          npm audit --audit-level=high --json > npm-audit-report.json || true
+          ACTIONABLE=$(jq -r '.vulnerabilities[]? | select(.severity=="high" or .severity=="critical") | .via[]? | select(type=="object") | .url' npm-audit-report.json \
+            | grep -oE 'GHSA-[a-z0-9-]+' | sort -u \
+            | grep -vFf <(echo "$ALLOWLIST") || true)
+          if [ -n "$ACTIONABLE" ]; then
+            echo "Actionable high/critical npm advisories (not allowlisted):"
+            echo "$ACTIONABLE"
+            exit 1
+          fi
+          echo "npm audit: no actionable high/critical advisories (allowlist: $ALLOWLIST)."
+
           npm run lint
           npm run test
           npm run typecheck
