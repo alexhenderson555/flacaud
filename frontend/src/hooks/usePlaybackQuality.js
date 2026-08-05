@@ -941,11 +941,29 @@ export function usePlaybackQuality({
     // Beyond the immediate next track (which needs a resolved src for instant
     // playback above), just warm a few more tracks into the offline cache in the
     // background — no src resolution needed since nothing plays them yet.
+    //
+    // Firing all of these at once (the old forEach + fire-and-forget) opened
+    // PRELOAD_CACHE_AHEAD extra concurrent stream sessions against the same
+    // backend Tidal account pool the currently-PLAYING track's own stream
+    // depends on. Individual-tier Tidal accounts allow only one concurrent
+    // stream -- when the pool has few (or, as observed in production, just
+    // one) accounts with quota left, these speculative preloads could steal
+    // the account the live stream needed mid-track, cutting it off outright.
+    // Serializing them (one in flight at a time, awaited before the next
+    // starts) keeps worst-case concurrent stream usage at "live + one
+    // preload" instead of "live + PRELOAD_CACHE_AHEAD".
     const upcoming = playlist.slice(currentTrackIndex + 2, currentTrackIndex + 1 + PRELOAD_CACHE_AHEAD);
-    upcoming.forEach((track) => {
-      if (!track?.provider_id) return;
-      void prefetchAudioToCache({ ...track, provider: track.provider || 'tidal' }, streamQuality);
-    });
+    const preloadGen = streamLoadGenRef.current;
+    void (async () => {
+      for (const track of upcoming) {
+        if (!track?.provider_id) continue;
+        if (streamLoadGenRef.current !== preloadGen) return; // track changed again; stale queue
+        await prefetchAudioToCache(
+          { ...track, provider: track.provider || 'tidal' },
+          streamQuality,
+        ).catch(() => {});
+      }
+    })();
   }, [playbackQuality, streamQuality, qualitiesReady, downloadedTracksRef, buildStreamUrl, streamRetryNonce]);
 
   return {
