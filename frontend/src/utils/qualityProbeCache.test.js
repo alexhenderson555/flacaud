@@ -2,8 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readQualityProbeCache, writeQualityProbeCache } from './qualityProbeCache';
 
 describe('qualityProbeCache', () => {
+  const store = {};
+
   beforeEach(() => {
-    sessionStorage.clear();
+    Object.keys(store).forEach((k) => delete store[k]);
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v; },
+      removeItem: (k) => { delete store[k]; },
+      clear: () => { Object.keys(store).forEach((k) => delete store[k]); },
+    });
   });
 
   afterEach(() => {
