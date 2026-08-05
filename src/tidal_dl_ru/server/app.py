@@ -41,14 +41,23 @@ validate_production_config()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Initialize SQLite Database
     create_db_and_tables()
-    try:
-        app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-    except Exception as e:
-        if os.environ.get("TIDALDLRU_ENV") == "production":
-            logger.error(f"Failed to connect to Redis in production: {e}")
-            raise e
-        logger.info(f"Warning: Could not connect to Redis ({e}). ARQ queue won't work.")
+    if os.environ.get("TIDALDLRU_ENV") == "test":
+        # `with TestClient(app)` re-runs this lifespan on every test that uses
+        # it (hundreds of times across the suite) -- a real connection
+        # attempt to a Redis that's never running in CI doesn't fail fast
+        # (arq/redis-py's refused-connection detection isn't instant), and
+        # that per-test delay compounds into a suite that looks hung. No test
+        # exercises the ARQ queue directly, so skip the attempt entirely.
         app.state.arq = None
+    else:
+        try:
+            app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        except Exception as e:
+            if os.environ.get("TIDALDLRU_ENV") == "production":
+                logger.error(f"Failed to connect to Redis in production: {e}")
+                raise e
+            logger.info(f"Warning: Could not connect to Redis ({e}). ARQ queue won't work.")
+            app.state.arq = None
     try:
         yield
     finally:

@@ -3,9 +3,20 @@
 import os
 import uuid
 
+import bcrypt
 import pytest
 from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, create_engine
+
+# auth.get_password_hash() calls bcrypt.gensalt() with no args, so it uses
+# whatever default we set here. Production wants the real cost (12); tests
+# call register_and_login() constantly (hundreds of times across the suite)
+# and cost-12 bcrypt is ~12s per hash+verify pair on a modern CPU -- on a
+# throttled CI runner that ballooned the whole suite well past an hour, which
+# looked indistinguishable from a hung test until a faulthandler dump showed
+# the process was still making (very slow) progress, not deadlocked.
+_original_gensalt = bcrypt.gensalt
+bcrypt.gensalt = lambda rounds=4, prefix=b"2b": _original_gensalt(rounds=rounds, prefix=prefix)
 
 os.environ.setdefault("TIDALDLRU_DB_PATH", ":memory:")
 os.environ.setdefault("DATABASE_URL", "sqlite://")
