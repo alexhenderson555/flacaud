@@ -66,7 +66,18 @@ jobs:
         # Threshold 65: CI reports 65.12% (local envs vary slightly). Reaching
         # 80% needs Tidal API mocks for streaming.py (339 uncovered) and
         # catalog.py (371) — large effort.
-        run: uv run pytest tests/ -q --tb=short -k "not remote_flow_live" --cov=tidal_dl_ru.server --cov=tidal_dl_ru.providers --cov=tidal_dl_ru.core --cov-report=term-missing --cov-fail-under=65
+        #
+        # TEMP DIAGNOSTIC ROUND 2 (remove once found): the Redis/bcrypt fix
+        # cut this from 80+min to "only" 34+min still-running, well past the
+        # 2m20s local baseline -- there's a second CI-only multiplier left.
+        # 300s is >2x the local baseline with room for CI overhead.
+        run: |
+          uv run python -c "
+          import faulthandler, sys
+          faulthandler.dump_traceback_later(300, exit=True)
+          import pytest
+          sys.exit(pytest.main(['tests/', '-q', '--tb=short', '-k', 'not remote_flow_live', '--cov=tidal_dl_ru.server', '--cov=tidal_dl_ru.providers', '--cov=tidal_dl_ru.core', '--cov-report=term-missing', '--cov-fail-under=65']))
+          "
 
   backend-postgres:
     runs-on: ubuntu-latest
