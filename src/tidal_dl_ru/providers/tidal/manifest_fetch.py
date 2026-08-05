@@ -63,6 +63,13 @@ def fetch_playback_manifest(
 
     if client is not None:
         manifest, rate_limited = _fetch_once(client, track_id, enum_q)
+        if manifest is not None and manifest.is_preview:
+            logger.info(
+                "Manifest fetch returned PREVIEW asset track=%s quality=%s, discarding",
+                track_id,
+                q_name,
+            )
+            manifest = None
         if manifest is not None:
             manifest_cache.put(track_id, q_name, manifest)
         if rate_limited:
@@ -98,6 +105,16 @@ def fetch_playback_manifest(
             manifest, rate_limited = _fetch_once(rotating, track_id, enum_q)
         finally:
             own_http.close()
+
+        if manifest is not None and manifest.is_preview:
+            logger.info(
+                "Pool account %s got PREVIEW asset track=%s quality=%s, trying next account",
+                acc.id,
+                track_id,
+                q_name,
+            )
+            excluded = excluded | {acc.id}
+            continue
 
         if manifest is not None:
             manifest_cache.put(track_id, q_name, manifest)

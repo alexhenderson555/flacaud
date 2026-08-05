@@ -69,6 +69,11 @@ class PlaybackManifest(TidalModel):
     manifest: str  # base64-encoded
     sample_rate: Optional[int] = Field(default=None, alias="sampleRate")
     bit_depth: Optional[int] = Field(default=None, alias="bitDepth")
+    asset_presentation: Optional[str] = Field(default=None, alias="assetPresentation")
+
+    @property
+    def is_preview(self) -> bool:
+        return (self.asset_presentation or "").upper() == "PREVIEW"
 
 
 class DeviceAuth(TidalModel):

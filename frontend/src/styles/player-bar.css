@@ -59,7 +59,7 @@
 @media (width <= 768px) {
   :root {
     --layout-player-height: 88px;
-    --layout-page-pad-bottom: 100px;
+    --layout-page-pad-bottom: calc(var(--mobile-nav-height, 64px) + 72px + 24px);
   }
 }
 
