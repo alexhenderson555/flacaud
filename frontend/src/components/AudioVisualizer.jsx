@@ -10,7 +10,6 @@ import {
   visualizerShouldAnimate,
 } from '../utils/visualizerRuntime';
 
-const FRAME_MS = 1000 / 60;
 const GRAD_BUCKETS = 36;
 const MAX_DPR = 2;
 const IDLE_CUTOFF = 0.5;
@@ -107,7 +106,6 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
     let cancelled = false;
     let waitRaf = null;
     let playEl = null;
-    let lastFrame = 0;
 
     // --- Beat tracking (shared by the dynamic modes) ---------------------------
     // Bass-weighted instant energy vs. its slow rolling average detects kicks;
@@ -184,7 +182,6 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
       if (document.visibilityState !== 'visible') return;
       resumeAudioContext();
       bindAnalyser();
-      lastFrame = 0;
     };
     document.addEventListener('visibilitychange', onVisibility);
 
@@ -518,9 +515,6 @@ export default function AudioVisualizer({ audioRef, getMainAudioEl }) {
         }
         return;
       }
-
-      if (time - lastFrame < FRAME_MS) return;
-      lastFrame = time;
 
       // Re-bind when the main <audio> element swaps to the other A/B slot (e.g. a
       // quality change 320k -> lossless), otherwise the analyser stays on the
