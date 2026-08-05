@@ -125,4 +125,19 @@ def configure_logging(service: str = "api") -> None:
         ):
             logging.getLogger(noisy).setLevel(logging.INFO)
 
+    # The access logger must never inherit a stricter level than root -- explicit
+    # NOTSET (rather than relying on the logging module's fresh-logger default)
+    # guards against any future accidental `setLevel()` on this specific logger
+    # silently swallowing every per-request INFO line with no visible error.
+    access_logger = logging.getLogger("tidal_dl_ru.access")
+    access_logger.setLevel(logging.NOTSET)
+    access_logger.propagate = True
+
     _configured = True
+    root.info(
+        "logging_configured level=%s format=%s handlers=%d access_logger_effective_level=%s",
+        level_name,
+        log_format,
+        len(root.handlers),
+        logging.getLevelName(access_logger.getEffectiveLevel()),
+    )

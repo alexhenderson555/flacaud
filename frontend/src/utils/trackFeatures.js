@@ -3,7 +3,30 @@ import { apiGetJson, apiPatchJson } from './apiClient';
 import {
   isDjAnalysisBlockedForTrack,
   shouldDeferBackgroundMedia,
+  subscribePlaybackPriority,
 } from './playbackPriority';
+
+// Background BPM/key analysis for OTHER tracks in a list can share the same
+// (often single, quota-limited) Tidal pool account as the track the user is
+// actively playing. Individual-tier Tidal accounts allow only one concurrent
+// stream, so an in-flight analysis request opening its own manifest/stream
+// mid-playback can get the live playback session kicked -- the track cuts
+// off wherever that race lands, commonly ~20-30s in. shouldDeferBackgroundMedia()
+// already blocks *new* analysis while playing, but does nothing for requests
+// already in flight (the dj-meta call alone can run up to DJ_META_TIMEOUT_MS).
+// Abort every in-flight analysis request the instant playback starts.
+const activeAnalysisControllers = new Set();
+subscribePlaybackPriority(() => {
+  if (!shouldDeferBackgroundMedia()) return;
+  for (const ctrl of activeAnalysisControllers) {
+    try {
+      ctrl.abort();
+    } catch {
+      /* ignore */
+    }
+  }
+  activeAnalysisControllers.clear();
+});
 
 /** Camelot wheel — matches backend tidal_dl_ru.core.dj._CAMELOT */
 const CAMELOT = {
@@ -206,6 +229,8 @@ export async function analyzeTrackFeatures(track, streamUrl) {
   }
 
   const promise = (async () => {
+    const controller = new AbortController();
+    activeAnalysisControllers.add(controller);
     try {
       const isTidal = (track?.provider || 'tidal') === 'tidal';
       if (
@@ -217,6 +242,7 @@ export async function analyzeTrackFeatures(track, streamUrl) {
           const meta = await apiGetJson(`/api/track/tidal/${id}/dj-meta`, {
             auth: true,
             timeoutMs: DJ_META_TIMEOUT_MS,
+            signal: controller.signal,
           });
           if (meta?.bpm && meta?.camelot_key) {
             const entry = {
@@ -233,12 +259,13 @@ export async function analyzeTrackFeatures(track, streamUrl) {
         }
       }
 
-      if (!streamUrl) {
+      if (!streamUrl || shouldDeferBackgroundMedia()) {
         return { analyzed: false };
       }
 
       const res = await fetch(streamUrl, {
         headers: { Range: `bytes=0-${ANALYZE_RANGE_BYTES}` },
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const arrayBuffer = await res.arrayBuffer();
@@ -259,11 +286,16 @@ export async function analyzeTrackFeatures(track, streamUrl) {
         await audioCtx.close().catch(() => {});
       }
     } catch (e) {
-      console.warn('Track feature analysis failed', e);
-      if (streamUrl) markFeatureAnalysisFailed(id);
+      // Aborted because playback started, not a real failure — leave the
+      // cache alone so it retries once the user stops/pauses.
+      if (e?.name !== 'AbortError') {
+        console.warn('Track feature analysis failed', e);
+        if (streamUrl) markFeatureAnalysisFailed(id);
+      }
       return { analyzed: false };
     } finally {
       inflight.delete(id);
+      activeAnalysisControllers.delete(controller);
     }
   })();
 

@@ -79,8 +79,15 @@ export function usePlayerHotkeys({
     const resolveAudio = () => getMainAudioEl?.() ?? audioRef.current;
 
     const handleKeyDown = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-        if (e.key === 'Escape') document.activeElement?.blur?.();
+      const active = document.activeElement;
+      // Seek/volume sliders are <input type="range"> -- tagName INPUT, but
+      // they don't accept typed text, so global hotkeys should keep working
+      // while one holds focus (e.g. right after dragging the seek bar).
+      const isTextEntry = active?.tagName === 'TEXTAREA'
+        || active?.tagName === 'SELECT'
+        || (active?.tagName === 'INPUT' && active?.type !== 'range');
+      if (isTextEntry) {
+        if (e.key === 'Escape') active?.blur?.();
         const paletteToggle = e.code === 'KeyK' && (e.ctrlKey || e.metaKey);
         if (!paletteToggle) return;
       }

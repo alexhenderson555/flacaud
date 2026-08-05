@@ -107,4 +107,6 @@ dev = [
     "alembic>=1.13",
     "mypy>=1.10",
     "pip-audit>=2.7",
+    "paramiko>=5.0.0",
+    "scp>=0.16.1",
 ]
