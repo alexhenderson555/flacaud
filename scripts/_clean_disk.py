@@ -25,7 +25,7 @@ from _ops_env import tidal_host  # noqa: E402
 
 os.environ.setdefault("TIDAL_HOST", os.environ.get("DEPLOY_HOST") or tidal_host(required=False) or "")
 
-from scripts.repair_servers import TIDAL_HOST, TIDAL_USER, _ssh_run, _password  # noqa: E402
+from scripts.repair_servers import TIDAL_HOST, TIDAL_USER, _password, _ssh_run  # noqa: E402
 
 
 def main() -> None:

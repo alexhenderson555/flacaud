@@ -7,7 +7,15 @@ from sqlmodel import Session, select
 
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.database import get_session
-from tidal_dl_ru.database.models import Playlist, PlaylistBase, SavedTrack, SavedTrackBase, SavedAlbum, SavedAlbumBase, User
+from tidal_dl_ru.database.models import (
+    Playlist,
+    PlaylistBase,
+    SavedAlbum,
+    SavedAlbumBase,
+    SavedTrack,
+    SavedTrackBase,
+    User,
+)
 
 router = APIRouter(prefix="/api", tags=["library"])
 
