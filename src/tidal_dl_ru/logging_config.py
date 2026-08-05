@@ -83,7 +83,26 @@ def configure_logging(service: str = "api") -> None:
     if _configured:
         service_var.set(service)
         return
+    _apply_logging_config(service)
+    _configured = True
 
+
+def reapply_logging_config() -> None:
+    """Force-redo the logging setup, bypassing the once-only guard.
+
+    Alembic's generated migrations/env.py calls ``logging.config.fileConfig``
+    on every `alembic upgrade`/`stamp` run -- including the ones
+    create_db_and_tables() triggers on every app startup, not just the
+    standalone `alembic` CLI. Even with disable_existing_loggers=False (which
+    stops it from silently disabling every other logger), fileConfig still
+    applies alembic.ini's own [logger_root] section, replacing root's level
+    and handlers with alembic's plain, unstructured ones. Call this right
+    after any Alembic command to restore our own setup.
+    """
+    _apply_logging_config(service_var.get())
+
+
+def _apply_logging_config(service: str) -> None:
     level_name = os.environ.get("TIDALDLRU_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
     log_format = os.environ.get("TIDALDLRU_LOG_FORMAT", "text").lower()
@@ -133,7 +152,6 @@ def configure_logging(service: str = "api") -> None:
     access_logger.setLevel(logging.NOTSET)
     access_logger.propagate = True
 
-    _configured = True
     root.info(
         "logging_configured level=%s format=%s handlers=%d access_logger_effective_level=%s",
         level_name,

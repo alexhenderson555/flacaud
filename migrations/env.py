@@ -15,7 +15,12 @@ import tidal_dl_ru.server.activation_codes  # noqa: F401 — ActivationCode
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which silently disables every
+    # logger our app already configured (including the access logger) the
+    # instant migrations run -- this env.py executes on every app startup via
+    # create_db_and_tables() -> run_migrations(), not just the standalone
+    # `alembic` CLI, so it must not clobber a live process's logging setup.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = SQLModel.metadata
 

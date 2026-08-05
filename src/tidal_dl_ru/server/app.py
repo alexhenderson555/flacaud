@@ -6,7 +6,7 @@ Authenticated JSON API (JWT) + short-lived media tokens for streams/downloads.
 See /docs for the full OpenAPI surface.
 """
 
-from tidal_dl_ru.logging_config import configure_logging
+from tidal_dl_ru.logging_config import configure_logging, reapply_logging_config
 
 configure_logging("api")
 
@@ -37,10 +37,17 @@ from tidal_dl_ru.server.settings import settings
 
 validate_production_config()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Initialize SQLite Database
     create_db_and_tables()
+    # create_db_and_tables() runs Alembic, whose generated migrations/env.py
+    # calls logging.config.fileConfig() -- that replaces root's handlers/level
+    # with alembic.ini's own [logger_root] section on every startup, silently
+    # discarding our JSON/text formatting and raising the effective level.
+    # Restore it immediately after.
+    reapply_logging_config()
     if os.environ.get("TIDALDLRU_ENV") == "test":
         # `with TestClient(app)` re-runs this lifespan on every test that uses
         # it (hundreds of times across the suite) -- a real connection

@@ -203,8 +203,17 @@ export function usePlaybackQuality({
       // ACTUALLY playing (the current stream tier) — not the un-played auto-max.
       // Falling back to actualMap[effective] made a manual 320k pick visibly snap
       // back to Lossless a frame later.
+      //
+      // actualMap can be momentarily stale/incomplete relative to
+      // streamQualityRef.current (e.g. a probe update landing between the
+      // forced call that set the real stream tier and this guard re-running).
+      // Falling back to the bare tier KEY in that case fed updateDeliveredMeta
+      // a value it treats as if it were the real delivered-quality result —
+      // showing e.g. "HIGH/320k" from the tier name alone, overwriting the
+      // correct badge the earlier forced call had already set. Skip the
+      // update entirely instead of guessing: leave whatever's already shown.
       const keepActual = actualMap?.[streamQualityRef.current];
-      updateDeliveredMeta(keepActual || streamQualityRef.current, activeProbe);
+      if (keepActual) updateDeliveredMeta(keepActual, activeProbe);
       return;
     }
 
