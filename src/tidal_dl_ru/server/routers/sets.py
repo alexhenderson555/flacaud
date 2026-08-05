@@ -379,6 +379,7 @@ async def set_recommendations_endpoint(
     date_filtered = provider is not None
     artist_count = 3 if date_filtered else 6
     genre_count = 6 if date_filtered else 5
+    assert current_user.id is not None
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
         picked = random.sample(artist_names, min(artist_count, len(artist_names)))

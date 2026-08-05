@@ -790,11 +790,11 @@ async def build_recommendations(
                     for t in topup_tracks:
                         if len(tracks) >= collect_limit:
                             break
-                        tid = str(t.provider_id) if t.provider_id else None
-                        if not tid:
+                        topup_tid = str(t.provider_id) if t.provider_id else None
+                        if not topup_tid:
                             continue
                         await _collect_track_neighbourhood(
-                            client, tid, tracks, seen, artist_counts, collect_limit,
+                            client, topup_tid, tracks, seen, artist_counts, collect_limit,
                         )
         else:
             if len(tracks) < min_track_signal and saved:
