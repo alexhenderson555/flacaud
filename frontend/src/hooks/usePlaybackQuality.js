@@ -98,6 +98,15 @@ export function usePlaybackQuality({
   const retryTimerRef = useRef(null);
   const warmInFlightRef = useRef('');
   const streamLoadGenRef = useRef(0);
+  // Guards against concurrent updatePreloadForPlaylist invocations. The caller
+  // (usePlayerMediaEffects) re-runs its own effect -- and re-invokes this
+  // callback -- on several unrelated dependency changes; without this, a
+  // previous call's serialized "upcoming tracks" loop keeps running while a
+  // new call starts its own, so the same track IDs get hit repeatedly and
+  // concurrently, which is exactly the resource contention the serialization
+  // was meant to prevent in the first place. streamLoadGenRef only changes on
+  // a real track change, so it can't detect this.
+  const preloadRunIdRef = useRef(0);
   const qualitySwitchRef = useRef(false);
   const autoQualityRef = useRef(autoQuality);
   const streamErrorSuppressUntilRef = useRef(0);
@@ -920,15 +929,23 @@ export function usePlaybackQuality({
   const PRELOAD_CACHE_AHEAD = 3;
 
   const updatePreloadForPlaylist = useCallback(async (playlist, currentTrackIndex) => {
+    // usePlayerMediaEffects re-invokes this on several unrelated dependency
+    // changes (not just a real track change), so a fresh call must invalidate
+    // whatever the previous call's in-flight loop below is still doing --
+    // otherwise both run concurrently against the same track IDs.
+    const runId = (preloadRunIdRef.current += 1);
+
     if (!qualitiesReady || !playlist?.length || currentTrackIndex < 0 || currentTrackIndex >= playlist.length - 1) {
       setPreloadAudioSrc('');
       return;
     }
     const nextTrack = playlist[currentTrackIndex + 1];
     let url = await getCachedAudioUrl(nextTrack, streamQuality);
+    if (preloadRunIdRef.current !== runId) return;
     if (!url) {
       const bypass = downloadedTracksRef.current.has(String(nextTrack.provider_id)) ? 'false' : 'true';
       url = await buildStreamUrl(nextTrack, streamQuality, bypass);
+      if (preloadRunIdRef.current !== runId) return;
       if (url) {
         void prefetchAudioToCache(
           { ...nextTrack, provider: nextTrack.provider || 'tidal' },
@@ -953,11 +970,10 @@ export function usePlaybackQuality({
     // starts) keeps worst-case concurrent stream usage at "live + one
     // preload" instead of "live + PRELOAD_CACHE_AHEAD".
     const upcoming = playlist.slice(currentTrackIndex + 2, currentTrackIndex + 1 + PRELOAD_CACHE_AHEAD);
-    const preloadGen = streamLoadGenRef.current;
     void (async () => {
       for (const track of upcoming) {
         if (!track?.provider_id) continue;
-        if (streamLoadGenRef.current !== preloadGen) return; // track changed again; stale queue
+        if (preloadRunIdRef.current !== runId) return; // superseded by a newer call
         await prefetchAudioToCache(
           { ...track, provider: track.provider || 'tidal' },
           streamQuality,

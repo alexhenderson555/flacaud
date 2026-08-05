@@ -73,7 +73,6 @@ export default function Library() {
     setAlbums,
     libraryLoading,
     loadPlaylistsData,
-    removeFromLibrary,
     removeFromPlaylist,
     reorderTracksInPlaylist,
     deletePlaylist,
@@ -763,7 +762,7 @@ export default function Library() {
                 ) : (
                   <VirtualTrackList
                     items={filteredLibrary}
-                    renderItem={(track, i) => renderTrack(track, i, filteredLibrary, removeFromLibrary)}
+                    renderItem={(track, i) => renderTrack(track, i, filteredLibrary, null)}
                     style={{ minHeight: '200px' }}
                   />
                 )}
