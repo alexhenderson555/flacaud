@@ -262,6 +262,13 @@ export default function SetBrowser() {
     }
   }, [results]);
 
+  // Only SoundCloud's search exposes a real upload timestamp, so once the
+  // "uploaded within" filter is active every fetch (initial + load-more)
+  // should be scoped to SoundCloud alone with a bigger limit -- otherwise
+  // half the fetched results are YouTube items the client-side date filter
+  // immediately throws away, making the filter look broken/empty.
+  const uploadedProvider = uploadedFilter !== 'any' ? 'soundcloud' : undefined;
+
   const runSearch = useCallback(async (e) => {
     e?.preventDefault();
     const q = query.trim();
@@ -301,13 +308,6 @@ export default function SetBrowser() {
     setHasSearched(false);
     setResultsLimit(PAGE_SIZE);
   }, []);
-
-  // Only SoundCloud's search exposes a real upload timestamp, so once the
-  // "uploaded within" filter is active every fetch (initial + load-more)
-  // should be scoped to SoundCloud alone with a bigger limit -- otherwise
-  // half the fetched results are YouTube items the client-side date filter
-  // immediately throws away, making the filter look broken/empty.
-  const uploadedProvider = uploadedFilter !== 'any' ? 'soundcloud' : undefined;
 
   const loadMoreResults = useCallback(async () => {
     const q = query.trim();
