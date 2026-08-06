@@ -21,11 +21,19 @@ export function useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progres
   // active line" (-1) so the UI can light all lines uniformly.
   const synced = Array.isArray(lyrics) && lyrics.some((l) => Number(l?.time) > 0);
 
+  // Intentionally NOT keyed on progress/getMainAudioEl/audioRef -- this guard
+  // exists to catch the stale-clock moment right after a track change (see
+  // the comment above), and must only run once when a genuinely new `lyrics`
+  // array arrives. progress updates continuously during playback; including
+  // it here reran this "assume stale, hold on line 0" check on every tick,
+  // which near the real end of a song kept re-triggering forever (the last-3
+  // -lines condition stays true) and permanently prevented the last 3 lines
+  // from ever becoming active.
   useEffect(() => {
     if (lyrics.length > 0 && synced) {
       const t = getPlaybackCurrentTime({ getMainAudioEl, audioRef, progress });
       const initialIdx = getActiveLyricIndex(lyrics, t, LYRICS_SYNC_LEAD_S);
-      // Only protect against stale clock if the calculated index is the very end 
+      // Only protect against stale clock if the calculated index is the very end
       // of the song, but we suspect it's a fresh track. Otherwise, trust the clock.
       if (t > FRESH_START_MAX_S && initialIdx >= lyrics.length - 3) {
         activeIdxRef.current = 0;
@@ -42,7 +50,8 @@ export function useLyricsActiveIndex(lyrics, { getMainAudioEl, audioRef, progres
       setActiveIdx(-1);
       waitForResetRef.current = false;
     }
-  }, [lyrics, synced, getMainAudioEl, audioRef, progress]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lyrics, synced]);
 
   useEffect(() => {
     if (!lyrics?.length || !synced) return undefined;
