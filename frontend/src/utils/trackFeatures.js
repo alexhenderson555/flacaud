@@ -259,7 +259,16 @@ export async function analyzeTrackFeatures(track, streamUrl) {
         }
       }
 
-      if (!streamUrl || shouldDeferBackgroundMedia()) {
+      // DJMode analyzing the CURRENTLY PLAYING track is an explicit,
+      // single-track, user-initiated request -- not the list-wide
+      // speculative scan this defer guard exists to protect against (a
+      // single extra range-fetch on the same track_id that's already
+      // streaming isn't the N-competing-tracks contention that was cutting
+      // playback off). isDjAnalysisBlockedForTrack(id) is true exactly when
+      // `id` is the current track, so it doubles as "analysis for this one
+      // is allowed to run despite playback" here.
+      const isCurrentTrack = isDjAnalysisBlockedForTrack(id);
+      if (!streamUrl || (shouldDeferBackgroundMedia() && !isCurrentTrack)) {
         return { analyzed: false };
       }
 
