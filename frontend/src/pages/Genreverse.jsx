@@ -157,7 +157,13 @@ export default function Genreverse() {
         // whatever scroll offset picking a subgenre happened to be at, the
         // browser clamps that to the new (much shorter) page's end, landing
         // the user at the bottom looking at nothing in particular.
-        if (!refresh) window.scrollTo({ top: 0, behavior: 'smooth' });
+        //
+        // window.scrollTo is a no-op here: the actual scrollable region is
+        // the app shell's .page-container (overflow-y: auto), not the
+        // window itself, which never scrolls in this layout.
+        if (!refresh) {
+          document.querySelector('.page-container')?.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       } else {
         setError(t('errGen'));
       }
