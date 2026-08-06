@@ -203,6 +203,7 @@ export default function Recommendations() {
           <VirtualTrackList
             className="track-list"
             items={tracks}
+            onNearEnd={hasMore && !isLoadingMore ? loadMore : undefined}
             renderItem={(track, index) => (
               <LibraryTrackRow
                 key={`${track.provider_id}-${index}`}

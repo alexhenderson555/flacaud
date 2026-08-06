@@ -15,9 +15,16 @@ export default function VirtualTrackList({
   className = '',
   style = {},
   scrollParentSelector = '.page-container',
+  // Called once when scrolling brings the user within `nearEndThreshold` rows
+  // of the end of the list -- lets a caller auto-fetch the next page instead
+  // of requiring an explicit "Load more" click. Re-arms automatically once
+  // `items` grows (a fresh page arrives), so it fires again near the new end.
+  onNearEnd,
+  nearEndThreshold = 5,
 }) {
   const containerRef = useRef(null);
   const [scrollEl, setScrollEl] = useState(null);
+  const firedForCountRef = useRef(0);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -38,6 +45,24 @@ export default function VirtualTrackList({
     estimateSize: () => rowHeight,
     overscan: OVERSCAN,
   });
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const lastVisibleIndex = virtualItems.length
+    ? virtualItems[virtualItems.length - 1].index
+    : -1;
+
+  useEffect(() => {
+    if (!onNearEnd || !items.length) return;
+    // Re-arm once the list has actually grown past whatever count we last
+    // fired for -- otherwise a caller whose fetch comes back with no new
+    // items (real end of data) would get re-triggered on every scroll tick.
+    if (items.length <= firedForCountRef.current) return;
+    if (lastVisibleIndex < 0) return;
+    if (lastVisibleIndex >= items.length - 1 - nearEndThreshold) {
+      firedForCountRef.current = items.length;
+      onNearEnd();
+    }
+  }, [lastVisibleIndex, items.length, onNearEnd, nearEndThreshold]);
 
   return (
     <div
