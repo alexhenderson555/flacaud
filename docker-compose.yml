@@ -80,6 +80,12 @@ services:
       TIDALDLRU_JOBS_DIR: /var/lib/tidal-dl-ru/jobs
       TIDALDLRU_ARQ_MAX_JOBS: ${TIDALDLRU_ARQ_MAX_JOBS:-2}
       TIDALDLRU_STREAM_CACHE_MAX_BYTES: ${TIDALDLRU_STREAM_CACHE_MAX_BYTES:-8589934592}
+      # Without this the worker's disk_cleanup cron (which runs HERE, not in
+      # api) falls back to settings.py's default of a container-local tmp dir
+      # -- always empty, since the real stream cache only ever gets written
+      # to by api. Cap enforcement silently did nothing (bytes_freed always
+      # 0) while the actual cache, on api's volume, grew past its cap.
+      TIDALDLRU_STREAM_CACHE_DIR: /var/lib/tidal-dl-ru/stream-cache
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
       OPENBLAS_NUM_THREADS: "2"
@@ -93,6 +99,7 @@ services:
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
     volumes:
       - jobs-data:/var/lib/tidal-dl-ru/jobs
+      - stream-cache:/var/lib/tidal-dl-ru/stream-cache
       - pool-data:/root/.config/tidal-dl-ru
     depends_on:
       redis:

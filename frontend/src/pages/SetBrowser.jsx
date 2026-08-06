@@ -273,16 +273,23 @@ export default function SetBrowser() {
     setSearching(true);
     setSearchError(null);
     setHasSearched(true);
-    setResultsLimit(PAGE_SIZE);
+    // Submitting a query while the "uploaded within" filter is already active
+    // must fetch SoundCloud-scoped with the bigger pool (see uploadedProvider
+    // above) -- otherwise this call pulls the default YouTube+SoundCloud mix
+    // at the small limit, the client-side date filter throws almost all of it
+    // away (YouTube has no timestamp at all), and the grid renders empty even
+    // though matching SoundCloud sets exist.
+    const scopedLimit = uploadedProvider ? PAGE_SIZE * 3 : PAGE_SIZE;
+    setResultsLimit(scopedLimit);
     try {
-      const rows = await searchSets(q, { lang, limit: PAGE_SIZE });
+      const rows = await searchSets(q, { lang, limit: scopedLimit, provider: uploadedProvider });
       setResults(rows);
     } catch (err) {
       setSearchError(messageForApiError(err, lang) || t('errGeneric'));
     } finally {
       setSearching(false);
     }
-  }, [query, lang, t]);
+  }, [query, lang, t, uploadedProvider]);
 
   // Clearing the query text alone left `results` populated (it's only set
   // inside runSearch), so the "Recommended for you" view -- gated on both
@@ -640,6 +647,9 @@ export default function SetBrowser() {
                   </div>
                 </>
               )}
+              {!recommendedLoading && recommended.length > 0 && sortedRecommended.length === 0 && (
+                <p style={{ color: 'var(--text-secondary)' }}>{t('noResultsFiltered')}</p>
+              )}
               {!recommendedLoading && !recommended.length && (
                 <p style={{ color: 'var(--text-secondary)' }}>{t('noQuery')}</p>
               )}
@@ -648,6 +658,9 @@ export default function SetBrowser() {
 
           {!searching && hasSearched && query.trim() && results.length === 0 && !searchError && (
             <p style={{ color: 'var(--text-secondary)' }}>{t('noResults')}</p>
+          )}
+          {!searching && results.length > 0 && sortedResults.length === 0 && !searchError && (
+            <p style={{ color: 'var(--text-secondary)' }}>{t('noResultsFiltered')}</p>
           )}
 
           {results.length > 0 && (

@@ -273,6 +273,19 @@ async def _blend_queries(
     batches = await asyncio.gather(
         *[asyncio.to_thread(search_sets, q, per_query, sources) for q in queries]
     )
+    if len(sources) == 1:
+        # Date-filter-scoped: each batch is still ordered by search_sets's own
+        # relevance*recency-weighted score, not by date -- so row_idx 0 of a
+        # batch can easily be an old, highly-relevant result. Re-sorting each
+        # batch by upload_timestamp before the round-robin below means row_idx
+        # 0..k across all queries are each query's MOST recent items, so the
+        # final `blended[:limit]` truncation is the one that actually decides
+        # what's recent, instead of discarding recent items that happened to
+        # rank low within their own query before the caller ever sees them.
+        batches = [
+            sorted(batch, key=lambda row: row.get("upload_timestamp") or 0, reverse=True)
+            for batch in batches
+        ]
     seen = set(exclude)
     blended: list[dict] = []
     for row_idx in range(per_query):
