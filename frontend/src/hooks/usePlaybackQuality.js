@@ -660,13 +660,26 @@ export function usePlaybackQuality({
       cancelled = true;
       abortReady.abort();
     };
+    // currentTrack is intentionally NOT a dependency -- trackKey already
+    // identifies which track this effect is resolving a src for. playQueue's
+    // "same track already playing" branch (e.g. starting Track Radio from the
+    // currently-playing track) still calls setCurrentTrack with a freshly
+    // merged object every time, even though the track itself hasn't changed.
+    // Depending on that object by reference reran this effect on every such
+    // merge. For an uncached track buildStreamUrl deterministically returns
+    // the same server URL string, so the "same resource" check below caught
+    // it -- but for a track already in the offline/prefetch cache,
+    // getCachedAudioUrl mints a brand new blob: URL each call (different
+    // string, identical bytes), which failed that check and got reassigned
+    // to <audio>.src, resetting playback to 0. Hence "restarts only if
+    // cached".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     trackKey,
     streamQuality,
     downloadRegistryTick,
     downloadedRegistryRef,
-    currentTrack,
     buildStreamUrl,
     streamRetryNonce,
     qualitiesReady,
