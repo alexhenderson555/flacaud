@@ -10,7 +10,13 @@ cd "$DEPLOY_PATH"
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
-if grep -q '^DATABASE_URL=postgresql' .env 2>/dev/null; then
+# DATABASE_URL is set on the api container via docker-compose.postgres.yml,
+# NOT written into .env on the host -- grepping .env directly always missed
+# it and silently fell back to backing up an unused, stale SQLite file while
+# the app actually ran on Postgres. Ask the running container instead.
+DB_URL="$($COMPOSE -f docker-compose.postgres.yml exec -T api printenv DATABASE_URL 2>/dev/null || true)"
+
+if [[ "$DB_URL" == postgresql* ]]; then
   echo "Postgres mode — pg_dump via postgres service"
   docker compose -f docker-compose.yml -f docker-compose.postgres.yml exec -T postgres \
     pg_dump -U "${POSTGRES_USER:-tidal}" "${POSTGRES_DB:-tidaldl}" \
