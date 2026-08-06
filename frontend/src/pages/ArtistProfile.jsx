@@ -17,6 +17,11 @@ export default function ArtistProfile() {
   const [bioLoading, setBioLoading] = useState(false);
   const [pictureFailed, setPictureFailed] = useState(false);
   const [playlistModalTrack, setPlaylistModalTrack] = useState(null);
+  const TOP_TRACKS_PAGE_SIZE = 20;
+  const [extraTopTracks, setExtraTopTracks] = useState([]);
+  const [topTracksOffset, setTopTracksOffset] = useState(TOP_TRACKS_PAGE_SIZE);
+  const [hasMoreTopTracks, setHasMoreTopTracks] = useState(true);
+  const [loadingMoreTopTracks, setLoadingMoreTopTracks] = useState(false);
 
   const {
     togglePlay,
@@ -40,10 +45,14 @@ export default function ArtistProfile() {
     const fetchArtist = async () => {
       setLoading(true);
       setPictureFailed(false);
+      setExtraTopTracks([]);
+      setTopTracksOffset(TOP_TRACKS_PAGE_SIZE);
+      setHasMoreTopTracks(true);
       try {
         const d = await apiGetJson(`/api/artist/${id}`, { lang });
         if (cancelled) return;
         setData(d);
+        if ((d?.top_tracks?.length || 0) < TOP_TRACKS_PAGE_SIZE) setHasMoreTopTracks(false);
       } catch (err) {
         if (cancelled) return;
         console.error(err);
@@ -54,6 +63,28 @@ export default function ArtistProfile() {
     fetchArtist();
     return () => { cancelled = true; };
   }, [id, lang]);
+
+  const loadMoreTopTracks = async () => {
+    if (loadingMoreTopTracks || !hasMoreTopTracks) return;
+    setLoadingMoreTopTracks(true);
+    try {
+      const d = await apiGetJson(
+        `/api/artist/${id}/top-tracks?offset=${topTracksOffset}&limit=${TOP_TRACKS_PAGE_SIZE}`,
+        { lang },
+      );
+      const incoming = d?.top_tracks || [];
+      if (incoming.length > 0) {
+        setExtraTopTracks((prev) => [...prev, ...incoming]);
+        setTopTracksOffset((prev) => prev + incoming.length);
+      }
+      setHasMoreTopTracks(Boolean(d?.has_more) && incoming.length > 0);
+    } catch (err) {
+      console.error(err);
+      setHasMoreTopTracks(false);
+    } finally {
+      setLoadingMoreTopTracks(false);
+    }
+  };
 
   useEffect(() => {
     if (!data?.artist?.name) return undefined;
@@ -92,7 +123,7 @@ export default function ArtistProfile() {
   const { artist, albums, top_tracks } = data;
   const hasPicture = !!(artist.picture || artist.picture_url) && !pictureFailed;
   const emoji = emojiAvatarForId(id);
-  const normalizedTopTracks = (top_tracks || [])
+  const normalizedTopTracks = ([...(top_tracks || []), ...extraTopTracks])
     .map((track) => normalizeTrack({ ...track, artist_ids: track.artist_ids?.length ? track.artist_ids : [String(id)] }))
     .filter(Boolean);
 
@@ -192,6 +223,22 @@ export default function ArtistProfile() {
               />
             ))}
           </div>
+          {hasMoreTopTracks && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+              <button
+                type="button"
+                onClick={loadMoreTopTracks}
+                disabled={loadingMoreTopTracks}
+                className="btn-secondary"
+                style={{ borderRadius: '20px', padding: '10px 24px', minWidth: '160px', justifyContent: 'center' }}
+                data-testid="artist-top-tracks-load-more"
+              >
+                {loadingMoreTopTracks
+                  ? (lang === 'ru' ? 'Подбираем…' : 'Loading…')
+                  : (lang === 'ru' ? 'Ещё' : 'Load more')}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

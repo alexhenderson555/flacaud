@@ -189,8 +189,8 @@ class TidalClient:
         data = self._get(f"/artists/{artist_id}/albums", limit=100)
         return [Album.model_validate(item) for item in data.get("items", [])]
 
-    def get_artist_top_tracks(self, artist_id: str | int) -> list[Track]:
-        data = self._get(f"/artists/{artist_id}/toptracks", limit=20)
+    def get_artist_top_tracks(self, artist_id: str | int, limit: int = 20, offset: int = 0) -> list[Track]:
+        data = self._get(f"/artists/{artist_id}/toptracks", limit=limit, offset=offset)
         return [Track.model_validate(item) for item in data.get("items", [])]
 
     def get_similar_artists(self, artist_id: str | int, limit: int = 20) -> list[Artist]:

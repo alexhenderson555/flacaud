@@ -150,7 +150,7 @@ export default function DJMode({ currentTrack, audioRef, onClose }) {
 
         <div className="glass-panel" style={{ flex: 1, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Key</span>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white' }}>{analyzing ? '…' : (effectiveKey ?? '—')}</span>
+          <span style={{ fontSize: 'clamp(1.3rem, 6vw, 2.5rem)', fontWeight: 800, color: 'white', whiteSpace: 'nowrap' }}>{analyzing ? '…' : (effectiveKey ?? '—')}</span>
           <span style={{ fontSize: '0.8rem', color: !preservePitch && playbackRate !== 1 ? 'var(--warning)' : 'var(--text-muted)' }}>
             {!preservePitch && playbackRate !== 1 && mockKey ? `Original: ${mockKey}` : 'Locked'}
           </span>

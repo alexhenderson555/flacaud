@@ -14,10 +14,12 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from tidal_dl_ru.logging_config import configure_logging
+from tidal_dl_ru.logging_config import configure_logging, request_id_var
 
 configure_logging("worker")
 log = logging.getLogger(__name__)
+
+import functools
 
 import httpx
 from arq import cron
@@ -41,6 +43,32 @@ _INVALID_FN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 def _safe(s: str, max_len: int = 120) -> str:
     out = _INVALID_FN.sub("_", s).strip().rstrip(". ")
     return out[:max_len] or "_"
+
+
+def traced(fn):
+    """Carry the API request's request_id into this job's own log lines.
+
+    Without this, a job's logs are a dead end for tracing: the api process
+    logs "request ... path=/api/jobs status=200" with some request_id, then
+    every subsequent line about that job (in the worker container, a
+    different process entirely) goes out with request_id="-" -- no way to
+    connect "this download failed" back to the request that started it
+    short of matching timestamps by hand.
+
+    Call sites pass `request_id` as a kwarg alongside the job's own args
+    (see jobs.py/transfer.py's enqueue_job calls); arq hands it straight
+    through since job functions are called with the exact args/kwargs given
+    to enqueue_job. Popped here so it never reaches the wrapped function's
+    own signature.
+    """
+    @functools.wraps(fn)
+    async def wrapper(ctx, *args, request_id: str | None = None, **kwargs):
+        token = request_id_var.set(request_id or "-")
+        try:
+            return await fn(ctx, *args, **kwargs)
+        finally:
+            request_id_var.reset(token)
+    return wrapper
 
 
 def _filename(track: Track) -> str:
@@ -154,6 +182,7 @@ def _download_sync(
     return path
 
 
+@traced
 async def download_url(
     ctx: dict,
     job_id: str,
@@ -237,6 +266,7 @@ async def download_url(
         raise
 
 
+@traced
 async def analyze_set(ctx: dict, job_id: str, url: str) -> dict:
     log.info("analyze_set_start job_id=%s", job_id, extra={"event": "analyze_set_start", "job_id": job_id})
     from tidal_dl_ru.core.set_analyzer import analyze_set_task
@@ -267,6 +297,7 @@ async def analyze_set(ctx: dict, job_id: str, url: str) -> dict:
         raise
 
 
+@traced
 async def download_set_audio(ctx: dict, job_id: str, url: str) -> dict:
     log.info(
         "download_set_audio_start job_id=%s", job_id,

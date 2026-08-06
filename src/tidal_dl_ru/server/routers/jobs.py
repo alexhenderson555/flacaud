@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from tidal_dl_ru.core.router import find_provider
 from tidal_dl_ru.database.auth import decode_token, get_current_user, get_media_user, oauth2_scheme
 from tidal_dl_ru.database.models import User
+from tidal_dl_ru.logging_config import request_id_var
 from tidal_dl_ru.plan_limits import cap_stream_quality
 from tidal_dl_ru.server import jobs as job_state
 from tidal_dl_ru.server.outbound_url import OutboundUrlError, validate_public_http_url
@@ -53,7 +54,9 @@ async def create_job(
         if arq_pool is None:
             raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
 
-        await arq_pool.enqueue_job("analyze_set", job_id, safe_url, _job_id=job_id)
+        await arq_pool.enqueue_job(
+            "analyze_set", job_id, safe_url, request_id=request_id_var.get(), _job_id=job_id,
+        )
 
         status = job_state.load(job_id)
         if status is None:
@@ -74,7 +77,9 @@ async def create_job(
         if arq_pool is None:
             raise HTTPException(status_code=500, detail="Redis ARQ pool not available")
 
-        await arq_pool.enqueue_job("download_set_audio", job_id, safe_url, _job_id=job_id)
+        await arq_pool.enqueue_job(
+            "download_set_audio", job_id, safe_url, request_id=request_id_var.get(), _job_id=job_id,
+        )
 
         status = job_state.load(job_id)
         if status is None:
@@ -107,6 +112,7 @@ async def create_job(
         req.dj_analyze,
         req.match_tidal,
         not via_bot,
+        request_id=request_id_var.get(),
         _job_id=job_id,
     )
 

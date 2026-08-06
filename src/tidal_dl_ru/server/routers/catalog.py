@@ -408,6 +408,58 @@ async def get_artist_api(artist_id: str):
         http.close()
 
 
+@router.get("/api/artist/{artist_id}/top-tracks")
+async def get_artist_top_tracks_page(artist_id: str, offset: int = 0, limit: int = 20):
+    """Paginated continuation of get_artist_api's top_tracks -- that endpoint
+    always fetched a fixed 20 with no way to page further, so the UI's Top
+    Tracks section had no load-more."""
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+
+    http = httpx.Client(timeout=30.0)
+    try:
+        try:
+            acc, tokens = tidal_pool.acquire(http)
+            client = TidalClient(
+                http=http,
+                tokens=tokens,
+                on_auth_error=lambda status, _id=acc.id: tidal_pool.report_failure(_id, status),  # type: ignore[misc]
+                on_token_refresh=lambda toks, _id=acc.id: tidal_pool.update_refresh_token(  # type: ignore[misc]
+                    _id, toks.refresh_token
+                ),
+            )
+        except tidal_pool.NoAccountAvailable:
+            client = TidalClient(http=http)
+
+        top_tracks = await asyncio.to_thread(client.get_artist_top_tracks, artist_id, limit, offset)
+
+        async def _enrich_track_meta(tidal_track):
+            def _build():
+                uni = _to_universal(tidal_track)
+                full = tidal_track
+                if not (uni.release_date or uni.year):
+                    try:
+                        full = client.get_track(tidal_track.id)
+                    except Exception:
+                        pass
+                return to_universal_enriched(client, full).model_dump()
+
+            return await asyncio.to_thread(_build)
+
+        tracks_univ = await asyncio.gather(*(_enrich_track_meta(t) for t in top_tracks))
+        return {"top_tracks": tracks_univ, "has_more": len(top_tracks) >= limit}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.info(f"Error fetching top tracks page for artist {artist_id}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "artist_unavailable", "message": "Artist unavailable"},
+        ) from e
+    finally:
+        http.close()
+
+
 @router.get("/api/artist/{artist_id}/bio")
 async def get_artist_bio_api(
     artist_id: str,

@@ -11,6 +11,7 @@ from sqlmodel import Session
 from tidal_dl_ru.database.auth import get_current_user, get_optional_user
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import User
+from tidal_dl_ru.logging_config import request_id_var
 from tidal_dl_ru.plan_limits import cap_stream_quality
 from tidal_dl_ru.providers.base import ProviderError
 from tidal_dl_ru.server import jobs as job_state
@@ -324,6 +325,7 @@ async def transfer_import(
             False,
             False,
             False,
+            request_id=request_id_var.get(),
             _job_id=job_id,
         )
         download_job_id = job_id

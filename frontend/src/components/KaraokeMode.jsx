@@ -81,7 +81,14 @@ export default function KaraokeMode({
       top: Math.max(0, targetTop),
       behavior: 'smooth',
     });
-  }, [activeIndex]);
+    // isLoading is here so this also re-runs the instant lyrics finish loading
+    // and the line elements actually exist to scroll to -- opening karaoke on
+    // a track that resolves to the same activeIndex it would've had a moment
+    // earlier (this effect ran on mount with containerRef.current still null,
+    // bailed above, and activeIndex hasn't changed since) otherwise leaves the
+    // view stuck at scrollTop 0 until playback naturally advances to the next
+    // line and finally changes activeIndex.
+  }, [activeIndex, isLoading]);
 
   useEffect(() => {
     let enteredFullscreen = false;
