@@ -402,7 +402,7 @@ export default function Library() {
     >
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ fontSize: '3rem', fontWeight: 700, margin: 0, color: 'white' }}>
-          {t('libTitle')}
+          {t('libTitle')} <span className="text-gradient">{t('libTitleBold')}</span>
         </h2>
         <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '1.1rem' }}>
           {t('libSubtitle')}
