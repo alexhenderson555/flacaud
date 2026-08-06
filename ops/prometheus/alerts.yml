@@ -88,3 +88,15 @@ groups:
           description: >
             API is returning 5xx responses at a rate exceeding 5/min.
             Check docker compose logs api --tail 100 for tracebacks.
+
+      - alert: FlacAudHighLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(flacaud_http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: p95 request latency above 2s
+          description: >
+            95th percentile HTTP request latency has exceeded 2 seconds for 10+ minutes.
+            Check for slow downstream calls (DB, Redis, Tidal manifest fetch) or CPU saturation.

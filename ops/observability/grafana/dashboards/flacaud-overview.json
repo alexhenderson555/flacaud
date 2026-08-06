@@ -1,5 +1,18 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": [
+      {
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "enable": true,
+        "expr": "changes(flacaud_uptime_seconds[2m]) > 0",
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "name": "Deploys",
+        "step": "60s",
+        "titleFormat": "Deploy",
+        "textFormat": "Process restarted (new container came up)"
+      }
+    ]
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -65,8 +78,67 @@
       "type": "timeseries"
     },
     {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 9,
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(flacaud_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(flacaud_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(flacaud_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
+      ],
+      "title": "HTTP request latency (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "sum(rate(flacaud_http_requests_total{status_class=\"5xx\"}[5m])) / sum(rate(flacaud_http_requests_total[5m]))",
+          "legendFormat": "5xx ratio (5m, fast burn)"
+        },
+        {
+          "expr": "sum(rate(flacaud_http_requests_total{status_class=\"5xx\"}[1h])) / sum(rate(flacaud_http_requests_total[1h]))",
+          "legendFormat": "5xx ratio (1h, slow burn)"
+        }
+      ],
+      "title": "Error-budget burn rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 11,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(flacaud_http_request_duration_seconds_bucket[5m])) by (le, route))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "title": "p95 latency by endpoint",
+      "type": "timeseries"
+    },
+    {
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 28 },
       "id": 7,
       "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
       "targets": [{ "expr": "{service=~\"api|worker|bot\"} | json | level=~\"ERROR|WARNING\" or event=\"client_error\"", "legendFormat": "" }],
@@ -75,7 +147,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 22 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 38 },
       "id": 8,
       "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
       "targets": [{ "expr": "{service=\"api\"} | json | event=\"request\" | status >= 400", "legendFormat": "" }],
@@ -91,5 +163,5 @@
   "timezone": "browser",
   "title": "FlacAud Overview",
   "uid": "flacaud-overview",
-  "version": 1
+  "version": 2
 }

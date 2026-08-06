@@ -22,6 +22,13 @@ _http_requests: dict[tuple[str, str, str], int] = {}
 _client_errors: dict[str, int] = {}
 _tidal_pool: dict[str, int] = {"total": 0, "active": 0, "healthy": 0}
 
+# Prometheus default-style buckets (seconds). Matches prometheus_client's
+# DEFAULT_BUCKETS so histogram_quantile() behaves as interviewers expect.
+_DURATION_BUCKETS: tuple[float, ...] = (
+    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
+)
+_http_durations: dict[tuple[str, str], dict] = {}
+
 
 def record_stream_error(kind: str) -> None:
     """Increment stream error counter (not_ready | failed)."""
@@ -42,12 +49,25 @@ def record_health(*, ok: bool, db_ok: bool, redis_ok: bool) -> None:
         _health["redis"] = 1 if redis_ok else 0
 
 
-def record_http_request(method: str, path: str, status: int) -> None:
+def record_http_request(
+    method: str, path: str, status: int, duration_seconds: float | None = None
+) -> None:
     route = normalize_path(path)
     status_class = f"{int(status // 100)}xx"
     key = (method.upper(), route, status_class)
     with _lock:
         _http_requests[key] = _http_requests.get(key, 0) + 1
+        if duration_seconds is not None:
+            dkey = (method.upper(), route)
+            entry = _http_durations.setdefault(
+                dkey, {"buckets": [0] * len(_DURATION_BUCKETS), "sum": 0.0, "count": 0}
+            )
+            entry["sum"] += duration_seconds
+            entry["count"] += 1
+            for i, bound in enumerate(_DURATION_BUCKETS):
+                if duration_seconds <= bound:
+                    entry["buckets"][i] += 1
+                    break
 
 
 def record_client_error(component: str) -> None:
@@ -182,9 +202,29 @@ def collect_prometheus_metrics() -> str:
     )
     with _lock:
         http_items = list(_http_requests.items())
+        duration_items = list(_http_durations.items())
     for (method, route, status_class), count in http_items:
         safe_route = route.replace('"', '\\"')
         lines.append(
             f'flacaud_http_requests_total{{method="{method}",route="{safe_route}",status_class="{status_class}"}} {count}'
+        )
+    lines.append("# HELP flacaud_http_request_duration_seconds HTTP request duration")
+    lines.append("# TYPE flacaud_http_request_duration_seconds histogram")
+    for (method, route), entry in duration_items:
+        safe_route = route.replace('"', '\\"')
+        cumulative = 0
+        for bound, bucket_count in zip(_DURATION_BUCKETS, entry["buckets"]):
+            cumulative += bucket_count
+            lines.append(
+                f'flacaud_http_request_duration_seconds_bucket{{method="{method}",route="{safe_route}",le="{bound}"}} {cumulative}'
+            )
+        lines.append(
+            f'flacaud_http_request_duration_seconds_bucket{{method="{method}",route="{safe_route}",le="+Inf"}} {entry["count"]}'
+        )
+        lines.append(
+            f'flacaud_http_request_duration_seconds_sum{{method="{method}",route="{safe_route}"}} {entry["sum"]:.6f}'
+        )
+        lines.append(
+            f'flacaud_http_request_duration_seconds_count{{method="{method}",route="{safe_route}"}} {entry["count"]}'
         )
     return "\n".join(lines) + "\n"

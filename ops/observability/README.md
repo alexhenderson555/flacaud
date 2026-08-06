@@ -70,6 +70,8 @@ Reload after edit:
 docker compose exec prometheus kill -HUP 1
 ```
 
+**Gotcha after a tar-mode deploy:** `scripts/deploy_tidal.py` extracts a fresh tarball on the server, which replaces `alerts.yml` with a **new inode** rather than editing it in place. A `prometheus` container that was already running keeps the bind-mount pointed at the old inode, so `kill -HUP 1` reloads `prometheus.yml` but silently keeps serving the stale `alerts.yml` (verify with `docker compose exec prometheus wc -l /etc/prometheus/alerts.yml` vs the file on disk). Fix: `docker compose restart prometheus` (not just kill -HUP) after any deploy that touches `alerts.yml`.
+
 ## Optional: public Grafana subdomain
 
 Do **not** expose Grafana without auth. If needed, add a Caddy vhost with basic auth and set `GRAFANA_ROOT_URL=https://monitor.example.com`.

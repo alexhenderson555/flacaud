@@ -235,7 +235,8 @@ All SLIs are emitted by the API's `/internal/metrics/prometheus` endpoint and sc
 
 | SLI | Prometheus metric | Description |
 |-----|-------------------|-------------|
-| Request latency | `flacaud_http_requests_total{...}` (counter) | Per-method, per-route, per-status-class request count. Use `rate()` + `histogram_quantile()` once histogram buckets are added. |
+| Request count | `flacaud_http_requests_total{...}` (counter) | Per-method, per-route, per-status-class request count. |
+| Request latency | `flacaud_http_request_duration_seconds` (histogram) | Per-method, per-route buckets. `histogram_quantile(0.95, sum(rate(flacaud_http_request_duration_seconds_bucket[5m])) by (le))` for p95. |
 | Error rate (5xx) | `flacaud_http_requests_total{status_class="5xx"}` | Ratio of 5xx responses to total responses. |
 | Uptime | `flacaud_health_ok` (gauge) | Aggregate health = 1 when DB + Redis are reachable. |
 | Stream errors | `flacaud_stream_errors_total{kind="..."}` | Counter incremented on `not_ready` / `failed` stream events. |
@@ -263,6 +264,7 @@ Alert rules live in `ops/prometheus/alerts.yml` and are loaded automatically by 
 | `FlacAudErrorBudgetBurnSlow` | 5xx rate > 0.1 % over 1h for 30m | warning | Investigate recurring 5xx patterns; check downstream services |
 | `FlacAudUptimeSLOBurn` | `avg_over_time(flacaud_health_ok[1h]) < 0.999` for 10m | warning | Health checks failing > 0.1 % of the hour; check restart loops |
 | `FlacAudAPIHighErrorRate` | 5xx rate > 5/min for 2m | critical | Immediate investigation — `docker compose logs api --tail 100` |
+| `FlacAudHighLatencyP95` | p95 latency > 2s for 10m | warning | Check slow downstream calls (DB, Redis, Tidal manifest fetch) or CPU saturation |
 
 **Alert routing:** In production with the observability stack enabled, Grafana Alerting or Alertmanager should route `critical` alerts to the on-call channel immediately and `warning` alerts to a Slack/email channel. Without Alertmanager, check the Prometheus Alerts UI at `http://127.0.0.1:9090/alerts` (via SSH tunnel).
 

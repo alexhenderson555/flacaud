@@ -98,7 +98,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             return response
 
         status = response.status_code
-        record_http_request(request.method, path, status)
+        record_http_request(request.method, path, status, duration_ms / 1000.0)
         slow_ms = int(os.environ.get("TIDALDLRU_SLOW_REQUEST_MS", "2000"))
         level = logging.INFO
         if status >= 500:
