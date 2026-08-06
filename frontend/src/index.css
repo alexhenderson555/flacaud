@@ -4566,24 +4566,34 @@ html.karaoke-mode-open body {
   background: #ffffff08;
   border-radius: 999px;
   flex: 1;
-  padding: 8px 10px;
+  padding: 9px 14px;
   font-size: 0.78rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  transform: translateY(0);
   transition:
-    border-color 0.15s,
-    background 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
+    border-color 0.18s,
+    background 0.18s,
+    color 0.18s,
+    box-shadow 0.18s,
+    transform 0.15s;
 }
 .eq-preset:hover {
   color: var(--text-primary);
-  background: #ffffff0f;
+  background: #ffffff14;
+  transform: translateY(-1px);
+}
+.eq-preset:active {
+  transform: translateY(0);
 }
 .eq-preset--active {
-  color: var(--text-primary);
-  background: #2575fc24;
-  border-color: #2575fc73;
-  box-shadow: 0 0 16px #2575fc2e;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-solid), color-mix(in srgb, var(--accent-solid) 70%, #fff 8%));
+  border-color: var(--accent-solid);
+  box-shadow: 0 2px 14px var(--accent-glow), inset 0 1px 0 #ffffff33;
+}
+.eq-preset--active:hover {
+  transform: translateY(-1px);
 }
 .eq-panel__curve-wrap {
   z-index: 1;

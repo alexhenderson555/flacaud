@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Disc } from 'lucide-react';
+import { ChevronLeft, Disc, Loader2 } from 'lucide-react';
 import LibraryTrackRow from '../components/LibraryTrackRow';
 import PlaylistModal from '../components/PlaylistModal';
 import { apiGetJson } from '../utils/apiClient';
@@ -142,7 +142,24 @@ export default function ArtistProfile() {
         <div style={{ marginBottom: '40px', color: 'var(--text-secondary)', fontSize: '1.1rem', lineHeight: 1.6, maxWidth: '800px' }}>
           <h2 style={{ fontSize: '1.8rem', marginBottom: '16px', fontWeight: 700, color: 'white' }}>About</h2>
           {bioLoading ? (
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>{lang === 'ru' ? 'Загрузка…' : 'Loading…'}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                <Loader2 size={16} className="spin" />
+                {lang === 'ru' ? 'Загрузка биографии…' : 'Loading bio…'}
+              </div>
+              {[1, 0.9, 0.6].map((width) => (
+                <div
+                  key={width}
+                  style={{
+                    height: '14px',
+                    width: `${width * 100}%`,
+                    borderRadius: '6px',
+                    background: 'var(--text-muted)',
+                    opacity: 0.15,
+                  }}
+                />
+              ))}
+            </div>
           ) : (
             <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{bio}</p>
           )}
