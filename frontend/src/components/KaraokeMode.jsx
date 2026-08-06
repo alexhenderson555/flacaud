@@ -91,17 +91,21 @@ export default function KaraokeMode({
   }, [activeIndex, isLoading]);
 
   useEffect(() => {
-    let enteredFullscreen = false;
+    // Captured synchronously, not from the requestFullscreen() promise's
+    // .then() -- that resolves asynchronously, so a fast open-then-close
+    // (or a fullscreen change racing with this effect) could otherwise leave
+    // the "did WE turn fullscreen on" flag unset when cleanup runs, exiting
+    // fullscreen that was already active before Karaoke opened (e.g. Cinema
+    // Mode) instead of leaving it as it was.
+    const wasFullscreenBefore = !!document.fullscreenElement;
     document.documentElement.classList.add('karaoke-mode-open');
     const el = rootRef.current || document.documentElement;
-    if (!document.fullscreenElement && el.requestFullscreen) {
-      void el.requestFullscreen({ navigationUI: 'hide' }).then(() => {
-        enteredFullscreen = true;
-      }).catch(() => {});
+    if (!wasFullscreenBefore && el.requestFullscreen) {
+      void el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
     }
     return () => {
       document.documentElement.classList.remove('karaoke-mode-open');
-      if (enteredFullscreen && document.fullscreenElement) {
+      if (!wasFullscreenBefore && document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
     };
