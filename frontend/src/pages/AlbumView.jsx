@@ -8,6 +8,7 @@ import { apiGetJson, messageForApiError } from '../utils/apiClient';
 import { useLibraryDataContext } from '../context/LibraryDataContext';
 import { addAlbumToLibraryApi, removeAlbumFromLibraryApi } from '../utils/libraryApi';
 import { hasAuthSession } from '../utils/hasAuthSession';
+import { sumTrackDurations, formatDurationSeconds } from '../utils/trackDuration';
 
 export default function AlbumView() {
   const { id } = useParams();
@@ -136,7 +137,12 @@ export default function AlbumView() {
               </>
             )}
             <span>•</span>
-            <span>{tracks.length} tracks</span>
+            <span>
+              {tracks.length}
+              {' '}
+              tracks
+              {tracks.length > 0 && ` · ${formatDurationSeconds(sumTrackDurations(tracks))}`}
+            </span>
           </div>
           <div style={{ display: 'flex', gap: '16px', marginTop: '24px' }}>
             <button 
