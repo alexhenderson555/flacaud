@@ -8,9 +8,11 @@ import { withHotkey } from '../../utils/playerHotkeys';
  * browser lacks Document Picture-in-Picture support (Chrome/Edge 116+ only --
  * no Firefox/Safari) rather than showing a button that would just fail. */
 export default function PipMiniPlayer({
-  currentTrack, isPlaying, isLoading, togglePlay, playPrevious, playNext, lang = 'en',
+  currentTrack, isPlaying, isLoading, togglePlay, playPrevious, playNext,
+  progress, trackDuration, beginSeekScrub, handleSeekPreview, handleSeekCommit,
+  startTrackRadio, radioLoadingTrackId, nextTrack, lang = 'en',
 }) {
-  const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow();
+  const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow({ width: 360, height: 224 });
 
   if (!isSupported) return null;
 
@@ -37,6 +39,14 @@ export default function PipMiniPlayer({
           togglePlay={togglePlay}
           playPrevious={playPrevious}
           playNext={playNext}
+          progress={progress}
+          trackDuration={trackDuration}
+          beginSeekScrub={beginSeekScrub}
+          handleSeekPreview={handleSeekPreview}
+          handleSeekCommit={handleSeekCommit}
+          startTrackRadio={startTrackRadio}
+          radioLoadingTrackId={radioLoadingTrackId}
+          nextTrack={nextTrack}
           lang={lang}
         />,
         pipWindow.document.body,

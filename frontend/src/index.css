@@ -1905,6 +1905,63 @@ button.nav-item {
   cursor: default;
   pointer-events: none;
 }
+/* Picture-in-Picture mini player seek bar (PipPlayerContent.jsx) -- same
+   accent-fill idea as .player-seek-range, but white-on-translucent since it
+   sits over a blurred cover-art backdrop rather than the app chrome. */
+.pip-seek-range {
+  appearance: none;
+  cursor: pointer;
+  touch-action: none;
+  background: 0 0;
+}
+.pip-seek-range::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    #fff 0%,
+    #fff var(--seek-pct, 0%),
+    rgba(255, 255, 255, 0.25) var(--seek-pct, 0%),
+    rgba(255, 255, 255, 0.25) 100%
+  );
+  border-radius: 3px;
+  height: 4px;
+}
+.pip-seek-range::-webkit-slider-thumb {
+  appearance: none;
+  cursor: grab;
+  background: #fff;
+  border-radius: 50%;
+  width: 11px;
+  height: 11px;
+  margin-top: -3.5px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+}
+.pip-seek-range:active::-webkit-slider-thumb {
+  cursor: grabbing;
+}
+.pip-seek-range::-moz-range-track {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  height: 4px;
+}
+.pip-seek-range::-moz-range-progress {
+  background: #fff;
+  border-radius: 3px 0 0 3px;
+  height: 4px;
+}
+.pip-seek-range::-moz-range-thumb {
+  cursor: grab;
+  background: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 11px;
+  height: 11px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+}
+.pip-seek-range:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
 .ambient-glow {
   background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%);
   opacity: 0.6;

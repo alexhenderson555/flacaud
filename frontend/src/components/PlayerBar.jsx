@@ -500,6 +500,14 @@ export default function PlayerBar({
         togglePlay={togglePlay}
         playPrevious={playPrevious}
         playNext={playNext}
+        progress={progress}
+        trackDuration={trackDuration}
+        beginSeekScrub={beginSeekScrub}
+        handleSeekPreview={handleSeekPreview}
+        handleSeekCommit={handleSeekCommit}
+        startTrackRadio={startTrackRadio}
+        radioLoadingTrackId={radioLoadingTrackId}
+        nextTrack={nextTrack}
         lang={lang}
       />
     </div>
