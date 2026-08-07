@@ -149,7 +149,23 @@ export function usePlaybackQuality({
   ), [effectivePlan]);
 
   const updateDeliveredMeta = useCallback((tier, probe = null, meta = {}) => {
-    const normalized = !tier || tier === 'LOW' || tier === 'HIGH'
+    // An empty `tier` means "reset, nothing delivered yet for the new track"
+    // (called on every track change) -- it must NOT collapse into the same
+    // shape as a real HIGH/320k delivery, or the UI can't tell "we don't
+    // know yet" apart from "320k was genuinely just delivered". That
+    // ambiguity is exactly what let a stale/placeholder 320k badge render
+    // simultaneously with the new track's real (lossless) info once the
+    // probe caught up -- a visible race between two independently-updating
+    // pieces of state. Keeping tier="" here lets the hook's own
+    // `deliveredStream.tier ? deliveredStream : null` return null during
+    // that gap, so callers correctly fall back to the requested tier
+    // instead of asserting a false delivered one.
+    if (!tier) {
+      setDeliveredStream({ tier: '', sampleRate: null, bitDepth: null });
+      setActualQuality('');
+      return;
+    }
+    const normalized = tier === 'LOW' || tier === 'HIGH'
       ? { tier: 'HIGH', sampleRate: null, bitDepth: null }
       : {
         tier,
@@ -556,6 +572,26 @@ export function usePlaybackQuality({
 
       const activelyPlaying = !forceQualitySwitch
         && isActivelyPlayingAudio(isPlayingRef.current, mainEl);
+
+      // Already playing the right src for this exact track+quality and
+      // nothing forced a re-resolve -- bail out before touching anything
+      // else. This effect also reruns on downloadRegistryTick/
+      // downloadedRegistryRef (needed so a *not-yet-playing* track picks up
+      // a freshly-finished download), but for a track that's mid-playback,
+      // recomputing `bypass` below can flip bypass_registry in the rebuilt
+      // URL -- a different query string that fails the exact-string
+      // sameStreamResource() check further down and gets reassigned to
+      // <audio>.src, restarting playback from 0. Reproduced by downloading
+      // a still-loading lossless track while it was already playing.
+      // (Only checks trackKey+streamQuality, not retry-nonce/bypass, so a
+      // genuine mid-track quality change -- which changes streamQuality --
+      // still falls through and re-resolves normally.)
+      const alreadyLoadedForTrackAndQuality = Boolean(trackKey)
+        && loadedSrcKeyRef.current.startsWith(`${trackKey}:${streamQuality}:`);
+      if (activelyPlaying && alreadyLoadedForTrackAndQuality) {
+        return;
+      }
+
       const skipUrl = skipAudioSrcSyncRef?.current;
       if (skipUrl) {
         const elSrc = mainEl?.currentSrc || mainEl?.src || '';
