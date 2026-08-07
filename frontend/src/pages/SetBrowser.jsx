@@ -74,6 +74,8 @@ const UPLOADED_MAX_AGE_SEC = {
 function SetResultCard({ set, onSelect, t, lang }) {
   const views = formatCompactNumber(set.view_count);
   const date = formatUploadDate(set.upload_timestamp, lang);
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const showThumbnail = set.thumbnail && !thumbnailFailed;
   return (
     <motion.button
       type="button"
@@ -87,10 +89,18 @@ function SetResultCard({ set, onSelect, t, lang }) {
       }}
     >
       <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', flexShrink: 0, overflow: 'hidden' }}>
-        {set.thumbnail ? (
+        {showThumbnail ? (
           // Absolutely positioned so the image's own (often square/SoundCloud)
           // intrinsic size can never stretch this box past its 16:9 aspect ratio.
-          <img src={set.thumbnail} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          // onError matters specifically for SoundCloud: its CDN thumbnail URLs
+          // occasionally 404/hotlink-block, and with no fallback that left a
+          // permanently blank/broken image box instead of the placeholder icon.
+          <img
+            src={set.thumbnail}
+            alt=""
+            onError={() => setThumbnailFailed(true)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Music2 size={32} color="var(--text-muted)" />
@@ -173,6 +183,12 @@ export default function SetBrowser() {
   const [sortBy, setSortBy] = useState('relevance');
   const [durationFilter, setDurationFilter] = useState('any');
   const [uploadedFilter, setUploadedFilter] = useState('any');
+  const filtersActive = sortBy !== 'relevance' || durationFilter !== 'any' || uploadedFilter !== 'any';
+  const resetFilters = useCallback(() => {
+    setSortBy('relevance');
+    setDurationFilter('any');
+    setUploadedFilter('any');
+  }, []);
   const [selected, setSelected] = useState(null);
   const [tracklist, setTracklist] = useState(null);
   const [tracklistLoading, setTracklistLoading] = useState(false);
@@ -627,6 +643,19 @@ export default function SetBrowser() {
                       onChange={setUploadedFilter}
                       options={UPLOADED_OPTIONS.map((opt) => ({ value: opt, label: t(`uploaded_${opt}`) }))}
                     />
+                    {filtersActive && (
+                      <button
+                        type="button"
+                        onClick={resetFilters}
+                        data-testid="set-browser-recommended-reset-filters"
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px',
+                          color: 'var(--accent-solid)', fontSize: '0.85rem', fontWeight: 600,
+                        }}
+                      >
+                        {t('resetFilters')}
+                      </button>
+                    )}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px', paddingBottom: '16px' }}>
                     {sortedRecommended.map((set) => (
@@ -704,6 +733,19 @@ export default function SetBrowser() {
                 onChange={setUploadedFilter}
                 options={UPLOADED_OPTIONS.map((opt) => ({ value: opt, label: t(`uploaded_${opt}`) }))}
               />
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  data-testid="set-browser-reset-filters"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px',
+                    color: 'var(--accent-solid)', fontSize: '0.85rem', fontWeight: 600,
+                  }}
+                >
+                  {t('resetFilters')}
+                </button>
+              )}
             </div>
           )}
 

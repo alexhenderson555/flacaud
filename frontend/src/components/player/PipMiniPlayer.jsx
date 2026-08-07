@@ -1,8 +1,9 @@
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { PictureInPicture2 } from 'lucide-react';
 import { usePipWindow } from '../../hooks/usePipWindow';
 import PipPlayerContent from './PipPlayerContent';
-import { withHotkey } from '../../utils/playerHotkeys';
+import { withHotkey, PLAYER_HOTKEYS } from '../../utils/playerHotkeys';
 
 /** Toggle button + the floating window itself. Not rendered at all when the
  * browser lacks Document Picture-in-Picture support (Chrome/Edge 116+ only --
@@ -18,6 +19,13 @@ export default function PipMiniPlayer({
   // space; dragging it taller reveals more of the queue list.
   const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow({ width: 350, height: 310 });
 
+  useEffect(() => {
+    if (!isSupported) return undefined;
+    const handleToggle = () => (isOpen ? closePip() : openPip());
+    window.addEventListener('flacaud:toggle-pip', handleToggle);
+    return () => window.removeEventListener('flacaud:toggle-pip', handleToggle);
+  }, [isSupported, isOpen, openPip, closePip]);
+
   if (!isSupported) return null;
 
   return (
@@ -30,6 +38,7 @@ export default function PipMiniPlayer({
         onClick={() => (isOpen ? closePip() : openPip())}
         title={withHotkey(
           lang === 'ru' ? 'Мини-плеер поверх окон' : 'Mini player (always on top)',
+          PLAYER_HOTKEYS.pip,
         )}
         aria-label={lang === 'ru' ? 'Мини-плеер' : 'Mini player'}
       >

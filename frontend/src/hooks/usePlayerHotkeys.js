@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { PARTY_MODE_ENABLED } from './usePartyModeAvailable';
 
 const SEEK_STEP = 5;
 
@@ -161,10 +160,14 @@ export function usePlayerHotkeys({
           }
           break;
         case 'KeyP':
-          if (!e.ctrlKey && !e.metaKey && PARTY_MODE_ENABLED) {
-            e.preventDefault();
-            toggleOverlay('party');
-          }
+          if (e.ctrlKey || e.metaKey) break;
+          e.preventDefault();
+          // PipMiniPlayer manages its own open/closed state locally (tied
+          // to the actual browser PiP window instance) -- a custom event
+          // lets this global handler trigger it without threading PiP
+          // state all the way up through the outlet context, same bridge
+          // pattern as flacaud:command-palette below.
+          window.dispatchEvent(new CustomEvent('flacaud:toggle-pip'));
           break;
         case 'KeyD':
           if (!e.ctrlKey && !e.metaKey) {
