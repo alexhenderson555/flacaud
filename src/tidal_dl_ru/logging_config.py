@@ -132,7 +132,13 @@ def _apply_logging_config(service: str) -> None:
         file_handler.setFormatter(handler.formatter)
         root.addHandler(file_handler)
 
-    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    # RequestLoggingMiddleware already emits a structured JSON line per request
+    # (tidal_dl_ru.access, with duration_ms/request_id/etc.) -- uvicorn's own
+    # built-in access log duplicated every request as a second, plain-text
+    # (non-JSON) line, doubling log volume and breaking Loki's `| json` parser
+    # on that second line. WARNING keeps uvicorn.access visible for anything
+    # actually unusual, just not the routine per-request line.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     if os.environ.get("TIDALDLRU_DEBUG_VERBOSE", "").strip().lower() not in ("1", "true", "yes"):
