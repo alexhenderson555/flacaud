@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { apiGetJson, apiPatchJson } from '../utils/apiClient';
 import { isTidalCoverUrl } from '../utils/coverUrl';
 
@@ -9,11 +9,32 @@ const ENRICH_CONCURRENCY = 5;
  */
 export function useEnrichLibraryArtists(library, setLibrary) {
   const enrichedRef = useRef(new Set());
+  const libraryRef = useRef(library);
+  useEffect(() => {
+    libraryRef.current = library;
+  }, [library]);
+
+  // This effect's own setLibrary() calls (one per successfully enriched
+  // track) change `library`'s reference on every success -- depending on
+  // `library` directly retriggered the whole effect each time, which set a
+  // fresh `cancelled` flag and tore down the previous run, discarding
+  // whatever the other ENRICH_CONCURRENCY-1 in-flight requests from that run
+  // were about to apply. Since enrichedRef already marked those tracks
+  // "done" before their request settled, they never got enriched and never
+  // retried -- with concurrency 5, only about 1-in-5 enrichments actually
+  // landed per pass. Keying on the set of track ids instead (stable across
+  // our own field-patching writes, only changes when tracks are genuinely
+  // added/removed) lets the whole batch actually finish.
+  const libraryIdsKey = useMemo(
+    () => (library || []).map((t) => t.provider_id).join(','),
+    [library],
+  );
 
   useEffect(() => {
-    if (!library?.length || !setLibrary) return undefined;
+    const currentLibrary = libraryRef.current;
+    if (!currentLibrary?.length || !setLibrary) return undefined;
 
-    const missing = library.filter(
+    const missing = currentLibrary.filter(
       (t) =>
         t.provider_id
         && (
@@ -91,5 +112,5 @@ export function useEnrichLibraryArtists(library, setLibrary) {
     return () => {
       cancelled = true;
     };
-  }, [library, setLibrary]);
+  }, [libraryIdsKey, setLibrary]);
 }
