@@ -67,14 +67,26 @@ export function usePlayerMediaEffects({
     }
   }, [visualizerEnabled, audioRef, currentAudioSrc]);
 
+  // Computed every render (cheap -- one findIndex) so the preload effect
+  // below can depend on a stable primitive instead of the raw `playlist`/
+  // `currentTrack` objects. Those get a fresh reference on every
+  // setPlaylist/setCurrentTrack call -- including playQueue's "same track
+  // already playing" merge branch -- with no actual change to which track
+  // should be preloaded next. Depending on the objects directly cancelled
+  // and restarted this effect's setTimeout on every such incidental
+  // re-render, so the 1.5-5s delay rarely elapsed and the next track's
+  // audio often hadn't finished prefetching by the time it was needed.
+  let preloadIdx = currentTrackIndex;
+  if (currentTrack && playlist?.length) {
+    const found = playlist.findIndex((tr) => tracksMatch(tr, currentTrack));
+    if (found >= 0) preloadIdx = found;
+  }
+  if (preloadIdx < 0) preloadIdx = 0;
+  const preloadTargetKey = `${preloadIdx}:${playlist?.[preloadIdx + 1]?.provider_id ?? ''}`;
+
   useEffect(() => {
     if (!PRELOAD_ENABLED || !mediaEnabled || !playlist?.length) return undefined;
-    let idx = currentTrackIndex;
-    if (currentTrack) {
-      const found = playlist.findIndex((tr) => tracksMatch(tr, currentTrack));
-      if (found >= 0) idx = found;
-    }
-    if (idx < 0) idx = 0;
+    const idx = preloadIdx;
 
     let cancelled = false;
     let timerId;
@@ -99,11 +111,10 @@ export function usePlayerMediaEffects({
       cancelled = true;
       if (timerId) clearTimeout(timerId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     mediaEnabled,
-    playlist,
-    currentTrack,
-    currentTrackIndex,
+    preloadTargetKey,
     currentAudioSrc,
     playbackQuality,
     updatePreloadForPlaylist,
