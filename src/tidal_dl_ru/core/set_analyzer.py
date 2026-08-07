@@ -53,11 +53,13 @@ async def _run_yt_dlp_download(job_id: str, download_fn) -> Optional[Exception]:
     return last_exc
 
 # How many segments to recognize concurrently. Shazam calls are network-bound, so
-# batching them cuts scan wall-time ~N×. Raised from 6 -> 10 for faster scans;
+# batching them cuts scan wall-time ~N×. Raised 6 -> 10 -> 20 for faster scans;
 # ShazamAPI is unofficial/reverse-engineered, so pushing this further risks the
 # same class of rate-limit/ban trouble hit earlier with the Tidal account pool -
-# watch for a spike in recognizeSong() failures if this ever needs to go back down.
-SHAZAM_CONCURRENCY = 10
+# deliberately NOT pushed to some arbitrary "max" for that reason. Watch for a
+# spike in recognizeSong() failures (_RATE_LIMIT_RETRIES exhausted) after this
+# change; if that happens, walk it back down rather than push further.
+SHAZAM_CONCURRENCY = 20
 
 # Kept as thin aliases so the rest of this module (and any external callers) don't
 # need to change; the real implementation lives in set_track_match so the
