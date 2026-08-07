@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlmodel import Session, select
+from sqlmodel import Session, select, update
 
 from tidal_dl_ru.database.models import User
 
@@ -118,6 +118,34 @@ def get_or_create(
         return user
 
 
+def _atomic_reserve_download(s: Session, user: User) -> bool:
+    """Check-and-increment downloads_today as a single conditional UPDATE.
+
+    A plain `user.downloads_today += 1; s.commit()` reads the counter, adds
+    1 in Python, and writes it back -- two concurrent requests for the same
+    user (a web download and a Telegram download firing close together, or
+    two browser tabs) can both read the same starting value, both pass the
+    limit check, and both commit N+1, losing one increment. That let a user
+    exceed their daily plan limit by however many requests happened to race.
+    `downloads_today = downloads_today + 1` is a SQL-side expression (not a
+    Python read-then-write), and the WHERE clause re-checks the limit at
+    UPDATE time, so only requests that still fit under the limit at the
+    instant they actually commit succeed -- mirrors the same fix already
+    applied to TidalAccount.downloads_today in providers/tidal/pool.py.
+    """
+    limit = user.daily_limit
+    result = s.execute(
+        update(User)
+        .where(User.id == user.id, User.downloads_today < limit)
+        .values(
+            downloads_today=User.downloads_today + 1,
+            total_downloads=User.total_downloads + 1,
+        )
+    )
+    s.commit()
+    return result.rowcount > 0
+
+
 def check_and_increment(telegram_id: int) -> tuple[bool, User]:
     """Bot path: reset-if-new-day, check the limit, reserve one download.
 
@@ -129,16 +157,12 @@ def check_and_increment(telegram_id: int) -> tuple[bool, User]:
 
         now = datetime.now(timezone.utc)
         _maybe_reset_daily(user, now)
-
-        if not user.can_download:
-            s.commit()
-            return False, user
-
-        user.downloads_today += 1
-        user.total_downloads += 1
         s.commit()
         s.refresh(user)
-        return True, user
+
+        allowed = _atomic_reserve_download(s, user)
+        s.refresh(user)
+        return allowed, user
 
 
 def reserve_web_download(user_id: int) -> tuple[bool, Optional[User]]:
@@ -153,16 +177,12 @@ def reserve_web_download(user_id: int) -> tuple[bool, Optional[User]]:
 
         now = datetime.now(timezone.utc)
         _maybe_reset_daily(user, now)
-
-        if not user.can_download:
-            s.commit()
-            return False, user
-
-        user.downloads_today += 1
-        user.total_downloads += 1
         s.commit()
         s.refresh(user)
-        return True, user
+
+        allowed = _atomic_reserve_download(s, user)
+        s.refresh(user)
+        return allowed, user
 
 
 def record_downloads(telegram_id: int, count: int) -> None:
@@ -174,8 +194,17 @@ def record_downloads(telegram_id: int, count: int) -> None:
         if user is None:
             return
         # First download already counted by check_and_increment, so add count-1.
-        user.downloads_today += count - 1
-        user.total_downloads += count - 1
+        # SQL-side expression, not read-then-write -- same lost-update risk as
+        # _atomic_reserve_download if two batches for the same user finish
+        # around the same time.
+        s.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(
+                downloads_today=User.downloads_today + (count - 1),
+                total_downloads=User.total_downloads + (count - 1),
+            )
+        )
         s.commit()
 
 
@@ -190,8 +219,14 @@ def record_downloads_by_user_id(user_id: int, count: int) -> None:
         user = s.get(User, user_id)
         if user is None:
             return
-        user.downloads_today += count - 1
-        user.total_downloads += count - 1
+        s.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(
+                downloads_today=User.downloads_today + (count - 1),
+                total_downloads=User.total_downloads + (count - 1),
+            )
+        )
         s.commit()
 
 

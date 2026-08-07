@@ -77,32 +77,15 @@ def _prune_job_dirs(jobs_dir: Path, *, max_age_sec: int) -> tuple[int, int]:
         except OSError as exc:
             logger.warning("disk_cleanup job_dir %s: %s", entry, exc)
     if registry_path.is_file() and removed:
-        _prune_stale_registry_entries(registry_path, jobs_dir)
+        # Delegate to jobs.py, which owns the registry's lock + atomic-write
+        # pattern -- this used to read/mutate/write the same file directly
+        # with no lock, racing a concurrent mark_downloaded() and risking
+        # silently dropping a just-completed download's entry (or, on a
+        # crash mid-write, truncating the whole registry).
+        from tidal_dl_ru.server.jobs import prune_missing_registry_entries
+
+        prune_missing_registry_entries(jobs_dir)
     return removed, freed
-
-
-def _prune_stale_registry_entries(registry_path: Path, jobs_dir: Path) -> None:
-    import json
-
-    try:
-        registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    except Exception:
-        return
-    changed = False
-    for track_id, entry in list(registry.items()):
-        rel = entry if isinstance(entry, str) else (entry.get("path") or entry.get("rel_path") or "")
-        if not rel:
-            registry.pop(track_id, None)
-            changed = True
-            continue
-        if not (jobs_dir / rel).exists():
-            registry.pop(track_id, None)
-            changed = True
-    if changed:
-        try:
-            registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError as exc:
-            logger.warning("disk_cleanup registry write: %s", exc)
 
 
 def _enforce_stream_cache_cap(cache_dir: Path, *, max_bytes: int) -> tuple[int, int]:

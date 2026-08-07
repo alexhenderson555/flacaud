@@ -357,6 +357,43 @@ def mark_downloaded(
         logger.warning("Failed to save registry: %s", e)
 
 
+def prune_missing_registry_entries(jobs_dir: Path) -> bool:
+    """Drop registry entries whose backing file no longer exists (e.g. after
+    disk_cleanup deletes a stale job dir). Returns True if the registry changed.
+
+    Uses the same lock + atomic-write pattern as mark_downloaded -- this used
+    to be duplicated in disk_cleanup.py as a plain read_text/write_text with
+    no lock at all, racing mark_downloaded's own locked read-modify-write: a
+    download completing (and locking, reading, adding its entry, writing)
+    at the same moment cleanup read its own stale copy, mutated it, and wrote
+    it back unlocked would silently overwrite -- and drop -- the just-added
+    entry. A crash mid-write_text (no temp file) could also leave the JSON
+    truncated, which _load_registry's bare `except: return {}` would then
+    treat as "empty registry", losing the entire download history.
+    """
+    try:
+        with _registry_lock.acquire(timeout=10):
+            registry = _load_registry()
+            changed = False
+            for track_id, entry in list(registry.items()):
+                rel = registry_rel_path(entry)
+                if not rel or not (jobs_dir / rel).exists():
+                    registry.pop(track_id, None)
+                    changed = True
+            if changed:
+                tmp = _registry_path.with_name(_registry_path.name + ".tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(registry, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, _registry_path)
+            return changed
+    except Timeout:
+        logger.warning("registry lock busy; skipped prune_missing_registry_entries")
+        return False
+    except Exception as e:
+        logger.warning("Failed to prune registry: %s", e)
+        return False
+
+
 def list_jobs_for_owner(owner_id: int, *, limit: int = 40) -> list[JobStatus]:
     """Recent download jobs for a user (Redis SCAN)."""
     r = _client()

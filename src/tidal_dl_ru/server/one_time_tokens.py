@@ -19,10 +19,13 @@ def consume_token(namespace: str, raw_token: str, ttl_seconds: int) -> bool:
         from tidal_dl_ru.server.jobs import _client as redis_client
 
         r = redis_client()
-        if r.get(key):
-            return False
-        r.setex(key, ttl_seconds, "1")
-        return True
+        # SET NX EX is atomic -- a separate GET-then-SETEX left a window where
+        # two concurrent requests with the same token (a double-clicked reset
+        # link, or two uvicorn workers handling a duplicated request) could
+        # both see "not consumed yet" and both succeed, defeating the
+        # one-time guarantee entirely (e.g. a password-reset token usable
+        # more than once within its TTL).
+        return bool(r.set(key, "1", nx=True, ex=ttl_seconds))
     except Exception as exc:
         logger.debug("one_time_token redis fallback: %s", exc)
 

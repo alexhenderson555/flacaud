@@ -8,17 +8,20 @@ from tidal_dl_ru.server import one_time_tokens as ott
 def test_consume_token_first_time_succeeds(monkeypatch):
     ott._mem.clear()
     fake_redis = MagicMock()
-    fake_redis.get = MagicMock(return_value=None)
-    fake_redis.setex = MagicMock()
+    # SET NX EX returns a truthy result when the key didn't already exist.
+    fake_redis.set = MagicMock(return_value=True)
     monkeypatch.setattr("tidal_dl_ru.server.jobs._client", lambda: fake_redis)
     assert ott.consume_token("reset", "token123", 3600) is True
+    fake_redis.set.assert_called_once()
+    _args, kwargs = fake_redis.set.call_args
+    assert kwargs.get("nx") is True
 
 
 def test_consume_token_replay_rejected(monkeypatch):
     ott._mem.clear()
     fake_redis = MagicMock()
-    fake_redis.get = MagicMock(return_value="1")
-    fake_redis.setex = MagicMock()
+    # NX prevents the set when the key already exists -- redis-py returns None.
+    fake_redis.set = MagicMock(return_value=None)
     monkeypatch.setattr("tidal_dl_ru.server.jobs._client", lambda: fake_redis)
     assert ott.consume_token("reset", "token123", 3600) is False
 
