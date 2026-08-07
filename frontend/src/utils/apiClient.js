@@ -53,17 +53,28 @@ export function messageForApiError(err, lang = 'en') {
       ? 'Сервер не ответил вовремя — подождите и попробуйте снова (или Ctrl+Shift+R)'
       : err.message;
   }
+  if (err.code === 'no_detail') {
+    return lang === 'ru' ? `Ошибка сервера (${err.status ?? '?'})` : `Server error (${err.status ?? '?'})`;
+  }
   return err.message;
 }
 
 async function jsonResponseOrThrow(res) {
   const body = await parseJsonSafe(res);
   if (!res.ok) {
-    const message = detailFromBody(body)
-      || (typeof body?.detail === 'string' ? body.detail : null)
-      || res.statusText
-      || 'Request failed';
-    throw new ApiError(message, { status: res.status, code: codeFromBody(body) || 'http_error' });
+    const detail = detailFromBody(body) || (typeof body?.detail === 'string' ? body.detail : null);
+    // res.statusText is frequently empty for HTTP/2 responses (no textual
+    // status line at all in the protocol) -- true for anything proxied
+    // through Cloudflare, which this app always is in prod. Falling through
+    // to statusText || 'Request failed' meant any error response with no
+    // JSON detail (a bare 401/404/502 from Caddy, a Cloudflare-generated
+    // error page) surfaced the same hardcoded English string regardless of
+    // `lang`, with no indication of which request or status code it even
+    // was. Marking this distinctly lets messageForApiError show a
+    // translated, status-code-specific message instead.
+    const message = detail || res.statusText || `HTTP ${res.status}`;
+    const code = codeFromBody(body) || (detail ? 'http_error' : 'no_detail');
+    throw new ApiError(message, { status: res.status, code });
   }
   return body;
 }

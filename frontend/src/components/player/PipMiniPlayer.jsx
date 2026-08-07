@@ -12,7 +12,11 @@ export default function PipMiniPlayer({
   progress, trackDuration, beginSeekScrub, handleSeekPreview, handleSeekCommit,
   startTrackRadio, radioLoadingTrackId, playlist, likedTracks, toggleLike, lang = 'en',
 }) {
-  const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow({ width: 360, height: 360 });
+  // The window is natively user-resizable (it's a real browser window) --
+  // this default (per user-picked "optimal size" screenshot) comfortably
+  // fits cover/title/seek/transport with no wasted space; dragging it
+  // taller reveals the queue list below.
+  const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow({ width: 505, height: 240 });
 
   if (!isSupported) return null;
 
