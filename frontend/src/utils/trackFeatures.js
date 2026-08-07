@@ -15,17 +15,26 @@ import {
 // already blocks *new* analysis while playing, but does nothing for requests
 // already in flight (the dj-meta call alone can run up to DJ_META_TIMEOUT_MS).
 // Abort every in-flight analysis request the instant playback starts.
-const activeAnalysisControllers = new Set();
+// Keyed by controller -> the track id it's analyzing, so the currently-
+// playing track's own analysis (explicitly allowed to run despite playback,
+// see analyzeTrackFeatures below) isn't caught in the same sweep as
+// speculative background analysis for OTHER tracks. Without this, opening DJ
+// Tools on the track that's already playing would start an analysis fetch
+// that this same listener immediately aborts on the next unrelated
+// loading-state pulse (e.g. preloading the next track) -- BPM/Key then never
+// resolve for that track since DJMode's effect doesn't retry on its own.
+const activeAnalysisControllers = new Map();
 subscribePlaybackPriority(() => {
   if (!shouldDeferBackgroundMedia()) return;
-  for (const ctrl of activeAnalysisControllers) {
+  for (const [ctrl, trackId] of activeAnalysisControllers) {
+    if (isDjAnalysisBlockedForTrack(trackId)) continue; // this IS the current track -- let it finish
     try {
       ctrl.abort();
     } catch {
       /* ignore */
     }
+    activeAnalysisControllers.delete(ctrl);
   }
-  activeAnalysisControllers.clear();
 });
 
 /** Camelot wheel — matches backend tidal_dl_ru.core.dj._CAMELOT */
@@ -230,7 +239,7 @@ export async function analyzeTrackFeatures(track, streamUrl) {
 
   const promise = (async () => {
     const controller = new AbortController();
-    activeAnalysisControllers.add(controller);
+    activeAnalysisControllers.set(controller, id);
     try {
       const isTidal = (track?.provider || 'tidal') === 'tidal';
       if (
