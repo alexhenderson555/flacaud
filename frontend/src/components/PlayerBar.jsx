@@ -28,6 +28,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePartyModeAvailable } from '../hooks/usePartyModeAvailable';
 import PlayerMobileActions from './player/PlayerMobileActions';
 import PlayerMarqueeTitle from './player/PlayerMarqueeTitle';
+import PipMiniPlayer from './player/PipMiniPlayer';
 
 const QUALITY_OPTIONS = [
   { id: 'HIGH', label: '320k', color: 'rgba(255,255,255,0.4)', level: 1 },
@@ -492,6 +493,15 @@ export default function PlayerBar({
       >
         <ListMusic size={22} />
       </button>
+      <PipMiniPlayer
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        isLoading={isLoading}
+        togglePlay={togglePlay}
+        playPrevious={playPrevious}
+        playNext={playNext}
+        lang={lang}
+      />
     </div>
   );
 
