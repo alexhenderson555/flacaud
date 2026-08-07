@@ -81,6 +81,40 @@ OBSERVABILITY_ENV_KEYS = (
 )
 
 
+def _render_alertmanager_config() -> str:
+    """Build the remote shell snippet that renders alertmanager.yml from its
+    git-tracked .template (see ops/observability/alertmanager/alertmanager.yml.template).
+
+    Alertmanager's own config format has no ${VAR} substitution, so the real
+    Resend API key / alert email can't live in the committed template --
+    render it with sed on the server, same pattern as the .env upserts above,
+    writing to a path .gitignore excludes so the next deploy's tar extraction
+    never overwrites it with a stale copy before this step re-renders it.
+
+    The Resend key itself is read from the REMOTE .env (already there --
+    every deploy's mail_ready check confirms it) rather than threaded through
+    from the local machine, so it doesn't need duplicating into a second
+    local secrets file just for this.
+    """
+    alert_email = (os.environ.get("GRAFANA_ALERT_EMAIL") or "").strip()
+    if not alert_email:
+        return ""
+    alert_from = (os.environ.get("GRAFANA_ALERT_FROM") or "alerts@flacaud.ru").strip()
+
+    def _sed_escape(val: str) -> str:
+        return val.replace("\\", "\\\\").replace("|", "\\|").replace("'", "'\"'\"'")
+
+    tmpl = "ops/observability/alertmanager/alertmanager.yml.template"
+    out = "ops/observability/alertmanager/alertmanager.yml"
+    return (
+        "_AM_RESEND_KEY=\"$(grep '^RESEND_API_KEY=' .env | head -1 | cut -d= -f2-)\"; "
+        f'sed -e "s|__RESEND_API_KEY__|$_AM_RESEND_KEY|g" '
+        f"-e 's|__GRAFANA_ALERT_FROM__|{_sed_escape(alert_from)}|g' "
+        f"-e 's|__GRAFANA_ALERT_EMAIL__|{_sed_escape(alert_email)}|g' "
+        f"{tmpl} > {out} && "
+    )
+
+
 def _remote_env_upserts(keys: tuple[str, ...] = MAIL_ENV_KEYS) -> str:
     """Build remote shell snippet to merge env vars from local deploy environment."""
     parts: list[str] = []
@@ -412,6 +446,7 @@ def deploy_tidal_server() -> None:
     ops_env = _remote_env_upserts(OPS_ENV_KEYS)
     observability_env = _remote_env_upserts(OBSERVABILITY_ENV_KEYS)
     image_env = _remote_env_upserts(IMAGE_ENV_KEYS) if mode == "registry" else ""
+    alertmanager_render = _render_alertmanager_config()
 
     if mode == "registry":
         dockerhub_user = os.environ.get("DOCKERHUB_USERNAME", "").strip()
@@ -442,6 +477,7 @@ def deploy_tidal_server() -> None:
         f"{ops_env}"
         f"{observability_env}"
         f"{image_env}"
+        f"{alertmanager_render}"
         f"(grep -q '^TIDALDLRU_PUBLIC_API_BASE=' .env && "
         f"sed -i 's|^TIDALDLRU_PUBLIC_API_BASE=.*|TIDALDLRU_PUBLIC_API_BASE={public_base}|' .env || "
         f"echo 'TIDALDLRU_PUBLIC_API_BASE={public_base}' >> .env) && "

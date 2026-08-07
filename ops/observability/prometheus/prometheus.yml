@@ -5,6 +5,15 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
+# Prometheus only EVALUATES alerts.yml's rules and exposes firing/pending
+# state via its API -- something has to actually deliver a notification when
+# one fires, and that's Alertmanager's job, not Prometheus's. Without this,
+# every rule in alerts.yml could fire forever and nobody would ever be told.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: flacaud-api
     metrics_path: /internal/metrics/prometheus

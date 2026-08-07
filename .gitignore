@@ -14,6 +14,7 @@ downloads/
 *.mp3
 .env
 .env.local
+ops/observability/alertmanager/alertmanager.yml
 
 # Databases & secrets — NEVER commit (hold tokens / PII / the pool Fernet key)
 *.db

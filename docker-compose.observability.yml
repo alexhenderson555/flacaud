@@ -21,6 +21,21 @@ services:
       api:
         condition: service_healthy
 
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      # Rendered from alertmanager.yml.template at deploy time (see
+      # scripts/repair_servers.py _render_alertmanager_config) -- the real
+      # SMTP password can't live in the git-tracked template.
+      - ./ops/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+
   loki:
     image: grafana/loki:3.4.2
     restart: unless-stopped
@@ -51,6 +66,17 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3000}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Reuses the app's own Resend account as an SMTP relay (Resend supports
+      # SMTP alongside its REST API) -- no separate mail provider needed just
+      # for alert delivery. Alert rules already exist (ops/prometheus/alerts.yml)
+      # but had no contact point configured, so a firing alert was only ever
+      # visible to someone who happened to open Grafana -- never pushed anywhere.
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: "smtp.resend.com:587"
+      GF_SMTP_USER: "resend"
+      GF_SMTP_PASSWORD: ${RESEND_API_KEY:-}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_ALERT_FROM:-alerts@flacaud.ru}
+      GF_SMTP_FROM_NAME: "FlacAud Alerts"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./ops/observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -74,5 +100,6 @@ services:
 
 volumes:
   prometheus-data:
+  alertmanager-data:
   loki-data:
   grafana-data:
