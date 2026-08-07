@@ -10,9 +10,9 @@ import { withHotkey } from '../../utils/playerHotkeys';
 export default function PipMiniPlayer({
   currentTrack, isPlaying, isLoading, togglePlay, playPrevious, playNext,
   progress, trackDuration, beginSeekScrub, handleSeekPreview, handleSeekCommit,
-  startTrackRadio, radioLoadingTrackId, nextTrack, lang = 'en',
+  startTrackRadio, radioLoadingTrackId, playlist, likedTracks, toggleLike, lang = 'en',
 }) {
-  const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow({ width: 360, height: 224 });
+  const { pipWindow, isSupported, isOpen, openPip, closePip } = usePipWindow({ width: 360, height: 360 });
 
   if (!isSupported) return null;
 
@@ -46,7 +46,9 @@ export default function PipMiniPlayer({
           handleSeekCommit={handleSeekCommit}
           startTrackRadio={startTrackRadio}
           radioLoadingTrackId={radioLoadingTrackId}
-          nextTrack={nextTrack}
+          playlist={playlist}
+          likedTracks={likedTracks}
+          toggleLike={toggleLike}
           lang={lang}
         />,
         pipWindow.document.body,

@@ -507,7 +507,9 @@ export default function PlayerBar({
         handleSeekCommit={handleSeekCommit}
         startTrackRadio={startTrackRadio}
         radioLoadingTrackId={radioLoadingTrackId}
-        nextTrack={nextTrack}
+        playlist={playlist}
+        likedTracks={likedTracks}
+        toggleLike={toggleLike}
         lang={lang}
       />
     </div>
