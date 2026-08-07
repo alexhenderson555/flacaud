@@ -317,12 +317,19 @@ def acquire(
         stored_refresh_token = acc.refresh_token
         try:
             tokens = refresh_tidal_token(http, stored_refresh_token)
-        except AuthError:
-            # Refresh genuinely failed (revoked/expired token) — ban the dead
-            # account so it isn't handed out again. Transient/network errors
-            # raise other types and are left untouched. Re-raise so the
-            # caller can pick another account.
-            report_failure(acc.id, 401)
+        except AuthError as e:
+            # Ban only on a REAL 401/403 from Tidal -- e.status_code is None
+            # (or some other code) when refresh_tidal_token failed for a
+            # reason that says nothing about whether the refresh token itself
+            # is actually dead: a malformed request on our side (see the
+            # PKCE client_id="" incident, which raised this with status_code
+            # 400 from Tidal) or a transient failure in the device-flow
+            # fallback. Hardcoding 401 here banned a still-valid account
+            # (hifi-new, 2026-08-06) purely because both refresh attempts
+            # happened to fail in the same window. report_failure's own
+            # `in (401, 403)` gate does nothing to protect against that when
+            # the caller always claims 401 regardless of what really happened.
+            report_failure(acc.id, e.status_code or 0)
             raise
         # Tidal rotates the refresh_token on every use, so the new one must
         # be persisted before we hand control back to the caller — otherwise

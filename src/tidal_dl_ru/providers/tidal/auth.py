@@ -30,7 +30,15 @@ LOGIN_BASE = "https://login.tidal.com"
 
 
 class AuthError(Exception):
-    pass
+    """`status_code` carries the real HTTP status Tidal returned, when known --
+    callers that ban pool accounts on auth failure need the real code, not an
+    assumed one, or a transient/malformed-request failure (see the PKCE
+    client_id="" incident) gets treated the same as a genuine token
+    revocation and bans an otherwise-healthy account."""
+
+    def __init__(self, message: str, status_code: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class PendingAuthorization(Exception):
@@ -124,7 +132,7 @@ def pkce_refresh_token(client: httpx.Client, refresh: str) -> TokenSet:
         },
     )
     if resp.status_code != 200:
-        raise AuthError(f"PKCE refresh failed: {resp.status_code} {resp.text}")
+        raise AuthError(f"PKCE refresh failed: {resp.status_code} {resp.text}", status_code=resp.status_code)
     data = resp.json()
     return TokenSet(
         access_token=data["access_token"],
@@ -207,7 +215,7 @@ def refresh_token(client: httpx.Client, refresh: str) -> TokenSet:
         auth=_basic_auth(),
     )
     if resp.status_code != 200:
-        raise AuthError(f"refresh failed: {resp.status_code} {resp.text}")
+        raise AuthError(f"refresh failed: {resp.status_code} {resp.text}", status_code=resp.status_code)
     data = resp.json()
     return TokenSet(
         access_token=data["access_token"],
