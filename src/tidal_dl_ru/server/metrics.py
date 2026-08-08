@@ -20,6 +20,12 @@ _disk_cleanup_last: dict | None = None
 _health: dict[str, int] = {"ok": 0, "db": 0, "redis": 0}
 _http_requests: dict[tuple[str, str, str], int] = {}
 _client_errors: dict[str, int] = {}
+# "healthy" is a boolean (>=1 active account), NOT a per-account healthy
+# count -- sitting next to "total"/"active" (real counts) in the same dict
+# reads misleadingly like "1 of N accounts are healthy". Exposed to clients
+# as "pool_ok" (see collect_metrics) to make that unambiguous; the internal
+# key and the Prometheus metric name (flacaud_tidal_pool_healthy, used by an
+# existing alert rule) are left as-is to avoid touching external consumers.
 _tidal_pool: dict[str, int] = {"total": 0, "active": 0, "healthy": 0}
 
 # Prometheus default-style buckets (seconds). Matches prometheus_client's
@@ -126,6 +132,11 @@ def collect_metrics() -> dict:
         tidal = dict(_tidal_pool)
         client_errors = dict(_client_errors)
         http_total = sum(_http_requests.values())
+    tidal_public = {
+        "total": tidal["total"],
+        "active": tidal["active"],
+        "pool_ok": bool(tidal["healthy"]),
+    }
     return {
         "uptime_sec": round(time.monotonic() - _started, 1),
         "health": health,
@@ -133,7 +144,7 @@ def collect_metrics() -> dict:
         "stream_errors": stream,
         "client_errors": client_errors,
         "http_requests_total": http_total,
-        "tidal_pool": tidal,
+        "tidal_pool": tidal_public,
         "disk": _disk_usage(),
         "last_disk_cleanup": cleanup,
     }
@@ -175,7 +186,7 @@ def collect_prometheus_metrics() -> str:
             f'flacaud_tidal_pool_accounts{{status="active"}} {tidal["active"]}',
             "# HELP flacaud_tidal_pool_healthy At least one active Tidal account",
             "# TYPE flacaud_tidal_pool_healthy gauge",
-            f"flacaud_tidal_pool_healthy {tidal['healthy']}",
+            f"flacaud_tidal_pool_healthy {int(tidal['pool_ok'])}",
         ]
     )
     disk = data["disk"]
