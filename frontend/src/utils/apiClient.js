@@ -40,6 +40,14 @@ export function detailFromBody(body) {
 
 export function messageForApiError(err, lang = 'en') {
   if (!(err instanceof ApiError)) return lang === 'ru' ? 'Ошибка сети' : 'Network error';
+  if (err.status === 401) {
+    // apiFetch already tried a silent token refresh-and-retry before this
+    // ever reaches a caller's catch -- a 401 surfacing here means the
+    // refresh itself failed (session genuinely expired), so err.message is
+    // the raw FastAPI OAuth2 detail ("Could not validate credentials"),
+    // never meant to be user-facing.
+    return lang === 'ru' ? 'Сессия истекла — войдите снова' : 'Session expired — please log in again';
+  }
   if (err.code === 'stream_failed') {
     return lang === 'ru'
       ? 'Не удалось запустить воспроизведение — попробуйте другой трек или качество'

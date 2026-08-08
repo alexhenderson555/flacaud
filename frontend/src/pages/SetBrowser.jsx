@@ -523,7 +523,7 @@ export default function SetBrowser() {
       await startDownloadJob({ url: track.source_url });
       showToast(t('downloadStarted'));
     } catch (err) {
-      showToast(err.message);
+      showToast(messageForApiError(err, lang));
     }
   };
 

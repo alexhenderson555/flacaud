@@ -16,7 +16,7 @@ import PlaylistModal from '../components/PlaylistModal';
 import { normalizeTrack, isTrackLiked } from '../utils/trackNormalize';
 import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
 import { startDownloadJob, cancelJob, downloadSetAudio } from '../utils/downloadJobs';
-import { apiPostJson } from '../utils/apiClient';
+import { apiPostJson, messageForApiError } from '../utils/apiClient';
 import { fetchJobStatus } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
 import { setAnalyzerDict } from '../locales/setAnalyzerDict';
@@ -413,7 +413,7 @@ export default function SetAnalyzer() {
       await downloadSetAudio(trimmedUrl, { lang, filename });
       showToast(t('downloadStarted'));
     } catch (e) {
-      showToast(e.message);
+      showToast(messageForApiError(e, lang));
     } finally {
       setDownloadingSet(false);
     }
@@ -425,7 +425,7 @@ export default function SetAnalyzer() {
     try {
       await startDownloadJob({ url: track.source_url });
     } catch (err) {
-      showToast(err.message);
+      showToast(messageForApiError(err, lang));
     }
   };
 
