@@ -74,12 +74,26 @@ def _ranged_part_response(
     media_type: str,
     headers: dict[str, str],
     resource_total: int | None,
-) -> Response | FileResponse:
+) -> Response:
     """Serve a growing .part file with optional known full asset size (seek metadata)."""
     size = path.stat().st_size
     total = resource_total if resource_total and resource_total >= size else size
     if size == 0:
-        return FileResponse(path, media_type=media_type, headers=headers)
+        # NOT a bare FileResponse: Starlette fixes Content-Length from the
+        # file's size at construction time but only actually reads/sends the
+        # bytes later (after this coroutine returns, possibly delayed by lock
+        # contention elsewhere in the merge pipeline) -- a `.part` file that's
+        # empty now and gets written to in that window sends MORE bytes than
+        # the Content-Length already promised, which uvicorn hard-fails on
+        # ("Response content longer than Content-Length"), killing the
+        # connection and forcing the client to restart the whole request.
+        # 503 lets the caller retry once there's real data, same as the
+        # empty-file case in streaming_part_response below.
+        raise HTTPException(
+            status_code=503,
+            detail="Stream segment not ready",
+            headers={"Retry-After": "0.2"},
+        )
     # A request with no Range header must NOT fall through to a plain
     # FileResponse here: Starlette would set Content-Length to the file's
     # CURRENT (still-growing) size with no signal that more data is coming,
@@ -95,7 +109,13 @@ def _ranged_part_response(
             rh, size, resource_total=total if total > size else None,
         )
     except (ValueError, IndexError):
-        return FileResponse(path, media_type=media_type, headers=headers)
+        # Same growing-file hazard as the size==0 branch above -- fall back to
+        # a 503 retry instead of a raw FileResponse racing the file's growth.
+        raise HTTPException(
+            status_code=503,
+            detail="Stream segment not ready",
+            headers={"Retry-After": "0.2"},
+        ) from None
 
     if start >= size:
         raise HTTPException(
@@ -209,7 +229,14 @@ async def streaming_part_response(
     try:
         start, end = parse_byte_range(rh, size, resource_total=range_total)
     except (ValueError, IndexError):
-        return FileResponse(part_path, media_type=media_type, headers=headers)
+        # Same growing-file hazard the size==0 check above guards against --
+        # a raw FileResponse here would fix Content-Length to part_path's
+        # size now, but part_path keeps growing until final_path lands.
+        raise HTTPException(
+            status_code=503,
+            detail="Stream segment not ready",
+            headers={"Retry-After": "0.2"},
+        ) from None
 
     if range_total and start >= range_total:
         raise HTTPException(

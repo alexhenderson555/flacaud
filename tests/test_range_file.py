@@ -70,6 +70,27 @@ def test_ranged_part_file_reports_full_total_for_seek():
         assert resp.headers["content-range"] == "bytes 10-19/1000"
 
 
+def test_ranged_part_empty_file_503s_instead_of_racing_growth():
+    """An empty (just-created) .part file must 503 for a retry, not fall
+    through to a bare FileResponse -- Starlette fixes Content-Length from the
+    file's size (0) at construction time but only actually reads/sends bytes
+    later, so a file that starts filling up in that window sends MORE bytes
+    than the already-promised Content-Length, which uvicorn hard-fails on."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "audio.flac.part"
+        path.write_bytes(b"")
+
+        scope = {"type": "http", "method": "GET", "headers": []}
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        request = Request(scope, receive)
+        with pytest.raises(HTTPException) as exc_info:
+            ranged_file_response(path, request, "audio/flac")
+        assert exc_info.value.status_code == 503
+
+
 def test_ranged_part_no_range_header_does_not_claim_partial_file_is_complete():
     """A plain GET (no Range header) on a still-growing .part file must not
     fall through to a bare FileResponse -- that would set Content-Length to

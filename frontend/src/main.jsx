@@ -71,6 +71,18 @@ function registerPwaAfterAuth() {
       window.location.reload();
     },
   });
+
+  // A mobile PWA (installed to the home screen) is almost never actually
+  // reloaded -- it's suspended and resumed. Without an explicit update()
+  // call, the browser only re-checks the SW script on a real navigation, so
+  // a resumed app can silently run a build from days ago even though the
+  // site itself has moved on (this is how the Library page title's accent
+  // color landed on desktop but not a phone that hadn't force-reloaded).
+  // Checking on every foreground resume closes that gap.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    navigator.serviceWorker.getRegistration().then((reg) => reg?.update());
+  });
 }
 
 window.addEventListener('tidal-auth-login', registerPwaAfterAuth);
