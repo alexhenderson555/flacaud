@@ -26,11 +26,11 @@ from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import User, UserCreate, UserRead
 from tidal_dl_ru.database.refresh_tokens import (
     REFRESH_COOKIE_NAME,
-    consume_refresh_token,
     issue_refresh_token,
     refresh_cookie_secure,
     revoke_all_refresh_sessions_for_user,
     revoke_refresh_token,
+    rotate_refresh_token,
 )
 from tidal_dl_ru.providers.tidal.auth import (
     AuthError,
@@ -378,12 +378,19 @@ def refresh_session(
     response: Response,
     session: Session = Depends(get_session),
 ):
-    """Rotate refresh cookie and issue a new short-lived access token."""
+    """Rotate refresh cookie and issue a new short-lived access token.
+
+    Uses rotate_refresh_token (not a separate consume+issue) so two
+    near-simultaneous calls sharing one cookie -- two tabs, or two page loads
+    from a stale-tab reload -- get back the SAME rotated pair within a short
+    grace window instead of the second one 401ing and logging that tab out.
+    """
     raw = request.cookies.get(REFRESH_COOKIE_NAME, "")
-    user_id = consume_refresh_token(session, raw)
-    if user_id is None:
+    rotated = rotate_refresh_token(session, raw)
+    if rotated is None:
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail="Invalid or expired session")
+    user_id, new_refresh = rotated
 
     user = session.get(User, user_id)
     if user is None:
@@ -399,7 +406,6 @@ def refresh_session(
         data={"sub": user.username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    new_refresh = issue_refresh_token(session, user.id)
     _set_refresh_cookie(response, new_refresh)
     return {"access_token": access_token, "token_type": "bearer"}
 

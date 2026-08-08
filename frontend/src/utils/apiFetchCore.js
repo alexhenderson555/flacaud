@@ -19,29 +19,45 @@ export function apiBase() {
 
 let refreshInFlight = null;
 
+async function doRefresh() {
+  try {
+    const res = await apiFetchOnce('/api/auth/refresh', {
+      method: 'POST',
+      credentials: 'include',
+      timeoutMs: 15000,
+      retries: 0,
+    });
+    if (!res.ok) {
+      clearAccessToken();
+      return false;
+    }
+    const data = await parseJsonSafe(res);
+    if (data?.access_token) {
+      persistAccessToken(data.access_token);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function tryRefreshAccessToken() {
   if (refreshInFlight) return refreshInFlight;
 
+  // The refresh cookie is shared across every tab of the origin, but the
+  // access token lives in per-tab sessionStorage -- so two tabs (or two
+  // page loads from a stale-tab reload) can each decide independently that
+  // they need to refresh and POST /api/auth/refresh with the SAME cookie at
+  // once. The backend now tolerates one repeat within a short grace window,
+  // but only within a single worker process; a cross-tab lock avoids the
+  // duplicate call outright for the common case (two tabs, same browser).
   refreshInFlight = (async () => {
     try {
-      const res = await apiFetchOnce('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-        timeoutMs: 15000,
-        retries: 0,
-      });
-      if (!res.ok) {
-        clearAccessToken();
-        return false;
+      if (navigator.locks?.request) {
+        return await navigator.locks.request('flacaud-refresh-token', doRefresh);
       }
-      const data = await parseJsonSafe(res);
-      if (data?.access_token) {
-        persistAccessToken(data.access_token);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
+      return await doRefresh();
     } finally {
       refreshInFlight = null;
     }

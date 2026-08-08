@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Field, Session, SQLModel, select
@@ -99,3 +100,42 @@ def consume_refresh_token(session: Session, raw: str) -> int | None:
     session.add(row)
     session.commit()
     return row.user_id
+
+
+# Handles the double-refresh race: two tabs (or two near-simultaneous page
+# loads, e.g. an old PWA-update reload) sharing one httpOnly cookie can both
+# POST /api/auth/refresh with the SAME still-valid raw token. Without this,
+# the second caller's consume finds the row already revoked by the first and
+# 401s -- logging out a tab whose session was objectively still valid. A
+# short in-memory grace window makes a repeat call with the same raw token
+# idempotent: it returns the SAME already-issued successor instead of 401ing
+# or minting a second (wasted) rotation. Per-process cache is fine here --
+# a miss just falls back to the old (rare) 401 behavior, not a new failure.
+_ROTATION_GRACE_SECONDS = 10
+_recent_rotations: dict[str, tuple[float, int, str]] = {}
+
+
+def rotate_refresh_token(session: Session, raw: str) -> tuple[int, str] | None:
+    """Atomically consume *raw* and issue its successor -> (user_id, new_raw).
+
+    Idempotent for repeat calls with the same *raw* within a short grace
+    window after the first rotation.
+    """
+    if not raw:
+        return None
+    h = _hash_token(raw)
+    now = time.time()
+    cached = _recent_rotations.get(h)
+    if cached and now - cached[0] < _ROTATION_GRACE_SECONDS:
+        return cached[1], cached[2]
+
+    user_id = consume_refresh_token(session, raw)
+    if user_id is None:
+        return None
+    new_raw = issue_refresh_token(session, user_id)
+    _recent_rotations[h] = (now, user_id, new_raw)
+    if len(_recent_rotations) > 512:
+        stale = sorted(_recent_rotations, key=lambda k: _recent_rotations[k][0])[:256]
+        for k in stale:
+            _recent_rotations.pop(k, None)
+    return user_id, new_raw
