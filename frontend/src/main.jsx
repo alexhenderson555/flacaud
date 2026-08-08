@@ -55,9 +55,19 @@ migrateLegacyToken();
 function registerPwaAfterAuth() {
   if (!('serviceWorker' in navigator) || window.__tidalPwaRegistered) return;
   window.__tidalPwaRegistered = true;
+  // registerType is 'autoUpdate', under which vite-plugin-pwa's registerSW
+  // ignores onNeedRefresh entirely (that hook only fires in 'prompt' mode) --
+  // it calls onNeedReload (or window.location.reload() by default) itself
+  // when the new SW activates. A manual Ctrl+R already fetches the current
+  // index.html + chunks straight from the network, so if the new SW finishes
+  // activating a couple seconds into that same page load, this forced second
+  // reload is pure redundant churn ("loads twice"). Only actually reload for
+  // updates found well after boot -- i.e. a tab left open across a deploy.
+  const bootTime = performance.now();
   registerSW({
     immediate: true,
-    onNeedRefresh() {
+    onNeedReload() {
+      if (performance.now() - bootTime < 15000) return;
       window.location.reload();
     },
   });

@@ -21,6 +21,17 @@ import { SOUND_CLOUD_EMBED_HEIGHT } from '../utils/setEmbedUrl';
 function isSoundCloudEmbed(url) {
   return /soundcloud\.com|snd\.sc/i.test(url || '');
 }
+
+// Many RU ISPs blackhole SoundCloud's CDN IP ranges (collateral from broader
+// blocking) even though soundcloud.com itself loads fine -- so these thumbs
+// need to be fetched server-side and re-served from our own origin.
+function setThumbnailSrc(thumbnail) {
+  if (!thumbnail) return null;
+  if (/(^|\.)sndcdn\.com$/i.test(new URL(thumbnail, window.location.href).hostname)) {
+    return `/api/image-proxy?url=${encodeURIComponent(thumbnail)}`;
+  }
+  return thumbnail;
+}
 import { SET_ANALYZER_ORIGIN } from '../utils/vibeRadio';
 import { startDownloadJob } from '../utils/downloadJobs';
 import { hasAuthSession } from '../utils/hasAuthSession';
@@ -96,7 +107,7 @@ function SetResultCard({ set, onSelect, t, lang }) {
           // occasionally 404/hotlink-block, and with no fallback that left a
           // permanently blank/broken image box instead of the placeholder icon.
           <img
-            src={set.thumbnail}
+            src={setThumbnailSrc(set.thumbnail)}
             alt=""
             onError={() => setThumbnailFailed(true)}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}

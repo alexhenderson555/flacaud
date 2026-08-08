@@ -132,6 +132,11 @@ async def image_proxy(url: str):
         ".wikipedia.org",
         ".dzcdn.net",
         ".mzstatic.com",
+        # SoundCloud set-browser artwork (i1.sndcdn.com etc). Many RU ISPs
+        # blackhole sndcdn's CDN ranges (collateral from broader blocking)
+        # even though soundcloud.com itself loads fine, so these thumbnails
+        # need to come from our own server rather than the client's browser.
+        ".sndcdn.com",
     )
     host = (parsed.hostname or "").lower()
     if not (
