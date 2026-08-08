@@ -9,7 +9,11 @@ from sqlmodel import SQLModel, create_engine
 from tests.conftest import register_and_login
 from tidal_dl_ru.database.models import SavedTrack
 from tidal_dl_ru.server.app import app
-from tidal_dl_ru.server.routers.sets import _FALLBACK_DISCOVER_QUERIES, _blend_queries
+from tidal_dl_ru.server.routers.sets import (
+    _FALLBACK_DISCOVER_QUERIES,
+    _RECENT_FALLBACK_DISCOVER_QUERIES,
+    _blend_queries,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -100,6 +104,14 @@ def test_recommendations_lean_genre_heavy_when_date_filtered(client, monkeypatch
     genre_queries = [q for q in queries if q in _FALLBACK_DISCOVER_QUERIES]
     assert len(artist_queries) == 3
     assert len(genre_queries) == 6
+    # "boiler room dj set" / "tomorrowland dj set" are swamped by their own
+    # all-time-classic uploads (verified empirically: 0/40 results within 30
+    # days for either) -- no amount of recency-sorting the fetched pool can
+    # surface something recent that was never fetched, so once the date
+    # filter is active these two must never be picked at all.
+    assert set(genre_queries) <= set(_RECENT_FALLBACK_DISCOVER_QUERIES)
+    assert "boiler room dj set" not in genre_queries
+    assert "tomorrowland dj set" not in genre_queries
 
 
 def test_recommendations_fallback_queries_without_library(client, monkeypatch):

@@ -342,6 +342,18 @@ _FALLBACK_DISCOVER_QUERIES = [
     "progressive house dj set",
 ]
 
+# Brand/venue/festival queries ("boiler room dj set", "tomorrowland dj set")
+# get swamped by their own all-time-classic uploads on SoundCloud (verified
+# empirically: 0/40 results within 30 days for either, vs. 3-11/40 for every
+# plain genre query below) -- their popularity means the same decade-old
+# viral sets always outrank anything actually recent, so no amount of
+# recency-sorting the fetched pool can help once the date filter is active.
+# Excluded from the date-filtered discovery pool only; they're fine (in fact
+# good) for the unfiltered personalized-discovery case above.
+_RECENT_FALLBACK_DISCOVER_QUERIES = [
+    q for q in _FALLBACK_DISCOVER_QUERIES if "boiler room" not in q and "tomorrowland" not in q
+]
+
 
 def _library_artist_names(session: Session, user_id: int, limit: int = 60) -> list[str]:
     rows = session.exec(
@@ -392,14 +404,15 @@ async def set_recommendations_endpoint(
     date_filtered = provider is not None
     artist_count = 3 if date_filtered else 6
     genre_count = 6 if date_filtered else 5
+    genre_pool = _RECENT_FALLBACK_DISCOVER_QUERIES if date_filtered else _FALLBACK_DISCOVER_QUERIES
     assert current_user.id is not None
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
         picked = random.sample(artist_names, min(artist_count, len(artist_names)))
         queries = [f"{name} dj set" for name in picked]
-        queries += random.sample(_FALLBACK_DISCOVER_QUERIES, min(genre_count, len(_FALLBACK_DISCOVER_QUERIES)))
+        queries += random.sample(genre_pool, min(genre_count, len(genre_pool)))
     else:
-        queries = random.sample(_FALLBACK_DISCOVER_QUERIES, min(8, len(_FALLBACK_DISCOVER_QUERIES)))
+        queries = random.sample(genre_pool, min(8, len(genre_pool)))
 
     blended = await _blend_queries(queries, limit, exclude=set(), sources=_resolve_sources(provider))
     return {"queries": queries, "results": blended}
