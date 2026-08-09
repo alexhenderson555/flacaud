@@ -13,16 +13,6 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
-          // Match three-family packages by path segment, not substring: a bare
-          // includes('three') also caught zustand (a dep shared with
-          // @react-three/fiber), which made the player store statically import
-          // this chunk — 864 KB of three.js preloaded on first paint for the
-          // lazy party-mode feature.
-          if (/node_modules[\\/](three|three-stdlib|three-mesh-bvh|@react-three|troika-three-[^\\/]+)[\\/]/.test(id)) return 'vendor-three'
-          // zustand is shared by the app store AND @react-three/fiber; without
-          // an explicit assignment rolldown merges it into vendor-three, which
-          // made the store chunk statically import 864 KB of three.js on first
-          // paint. Keep it in its own tiny chunk both sides can depend on.
           if (id.includes('node_modules/zustand/')) return 'vendor-state'
           if (id.includes('framer-motion')) return 'vendor-motion'
           if (id.includes('lucide-react')) return 'vendor-icons'
@@ -38,8 +28,6 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         globIgnores: [
-          '**/vendor-three*.js',
-          '**/PartyMode*.js',
           '**/vendor-motion*.js',
           '**/videos/**',
           '**/*.mp4',

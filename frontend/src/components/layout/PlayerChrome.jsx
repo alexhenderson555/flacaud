@@ -146,7 +146,6 @@ function PlayerChrome({ playbackEnabled = true }) {
         maxTrackQuality={maxTrackQuality}
         likedTracks={likedTracks}
         isKaraokeOpen={overlays.isKaraokeOpen}
-        isPartyOpen={overlays.isPartyOpen}
         isDJOpen={overlays.isDJOpen}
         isEQOpen={overlays.isEQOpen}
         isQueueOpen={overlays.isQueueOpen}
@@ -194,13 +193,11 @@ function PlayerChrome({ playbackEnabled = true }) {
 
       <PlayerOverlays
         isKaraokeOpen={overlays.isKaraokeOpen}
-        isPartyOpen={overlays.isPartyOpen}
         isDJOpen={overlays.isDJOpen}
         isQueueOpen={overlays.isQueueOpen}
         isEQOpen={overlays.isEQOpen}
         isPlaylistModalOpenPlayer={overlays.isPlaylistModalOpenPlayer}
         closeKaraoke={overlays.closeKaraoke}
-        closeParty={overlays.closeParty}
         setIsDJOpen={overlays.setIsDJOpen}
         setIsQueueOpen={overlays.setIsQueueOpen}
         setIsEQOpen={overlays.setIsEQOpen}
@@ -213,11 +210,6 @@ function PlayerChrome({ playbackEnabled = true }) {
         currentTrackIndex={currentTrackIndex}
         handleReorderQueue={transport.handleReorderQueue}
         togglePlay={transport.togglePlay}
-        isPlaying={isPlaying}
-        isLoading={isLoading}
-        playNext={transport.playNext}
-        toggleLike={toggleLike}
-        likedTracks={likedTracks}
         lang={lang}
       />
 

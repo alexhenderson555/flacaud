@@ -1,9 +1,6 @@
-import { lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import KaraokeMode from '../KaraokeMode';
 import DJMode from '../DJMode';
-
-const PartyMode = lazy(() => import('../party/PartyMode'));
 import PlaybackQueue from '../PlaybackQueue';
 import Equalizer from '../Equalizer';
 import PlaylistModal from '../PlaylistModal';
@@ -11,7 +8,6 @@ import { dispatchLibraryReloadRequest } from '../../utils/libraryPatch';
 
 export default function PlayerOverlays({
   isKaraokeOpen,
-  isPartyOpen,
   isDJOpen,
   isQueueOpen,
   isEQOpen,
@@ -24,13 +20,7 @@ export default function PlayerOverlays({
   currentTrackIndex,
   handleReorderQueue,
   togglePlay,
-  playNext,
-  isPlaying,
-  isLoading,
-  toggleLike,
-  likedTracks,
   closeKaraoke,
-  closeParty,
   setIsDJOpen,
   setIsQueueOpen,
   setIsEQOpen,
@@ -49,23 +39,6 @@ export default function PlayerOverlays({
           lang={lang}
           onClose={closeKaraoke}
         />
-      )}
-
-      {isPartyOpen && currentTrack && (
-        <Suspense fallback={null}>
-          <PartyMode
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            isLoading={isLoading}
-            togglePlay={togglePlay}
-            playNext={playNext}
-            toggleLike={toggleLike}
-            likedTracks={likedTracks}
-            audioRef={audioRef}
-            onClose={closeParty}
-            lang={lang}
-          />
-        </Suspense>
       )}
 
       {isDJOpen && (

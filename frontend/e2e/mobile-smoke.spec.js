@@ -27,16 +27,3 @@ test('terms page loads on mobile', async ({ page }) => {
   await page.goto('/terms');
   await expect(page.getByRole('heading', { name: /Terms of Use|Условия/i })).toBeVisible();
 });
-
-test('party mode button hidden on mobile', async ({ page }) => {
-  await installE2EAuth(page, { token: 'e2e-mobile-party' });
-  await page.route('**/api/library', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-  });
-  await routeMediaToken(page);
-  await routeQualityAvailable(page);
-  await routeStream(page);
-
-  await page.goto('/search');
-  await expect(page.getByTestId('player-party-btn')).toHaveCount(0);
-});

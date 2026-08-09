@@ -18,14 +18,13 @@ import { useArtistCardStore } from '../store/useArtistCardStore';
 import { resolveArtistId } from '../utils/resolveArtist';
 import {
   Play, Pause, SkipBack, SkipForward, Heart, Plus, Download, Mic2, Disc3, Sliders,
-  ListMusic, Volume2, Waves, Radio, Shuffle, Repeat, Repeat1, ChevronUp, ChevronDown, Sparkles, Loader2,
+  ListMusic, Volume2, Waves, Radio, Shuffle, Repeat, Repeat1, ChevronUp, ChevronDown, Loader2,
 } from 'lucide-react';
 import { REPEAT_ALL, REPEAT_ONE } from '../utils/playbackModes';
 import { PLAYER_HOTKEYS, withHotkey } from '../utils/playerHotkeys';
 import { isTrackLiked } from '../utils/trackNormalize';
 import { motion } from 'framer-motion';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { usePartyModeAvailable } from '../hooks/usePartyModeAvailable';
 import PlayerMobileActions from './player/PlayerMobileActions';
 import PlayerMarqueeTitle from './player/PlayerMarqueeTitle';
 import PipMiniPlayer from './player/PipMiniPlayer';
@@ -64,7 +63,6 @@ export default function PlayerBar({
   probeData = null,
   likedTracks,
   isKaraokeOpen,
-  isPartyOpen = false,
   isDJOpen,
   isEQOpen,
   isQueueOpen,
@@ -90,7 +88,6 @@ export default function PlayerBar({
   cycleRepeat,
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const partyModeAvailable = usePartyModeAvailable();
   const radioLoading = Boolean(
     currentTrack && radioLoadingTrackId === String(currentTrack.provider_id),
   );
@@ -449,19 +446,6 @@ export default function PlayerBar({
       >
         <Mic2 size={22} />
       </button>
-      {partyModeAvailable && (
-        <button
-          type="button"
-          onClick={() => toggleOverlay('party')}
-          className="player-overlay-btn player-overlay-btn--party"
-          data-active={isPartyOpen}
-          data-testid="player-party-btn"
-          title={withHotkey(lang === 'ru' ? 'Party mode' : 'Party mode', PLAYER_HOTKEYS.party)}
-          aria-label={lang === 'ru' ? 'Party mode' : 'Party mode'}
-        >
-          <Sparkles size={22} />
-        </button>
-      )}
       <button
         type="button"
         onClick={() => toggleOverlay('dj')}

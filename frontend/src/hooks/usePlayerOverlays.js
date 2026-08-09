@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef } from 'react';
-import { PARTY_MODE_ENABLED } from './usePartyModeAvailable';
 
 function exitFullscreen() {
   if (document.fullscreenElement) {
@@ -12,7 +11,6 @@ export function usePlayerOverlays() {
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isDJOpen, setIsDJOpen] = useState(false);
   const [isKaraokeOpen, setIsKaraokeOpen] = useState(false);
-  const [isPartyOpen, setIsPartyOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isPlaylistModalOpenPlayer, setIsPlaylistModalOpenPlayer] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -24,25 +22,7 @@ export function usePlayerOverlays() {
     exitFullscreen();
   }, []);
 
-  const closeParty = useCallback(() => {
-    setIsPartyOpen(false);
-    exitFullscreen();
-  }, []);
-
   const toggleOverlay = useCallback((overlay) => {
-    if (overlay === 'party' && !PARTY_MODE_ENABLED) return;
-    if (overlay === 'party') {
-      setIsPartyOpen((prev) => {
-        const next = !prev;
-        if (next) {
-          setIsEQOpen(false);
-          setIsQueueOpen(false);
-          setIsDJOpen(false);
-        }
-        return next;
-      });
-      return;
-    }
     if (overlay === 'karaoke') {
       const next = !isKaraokeOpenRef.current;
       if (!next) {
@@ -88,21 +68,16 @@ export function usePlayerOverlays() {
       setIsDJOpen(false);
       return;
     }
-    if (isPartyOpen) {
-      closeParty();
-      return;
-    }
     if (isKaraokeOpenRef.current) {
       closeKaraoke();
     }
-  }, [closeKaraoke, closeParty, isCommandPaletteOpen, isQueueOpen, isEQOpen, isDJOpen, isPartyOpen]);
+  }, [closeKaraoke, isCommandPaletteOpen, isQueueOpen, isEQOpen, isDJOpen]);
 
   return {
     isEQOpen,
     isQueueOpen,
     isDJOpen,
     isKaraokeOpen,
-    isPartyOpen,
     isCommandPaletteOpen,
     setIsCommandPaletteOpen,
     isPlaylistModalOpenPlayer,
@@ -112,8 +87,6 @@ export function usePlayerOverlays() {
     toggleOverlay,
     closeAllPanels,
     closeKaraoke,
-    closeParty,
-    setIsPartyOpen,
     setIsQueueOpen,
     setIsEQOpen,
     setIsDJOpen,
