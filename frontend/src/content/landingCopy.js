@@ -73,7 +73,7 @@ export const LANDING_COPY = {
         id: 'dj',
         label: 'DJs',
         desc: 'Harmonic mixing',
-        highlights: ['Track compatibility analysis', 'Set speed curves', 'EQ and stem splitting'],
+        highlights: ['Track compatibility analysis', 'Set speed curves', 'Built-in EQ'],
       },
       {
         id: 'discover',
@@ -237,7 +237,7 @@ export const LANDING_COPY = {
         id: 'dj',
         label: 'Диджеям',
         desc: 'Сведение по тональности',
-        highlights: ['Анализ совместимости треков', 'Кривая скорости сета', 'EQ и деление на стемы'],
+        highlights: ['Анализ совместимости треков', 'Кривая скорости сета', 'Встроенный EQ'],
       },
       {
         id: 'discover',

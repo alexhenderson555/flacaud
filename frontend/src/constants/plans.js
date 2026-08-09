@@ -9,8 +9,8 @@ export const PLAN_CATALOG = [
     periodEn: '',
     periodRu: '',
     backendId: null,
-    featuresEn: ['3 downloads / day', '96 kbps streaming', 'Search & library'],
-    featuresRu: ['3 скачивания / день', 'Стрим 96 kbps', 'Поиск и медиатека'],
+    featuresEn: ['3 downloads / day', '320 kbps streaming', 'Search & library'],
+    featuresRu: ['3 скачивания / день', 'Стрим 320 kbps', 'Поиск и медиатека'],
   },
   {
     id: 'basic',
@@ -46,8 +46,8 @@ export const PLAN_CATALOG = [
     periodEn: 'one-time',
     periodRu: 'разово',
     backendId: 'lifetime',
-    featuresEn: ['200 downloads / day forever', 'MAX when track supports it', 'Karaoke & priority queue'],
-    featuresRu: ['200 скачиваний / день навсегда', 'MAX если трек поддерживает', 'Караоке и приоритет'],
+    featuresEn: ['200 downloads / day forever', 'MAX when track supports it', 'Karaoke mode'],
+    featuresRu: ['200 скачиваний / день навсегда', 'MAX если трек поддерживает', 'Караоке-режим'],
   },
 ];
 
