@@ -17,6 +17,7 @@ from tidal_dl_ru.core.tracklist_parser import parse_tracklist_from_description
 from tidal_dl_ru.database.auth import get_current_user
 from tidal_dl_ru.database.database import get_session
 from tidal_dl_ru.database.models import SavedSet, SavedSetRead, SavedTrack, User
+from tidal_dl_ru.server import rec_cache
 from tidal_dl_ru.server.share_utils import (
     new_share_token,
     parse_tracks_json,
@@ -395,6 +396,19 @@ async def set_recommendations_endpoint(
     the user's own top few favorites.
     """
     limit = max(1, min(limit, 48))
+    assert current_user.id is not None
+
+    # Each query costs a real (slow, sometimes YouTube-rate-limited) yt-dlp
+    # search -- production logs showed this endpoint occasionally taking
+    # 10-50+ seconds with the old 11-query fan-out, blowing past the
+    # frontend's request timeout and silently rendering an empty grid (the
+    # fetch failure is swallowed). Cache the built list per (user, provider,
+    # limit) for rec_cache's TTL so repeat visits/refetches are instant.
+    cache_key = f"sets:{current_user.id}:{provider or 'all'}"
+    cached = rec_cache.cache_get(cache_key, limit)
+    if cached is not None:
+        return {"queries": [], "results": cached}
+
     # A specific artist's own upload volume in any given recent window is
     # usually thin (someone you like might post a new set every few months),
     # while a general genre query has far more monthly SoundCloud volume --
@@ -405,7 +419,6 @@ async def set_recommendations_endpoint(
     artist_count = 3 if date_filtered else 6
     genre_count = 6 if date_filtered else 5
     genre_pool = _RECENT_FALLBACK_DISCOVER_QUERIES if date_filtered else _FALLBACK_DISCOVER_QUERIES
-    assert current_user.id is not None
     artist_names = _library_artist_names(session, current_user.id)
     if artist_names:
         picked = random.sample(artist_names, min(artist_count, len(artist_names)))
@@ -415,6 +428,7 @@ async def set_recommendations_endpoint(
         queries = random.sample(genre_pool, min(8, len(genre_pool)))
 
     blended = await _blend_queries(queries, limit, exclude=set(), sources=_resolve_sources(provider))
+    rec_cache.cache_set(cache_key, limit, blended)
     return {"queries": queries, "results": blended}
 
 

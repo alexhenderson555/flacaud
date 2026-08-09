@@ -20,6 +20,7 @@ from tidal_dl_ru.server.routers.sets import (
 def _isolated_db(tmp_path, monkeypatch):
     import tidal_dl_ru.database.database as db_mod
     import tidal_dl_ru.database.models  # noqa: F401
+    from tidal_dl_ru.server import rec_cache
 
     test_db = tmp_path / "test_set_recommendations.db"
     monkeypatch.setattr(db_mod, "_db_path", test_db)
@@ -27,6 +28,10 @@ def _isolated_db(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{test_db.as_posix()}", connect_args={"check_same_thread": False})
     monkeypatch.setattr(db_mod, "engine", engine)
     SQLModel.metadata.create_all(engine)
+    # The recommendations endpoint now caches by user id; each test's fresh
+    # SQLite DB restarts autoincrement from 1, so without clearing this a
+    # later test's user id=1 would see an earlier test's cached results.
+    monkeypatch.setattr(rec_cache, "_store", {})
     yield
 
 
@@ -132,6 +137,34 @@ def test_recommendations_fallback_queries_without_library(client, monkeypatch):
     resp = client.get("/api/sets/recommendations", headers=headers)
     assert resp.status_code == 200
     assert all(q in _FALLBACK_DISCOVER_QUERIES for q in captured["queries"])
+
+
+def test_recommendations_cached_on_repeat_request(client, monkeypatch):
+    """Production logs showed this endpoint occasionally taking 10-50+
+    seconds (up to 11 concurrent yt-dlp searches) -- caching the built list
+    means a repeat visit/refetch within the TTL is instant instead of paying
+    that cost again, which is also what actually stops the frontend's
+    request-timeout from silently blanking the grid on a slow reload."""
+    headers, _uname = register_and_login(client, username="setrecuser4", email="setrec4@test.local")
+
+    call_count = {"n": 0}
+
+    def fake_blend_queries(queries, limit, exclude, sources=("youtube", "soundcloud")):
+        call_count["n"] += 1
+
+        async def _one():
+            return [{"url": "https://example.com/set", "title": "Set"}]
+        return _one()
+
+    import tidal_dl_ru.server.routers.sets as sets_mod
+    monkeypatch.setattr(sets_mod, "_blend_queries", fake_blend_queries)
+
+    first = client.get("/api/sets/recommendations?limit=12", headers=headers)
+    second = client.get("/api/sets/recommendations?limit=12", headers=headers)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["results"] == second.json()["results"]
+    assert call_count["n"] == 1
 
 
 @pytest.mark.asyncio

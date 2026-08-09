@@ -7,6 +7,7 @@ flat-extraction mode, which lists results without downloading anything.
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +124,25 @@ def search_sets(
     # pull a much bigger pool from the relevance-ranked results and pick the
     # recent ones out of that -- 200 is yt-dlp's own per-search cap.
     per_source = max(6, limit) if len(sources) > 1 else min(200, max(150, limit * 4))
-    yt = _search_one(query, "ytsearch", "youtube", per_source) if "youtube" in sources else []
-    sc = _search_one(query, "scsearch", "soundcloud", per_source) if "soundcloud" in sources else []
+    want_yt = "youtube" in sources
+    want_sc = "soundcloud" in sources
+    if want_yt and want_sc:
+        # This function itself already runs inside its own worker thread (the
+        # caller wraps it in asyncio.to_thread per query) -- but each yt-dlp
+        # search is a slow, sometimes YouTube-rate-limited blocking network
+        # call, and running the two sequentially in one thread means every
+        # query pays for BOTH searches back-to-back. A tiny nested pool lets
+        # this one query's own youtube+soundcloud searches overlap instead,
+        # which was the main contributor to /api/sets/recommendations
+        # occasionally taking 10-50+ seconds in production.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            yt_future = pool.submit(_search_one, query, "ytsearch", "youtube", per_source)
+            sc_future = pool.submit(_search_one, query, "scsearch", "soundcloud", per_source)
+            yt = yt_future.result()
+            sc = sc_future.result()
+    else:
+        yt = _search_one(query, "ytsearch", "youtube", per_source) if want_yt else []
+        sc = _search_one(query, "scsearch", "soundcloud", per_source) if want_sc else []
 
     scored = [
         (_relevance_score(row, rank), row)
