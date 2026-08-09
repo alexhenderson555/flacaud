@@ -1,5 +1,7 @@
 import PlatformIcon from '../sync/PlatformIcon';
-import { Play, SkipBack, SkipForward, Volume2, Maximize2 } from 'lucide-react';
+import {
+  Play, SkipBack, SkipForward, Volume2, Maximize2, Shuffle, Download,
+} from 'lucide-react';
 
 const DEMO_TRACKS = [
   { title: 'GLUE', artist: 'BICEP', duration: 269, cover: 1, initials: 'GL' },
@@ -191,11 +193,31 @@ export function LibraryPanel({ lang }) {
       title={lang === 'ru' ? 'Медиатека' : 'Library'}
       badge={`128 ${lang === 'ru' ? 'треков' : 'tracks'}`}
       toolbar={(
+        // Matches the real Library toolbar (Play All / Shuffle Play / Download
+        // All) -- not filter chips, which don't exist inline there (BPM/Camelot
+        // are behind a separate "DJ filters" toggle).
         <div className="landing-preview__filters">
-          <span className="landing-preview__filter landing-preview__filter--on">FLAC</span>
-          <span className="landing-preview__filter">Hi-Res</span>
-          <span className="landing-preview__filter">BPM</span>
-          <span className="landing-preview__filter">Camelot</span>
+          <span
+            className="landing-preview__btn landing-preview__btn--primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <Play size={12} fill="currentColor" />
+            {lang === 'ru' ? 'Играть всё' : 'Play All'}
+          </span>
+          <span
+            className="landing-preview__btn landing-preview__btn--ghost"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <Shuffle size={12} />
+            {lang === 'ru' ? 'Перемешать' : 'Shuffle'}
+          </span>
+          <span
+            className="landing-preview__btn landing-preview__btn--ghost"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <Download size={12} />
+            {lang === 'ru' ? 'Скачать всё' : 'Download All'}
+          </span>
         </div>
       )}
       miniPlayer={(

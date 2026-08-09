@@ -3,45 +3,51 @@ import {
 } from 'lucide-react';
 import { BRAND_LOGO_SRC } from '../../brand';
 
+// Mirrors the real sidebar's groups/order/labels 1:1 (components/layout/AppSidebar.jsx)
+// -- this is a marketing mockup, not a live embed, so it drifts whenever the
+// real nav changes unless kept in sync by hand.
 const NAV = [
   { id: 'search', icon: Search, labelKey: 'search' },
   { id: 'recs', icon: Flame, labelKey: 'recs' },
-  { id: 'vibe', icon: Radio, labelKey: 'vibe' },
+  { id: 'radio', icon: Radio, labelKey: 'radio' },
   { id: 'library', icon: Heart, labelKey: 'library' },
+  { id: 'playlists', icon: ListMusic, labelKey: 'playlists' },
   { id: 'transfer', icon: Repeat, labelKey: 'transfer' },
   { id: 'setBrowser', icon: Compass, labelKey: 'setBrowser' },
-  { id: 'analyzer', icon: ListMusic, labelKey: 'analyzer' },
   { id: 'sets', icon: Library, labelKey: 'sets' },
+  { id: 'analyzer', icon: ListMusic, labelKey: 'analyzer' },
 ];
 
 const LABELS = {
   en: {
     search: 'Search & Shazam',
     recs: 'Recommendations',
-    vibe: 'My Vibe',
+    radio: 'Genreverse',
     library: 'Library',
+    playlists: 'Playlists',
     transfer: 'Transfer Library',
     analyzer: 'Set Analyzer',
     sets: 'Set Library',
     setBrowser: 'Set Browser',
     discover: 'Discover',
-    myMusic: 'My music',
-    proTools: 'DJ tools',
+    myMusic: 'My Music',
+    proTools: 'DJ Tools',
     account: 'Account',
   },
   ru: {
-    search: 'Поиск и Shazam',
+    search: 'Поиск и Шазам',
     recs: 'Рекомендации',
-    vibe: 'Мой вайб',
+    radio: 'Genreverse',
     library: 'Медиатека',
-    transfer: 'Перенос медиатеки',
-    analyzer: 'Анализ сета',
+    playlists: 'Плейлисты',
+    transfer: 'Перенос музыки',
+    analyzer: 'Анализатор сетов',
     sets: 'Библиотека сетов',
     setBrowser: 'Сет Браузер',
     discover: 'Обзор',
     myMusic: 'Моя музыка',
     proTools: 'DJ-инструменты',
-    account: 'Аккаунт',
+    account: 'Профиль',
   },
 };
 
@@ -91,13 +97,13 @@ export default function LandingProductFrame({
             </div>
             <div className="landing-product__nav-group">
               <span className="landing-product__nav-label">{L.myMusic}</span>
-              {NAV.slice(3, 5).map((item) => (
+              {NAV.slice(3, 6).map((item) => (
                 <NavRow key={item.id} item={item} L={L} active={activeRoute === item.id} />
               ))}
             </div>
             <div className="landing-product__nav-group">
               <span className="landing-product__nav-label">{L.proTools}</span>
-              {NAV.slice(5).map((item) => (
+              {NAV.slice(6).map((item) => (
                 <NavRow
                   key={item.id}
                   item={item}
