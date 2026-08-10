@@ -16,6 +16,31 @@ describe('isChunkLoadError', () => {
   it('ignores unrelated errors', () => {
     expect(isChunkLoadError(new Error('network error'))).toBe(false);
   });
+
+  it('detects a truncated chunk leaving a symbol undefined', () => {
+    // Exactly the shape reported in prod (client_error ErrorBoundary,
+    // 2026-08-10): a chunk that 200'd but got cut short mid-transfer, so a
+    // later reference to a symbol it should have defined throws this
+    // instead of a "failed to fetch" message.
+    expect(isChunkLoadError(new TypeError('H is not a function'))).toBe(true);
+  });
+
+  it('detects a truncated chunk that fails to even parse', () => {
+    expect(isChunkLoadError(new SyntaxError("Unexpected token '<'"))).toBe(true);
+    expect(isChunkLoadError(new SyntaxError('Unexpected end of input'))).toBe(true);
+  });
+
+  it('does not misclassify a real app-code TypeError', () => {
+    expect(isChunkLoadError(new TypeError("Cannot read properties of undefined (reading 'foo')"))).toBe(false);
+  });
+
+  it('detects a truncated chunk leaving a global reference undefined', () => {
+    expect(isChunkLoadError(new ReferenceError('H is not defined'))).toBe(true);
+  });
+
+  it('does not misclassify a real ReferenceError to window/document', () => {
+    expect(isChunkLoadError(new ReferenceError('window is not defined'))).toBe(false);
+  });
 });
 
 describe('reloadForStaleChunks', () => {
