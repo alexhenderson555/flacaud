@@ -27,11 +27,7 @@
 		file_server
 	}
 
-	# Same reasoning as /api/stream/* above: never gzip video -- it's already
-	# compressed (gains ~nothing) and streaming-compressing a large binary
-	# through Caddy's encoder is a plausible cause of the landing hero video
-	# stalling mid-transfer for some viewers instead of just serving the raw
-	# bytes with working Range support.
+	# Same reasoning as /api/stream/* above: never gzip video.
 	handle /videos/* {
 		root * /srv/frontend
 		header Cache-Control "public, max-age=604800"
@@ -61,4 +57,65 @@ http://{$DOMAIN} {
 
 https://{$DOMAIN} {
 	import site
+}
+
+# --- Other tenants on this VPS, sharing this one Caddy process -----------
+# These are separate projects (not part of the flacaud deploy) that were
+# previously hand-patched directly onto the server's live Caddyfile after
+# every deploy overwrote it from this repo -- fragile (undocumented,
+# un-reviewable, one `git reset --hard` away from silently vanishing) and
+# risky for flacaud itself: a single shared Caddy process means a hung or
+# slow upstream on ANY of these can exhaust worker/connection capacity for
+# flacaud.ru too, with nothing in flacaud's own logs to explain why. Now
+# tracked here as the actual source of truth, with bounded dial/response
+# timeouts on each third-party upstream so one tenant hanging can no longer
+# starve the others -- flacaud's own reverse_proxy blocks above are left
+# untimed since legitimate operations there (DASH remux merge waits, large
+# stream reads) can legitimately take longer than a generic third-party
+# timeout would allow.
+
+# zapiis (ai-booking-bot): API + landing + audit tool
+https://api.zapiis.ru {
+	reverse_proxy zapiis-bot:8787 {
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 10s
+		}
+	}
+}
+
+https://zapiis.ru, https://www.zapiis.ru {
+	header {
+		-Server
+	}
+	encode gzip
+	handle_path /audit/* {
+		root * /srv/zapiis-audit
+		try_files {path} /index.html
+		file_server
+	}
+	handle {
+		root * /srv/zapiis-landing
+		try_files {path} {path}.html
+		file_server
+	}
+}
+
+# kld-events (Nishevy Kaliningrad): events map webapp, proxied to the host
+# app on :8080 via the bridge gateway (app runs directly on the host, not
+# in this compose project's network). Cloudflare is in Full (Strict) mode
+# for this domain, so -- unlike the other domains here that sit behind
+# Cloudflare Flexible -- this one DOES need its own trusted cert; Caddy gets
+# one from Let's Encrypt via HTTP-01 (TLS-ALPN-01 fails since Cloudflare
+# terminates the visitor's TLS, that's expected, HTTP-01 still works fine).
+https://niche-kld.ru, https://www.niche-kld.ru {
+	header {
+		-Server
+	}
+	reverse_proxy 172.18.0.1:8080 {
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 10s
+		}
+	}
 }

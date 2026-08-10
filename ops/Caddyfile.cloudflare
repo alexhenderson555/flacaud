@@ -58,3 +58,49 @@ https://{$DOMAIN} {
 	tls internal
 	import site
 }
+
+# --- Other tenants on this VPS, sharing this one Caddy process -----------
+# See the matching comment in ops/Caddyfile.le for the full explanation.
+# These get normal automatic (Let's Encrypt) HTTPS, not `tls internal` --
+# that override is scoped to the flacaud.ru block above only.
+
+# zapiis (ai-booking-bot): API + landing + audit tool
+https://api.zapiis.ru {
+	reverse_proxy zapiis-bot:8787 {
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 10s
+		}
+	}
+}
+
+https://zapiis.ru, https://www.zapiis.ru {
+	header {
+		-Server
+	}
+	encode gzip
+	handle_path /audit/* {
+		root * /srv/zapiis-audit
+		try_files {path} /index.html
+		file_server
+	}
+	handle {
+		root * /srv/zapiis-landing
+		try_files {path} {path}.html
+		file_server
+	}
+}
+
+# kld-events (Nishevy Kaliningrad): events map webapp, proxied to the host
+# app on :8080 via the bridge gateway. See ops/Caddyfile.le for details.
+https://niche-kld.ru, https://www.niche-kld.ru {
+	header {
+		-Server
+	}
+	reverse_proxy 172.18.0.1:8080 {
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 10s
+		}
+	}
+}
