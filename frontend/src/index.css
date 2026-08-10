@@ -1146,7 +1146,9 @@ input:focus-visible,
   gap: 8px;
   min-height: 0;
   display: flex;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 .sidebar-footer {
   border-top: 1px solid var(--border-subtle);

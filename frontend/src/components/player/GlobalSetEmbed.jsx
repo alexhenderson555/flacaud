@@ -97,17 +97,36 @@ export default function GlobalSetEmbed() {
   }, [showDock]);
 
   const prevModeRef = useRef(inlineAnchored ? 'inline' : (showDock ? 'dock' : 'none'));
+  // Tracked via its own effect (not read directly in the mode-transition
+  // effect below) so that effect's dependency array can omit embedPlaying --
+  // the YouTube iframe asynchronously self-pausing a moment into the retry
+  // window below must NOT cancel/restart that retry loop, which is exactly
+  // what including embedPlaying as a dependency would do.
+  const wasPlayingRef = useRef(embedPlaying);
+  useEffect(() => {
+    wasPlayingRef.current = embedPlaying;
+  }, [embedPlaying]);
   useEffect(() => {
     const mode = inlineAnchored ? 'inline' : (showDock ? 'dock' : 'none');
     const prev = prevModeRef.current;
     prevModeRef.current = mode;
     const mainPlaybackActive = !!currentTrack && (isPlaying || isLoading);
-    if (embedPlaying && prev === 'inline' && mode === 'dock' && !mainPlaybackActive) {
-      const id = window.setTimeout(() => resumeSetEmbed?.(), 500);
-      return () => window.clearTimeout(id);
+    if (wasPlayingRef.current && prev === 'inline' && mode === 'dock' && !mainPlaybackActive) {
+      // The YouTube iframe often self-reports a PAUSED state when its wrapper
+      // shrinks from full-size to the small corner dock (a resize-triggered
+      // player-state quirk, not a user pause) -- a single delayed resume
+      // attempt sometimes lost the race against exactly when that happens.
+      // Keep nudging play() for a couple seconds instead of just once.
+      let attempts = 0;
+      const id = window.setInterval(() => {
+        attempts += 1;
+        resumeSetEmbed?.();
+        if (attempts >= 10) window.clearInterval(id);
+      }, 200);
+      return () => window.clearInterval(id);
     }
     return undefined;
-  }, [inlineAnchored, showDock, embedPlaying, resumeSetEmbed, currentTrack, isPlaying, isLoading]);
+  }, [inlineAnchored, showDock, resumeSetEmbed, currentTrack, isPlaying, isLoading]);
 
   const onEmbedReady = useCallback(() => {
     handleEmbedReady?.();

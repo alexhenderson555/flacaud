@@ -71,6 +71,18 @@ const SORT_OPTIONS = ['relevance', 'views', 'date'];
 const DURATION_OPTIONS = ['any', 'short', 'medium', 'long'];
 const UPLOADED_OPTIONS = ['any', 'week', 'month', 'year'];
 
+// Genre names read the same in Russian DJ/electronic-music usage as in
+// English, so these double as their own labels -- no separate ru dict
+// entries needed. There's no genre metadata to filter on server-side
+// (YouTube has none at all; SoundCloud's isn't exposed by yt-dlp's flat
+// search), so a "style filter" here means re-querying with the genre as
+// search text, same trick the backend's own recommendation fallback
+// queries already use (routers/sets.py _FALLBACK_DISCOVER_QUERIES).
+const STYLE_CHIPS = [
+  'Afro House', 'Tech House', 'Melodic Techno', 'Deep House', 'House',
+  'Organic House', 'Hard Techno', 'Amapiano', 'Drum & Bass', 'Progressive House',
+];
+
 const DURATION_RANGES = {
   short: [0, 60 * 60],
   medium: [60 * 60, 120 * 60],
@@ -296,9 +308,11 @@ export default function SetBrowser() {
   // immediately throws away, making the filter look broken/empty.
   const uploadedProvider = uploadedFilter !== 'any' ? 'soundcloud' : undefined;
 
-  const runSearch = useCallback(async (e) => {
-    e?.preventDefault();
-    const q = query.trim();
+  const runSearch = useCallback(async (e, queryOverride) => {
+    e?.preventDefault?.();
+    // queryOverride lets a style-chip click search immediately with the new
+    // term instead of racing the async setQuery() state update.
+    const q = (queryOverride ?? query).trim();
     if (!q) return;
     if (!hasAuthSession()) {
       showToast(t('authRequired'));
@@ -324,6 +338,12 @@ export default function SetBrowser() {
       setSearching(false);
     }
   }, [query, lang, t, uploadedProvider]);
+
+  const runStyleSearch = useCallback((style) => {
+    const q = `${style} dj set`;
+    setQuery(q);
+    runSearch(undefined, q);
+  }, [runSearch]);
 
   // Clearing the query text alone left `results` populated (it's only set
   // inside runSearch), so the "Recommended for you" view -- gated on both
@@ -608,6 +628,37 @@ export default function SetBrowser() {
               {searching ? <><Loader2 className="spinner" size={20} /> {t('searching')}</> : <><Search size={20} /> {t('search')}</>}
             </button>
           </form>
+
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px', marginTop: '-10px',
+          }}
+          >
+            {STYLE_CHIPS.map((style) => {
+              const active = query.trim().toLowerCase() === `${style} dj set`.toLowerCase();
+              return (
+                <button
+                  key={style}
+                  type="button"
+                  onClick={() => runStyleSearch(style)}
+                  disabled={searching}
+                  data-testid={`set-browser-style-${style.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                  className="glass-panel"
+                  style={{
+                    border: active ? '1px solid var(--accent-solid)' : '1px solid var(--border-subtle)',
+                    background: active ? 'var(--accent-glow)' : 'transparent',
+                    color: active ? 'white' : 'var(--text-secondary)',
+                    borderRadius: '999px',
+                    padding: '6px 14px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {style}
+                </button>
+              );
+            })}
+          </div>
 
           {searchError && (
             <div style={{ padding: '16px', borderRadius: '16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', marginBottom: '24px' }}>

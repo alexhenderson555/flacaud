@@ -15,7 +15,7 @@ export async function fetchQuickTracklist(url, { lang } = {}) {
   return apiGetJson(`/api/sets/quick-tracklist?${params.toString()}`, { auth: true, lang });
 }
 
-export async function fetchSimilarSets(url, { lang, limit = 10 } = {}) {
+export async function fetchSimilarSets(url, { lang, limit = 12 } = {}) {
   const params = new URLSearchParams({ url, limit: String(limit) });
   const data = await apiGetJson(`/api/sets/radio?${params.toString()}`, { auth: true, lang });
   return data?.results || [];

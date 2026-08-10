@@ -305,7 +305,7 @@ async def _blend_queries(
 @router.get("/sets/radio")
 async def set_radio_endpoint(
     url: str,
-    limit: int = 10,
+    limit: int = 12,
     current_user: User = Depends(get_current_user),
 ):
     """'Similar sets' / radio-by-set — a blended mix (same artist, same
