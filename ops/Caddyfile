@@ -27,6 +27,17 @@
 		file_server
 	}
 
+	# Same reasoning as /api/stream/* above: never gzip video -- it's already
+	# compressed (gains ~nothing) and streaming-compressing a large binary
+	# through Caddy's encoder is a plausible cause of the landing hero video
+	# stalling mid-transfer for some viewers instead of just serving the raw
+	# bytes with working Range support.
+	handle /videos/* {
+		root * /srv/frontend
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
+
 	handle /assets/* {
 		encode zstd gzip
 		root * /srv/frontend
