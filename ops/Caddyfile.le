@@ -7,6 +7,16 @@
 		-Server
 	}
 
+	# Caddy only logs errors by default -- successful static file_server
+	# requests (all of /assets/*, /videos/*, /fonts/*) leave zero trace,
+	# which made a real user-reported "site won't load" impossible to
+	# diagnose from server-side logs alone (nothing to show whether their
+	# requests ever reached origin, or what happened to them if they did).
+	log {
+		output stdout
+		format json
+	}
+
 	# Never gzip audio streams — breaks 206 Range / FLAC seeking.
 	handle /api/stream/* {
 		reverse_proxy api:8000
