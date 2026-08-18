@@ -92,16 +92,18 @@ async def track_radio(
     track_id: str,
     limit: int = 30,
     fast: bool = False,
+    exclude: str | None = None,
     user: User | None = Depends(_optional_user),
     session: Session = Depends(get_session),
 ):
     if provider != "tidal":
         raise HTTPException(status_code=400, detail="Only tidal provider supported")
     limit = max(1, min(limit, 60))
+    exclude_ids = _parse_exclude_ids(exclude)
     if fast:
-        tracks = await build_track_radio_fast(track_id, limit)
+        tracks = await build_track_radio_fast(track_id, limit, exclude_ids=exclude_ids)
     else:
-        tracks = await build_track_radio(track_id, limit, user=user, session=session)
+        tracks = await build_track_radio(track_id, limit, user=user, session=session, exclude_ids=exclude_ids)
     if not tracks:
         raise HTTPException(status_code=503, detail="Could not load track radio")
     return SearchResponse(tracks=tracks)

@@ -509,10 +509,12 @@ async def _sparse_artist_radio_fallback(
 async def build_track_radio_fast(
     track_id: str,
     limit: int = 15,
+    *,
+    exclude_ids: set[str] | None = None,
 ) -> list[Track]:
     """One Tidal neighbourhood round — for instant player radio bootstrap."""
     tracks: list[Track] = []
-    seen: set[str] = set()
+    seen: set[str] = set(exclude_ids or ())
     artist_counts: dict[str, int] = defaultdict(int)
 
     client, http = await _with_client()
@@ -553,10 +555,11 @@ async def build_track_radio(
     *,
     user: User | None = None,
     session: Session | None = None,
+    exclude_ids: set[str] | None = None,
 ) -> list[Track]:
     """Radio around one seed — style signals first, library co-play, artist radio last."""
     tracks: list[Track] = []
-    seen: set[str] = set()
+    seen: set[str] = set(exclude_ids or ())
     artist_counts: dict[str, int] = defaultdict(int)
     collect_limit = _collection_cap(limit)
 

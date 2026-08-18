@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { showToast } from '../utils/toast';
 import { apiGetJson, apiPostJson, messageForApiError } from '../utils/apiClient';
 import { buildRadioQueue, pickRadioStartTrack } from '../utils/trackNormalize';
+import { getRadioHistory, addRadioHistory } from '../utils/radioHistory';
 
 /** Track / artist / AI radio queue bootstrap. */
 export function usePlayerRadio({
@@ -33,14 +34,22 @@ export function usePlayerRadio({
       const start = pickRadioStartTrack(queue, { advancePastSeed });
       if (!start || queue.length <= 1) return false;
       playQueue(start, queue, { preservePlaybackState: true });
+      addRadioHistory(provider, pid, radioTracks.map((rt) => rt.provider_id));
       showToast(t(toastKey));
       return true;
     };
 
+    // Ask the backend to skip whatever this exact seed already served last
+    // time — otherwise repeat "start radio" presses on the same track just
+    // reshuffle Tidal's same small neighbourhood pool into a list that feels
+    // identical.
+    const excludeParam = getRadioHistory(provider, pid).join(',');
+    const excludeQuery = excludeParam ? `&exclude=${encodeURIComponent(excludeParam)}` : '';
+
     try {
       try {
         const radioData = await apiGetJson(
-          `/api/track/${provider}/${pid}/radio?limit=30&fast=1`,
+          `/api/track/${provider}/${pid}/radio?limit=30&fast=1${excludeQuery}`,
           { auth: true, lang },
         );
         if (radioData.tracks?.length > 0 && applyRadioQueue(radioData.tracks)) {
@@ -52,7 +61,7 @@ export function usePlayerRadio({
 
       try {
         const radioData = await apiGetJson(
-          `/api/track/${provider}/${pid}/radio?limit=30`,
+          `/api/track/${provider}/${pid}/radio?limit=30${excludeQuery}`,
           { auth: true, lang },
         );
         if (radioData.tracks?.length > 0 && applyRadioQueue(radioData.tracks)) {
