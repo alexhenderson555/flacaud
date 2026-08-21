@@ -17,6 +17,19 @@ _db_path.parent.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{_db_path.as_posix()}"
 
+# A production container silently falling back to a local, empty SQLite file
+# instead of the real Postgres (e.g. a docker-compose invocation that dropped
+# `-f docker-compose.postgres.yml`, or a container that predates that override
+# being added and never got recreated) is a correctness incident, not a
+# degraded-but-working state: users would transparently see a different,
+# near-empty library with no indication anything is wrong. Fail loudly at
+# import time instead of letting it happen silently again.
+if os.environ.get("TIDALDLRU_ENV") == "production" and not DATABASE_URL.startswith("postgresql"):
+    raise RuntimeError(
+        "TIDALDLRU_ENV=production but DATABASE_URL is not set to a Postgres URL "
+        f"(got {DATABASE_URL!r}). Refusing to silently fall back to local SQLite."
+    )
+
 
 def _engine_connect_args(url: str) -> dict:
     if url.startswith("sqlite"):
