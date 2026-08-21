@@ -23,7 +23,6 @@ import {
 import { REPEAT_ALL, REPEAT_ONE } from '../utils/playbackModes';
 import { PLAYER_HOTKEYS, withHotkey } from '../utils/playerHotkeys';
 import { isTrackLiked } from '../utils/trackNormalize';
-import { motion } from 'framer-motion';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import PlayerMobileActions from './player/PlayerMobileActions';
 import PlayerMarqueeTitle from './player/PlayerMarqueeTitle';
@@ -260,7 +259,7 @@ export default function PlayerBar({
         type="button"
         data-testid="player-transport-btn"
         aria-label={playing ? t('playerPause') : t('playerPlay')}
-        disabled={!canTransport}
+        disabled={!canTransport || (!setActive && isLoading)}
         onClick={(e) => {
           e.stopPropagation();
           if (setActive) toggleSetEmbed?.();
@@ -270,10 +269,8 @@ export default function PlayerBar({
         style={{ width: size, height: size }}
       >
         {!setActive && isLoading ? (
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-            className="player-transport-spinner"
+          <div
+            className="player-transport-spinner spin"
             style={{ width: size * 0.45, height: size * 0.45 }}
           />
         ) : playing ? (
@@ -323,20 +320,34 @@ export default function PlayerBar({
     isLoading,
   });
 
-  const activeQualityId = uiQualityId;
+  // resolvePlayerUiQuality reflects what was *requested*, which can be a tier
+  // this specific track's probe then rules out -- e.g. the user's preferred
+  // quality is Lossless but this track (or the Tidal account pool right now)
+  // has no Lossless stream. Without this guard the Lossless button ends up
+  // both highlighted as "active" and disabled/unclickable at the same time,
+  // which reads as a broken button rather than "not available".
+  const qualityAvailability = QUALITY_OPTIONS.reduce((acc, q) => {
+    const planBlocked = !isQualityAllowedForPlan(q.id, effectivePlan);
+    const trackBlocked = qualitiesReady && !isPlaybackQualityAvailable(
+      q.id,
+      availableQualities,
+      maxTrackQuality,
+      effectivePlan,
+      probeData,
+    );
+    acc[q.id] = planBlocked || trackBlocked || !qualitiesReady;
+    return acc;
+  }, {});
+
+  const activeQualityId = (qualitiesReady && qualityAvailability[uiQualityId])
+    ? (QUALITY_OPTIONS.find((q) => !qualityAvailability[q.id])?.id || uiQualityId)
+    : uiQualityId;
 
   const qualityPicker = (
     <div className="player-quality-picker">
       {QUALITY_OPTIONS.map((q) => {
+        const isDisabled = qualityAvailability[q.id];
         const planBlocked = !isQualityAllowedForPlan(q.id, effectivePlan);
-        const trackBlocked = qualitiesReady && !isPlaybackQualityAvailable(
-          q.id,
-          availableQualities,
-          maxTrackQuality,
-          effectivePlan,
-          probeData,
-        );
-        const isDisabled = planBlocked || trackBlocked || !qualitiesReady;
         const tidalCatalogOnly = isTidalCatalogOnlyLossless(probeData);
 
         return (
