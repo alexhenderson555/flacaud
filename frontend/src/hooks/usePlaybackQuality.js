@@ -1058,7 +1058,14 @@ export function usePlaybackQuality({
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
   }, []);
 
-  const PRELOAD_CACHE_AHEAD = 3;
+  // With only one Lossless-capable Tidal account currently in the server's
+  // pool (see the account-pool health checks), each background prefetch here
+  // competes directly with whatever's actively playing for that single
+  // account's capacity -- observed in prod as the live track's own stream
+  // stalling for 20+ seconds while 3 upcoming tracks warmed concurrently.
+  // 1 keeps the "instant next track" benefit without piling on more
+  // concurrent speculative downloads than the pool can currently absorb.
+  const PRELOAD_CACHE_AHEAD = 1;
 
   const updatePreloadForPlaylist = useCallback(async (playlist, currentTrackIndex) => {
     // usePlayerMediaEffects re-invokes this on several unrelated dependency
