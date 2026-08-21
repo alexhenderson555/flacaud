@@ -81,6 +81,16 @@ https://{$DOMAIN} {
 	import site
 }
 
+# flacaud.com: mirror of flacaud.ru on a domain not (yet) targeted by RU
+# ISP-level SNI/DPI blocking of the .ru name, for visitors without a VPN.
+http://flacaud.com, http://www.flacaud.com {
+	redir https://{host}{uri} permanent
+}
+
+https://flacaud.com, https://www.flacaud.com {
+	import site
+}
+
 # --- Other tenants on this VPS, sharing this one Caddy process -----------
 # See the matching comment in ops/Caddyfile.le for the full explanation.
 # These get normal automatic (Let's Encrypt) HTTPS, not `tls internal` --

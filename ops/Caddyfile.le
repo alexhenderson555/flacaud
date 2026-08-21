@@ -81,6 +81,19 @@ https://{$DOMAIN} {
 	import site
 }
 
+# flacaud.com: mirror of flacaud.ru on a domain not (yet) targeted by RU
+# ISP-level SNI/DPI blocking of the .ru name, for visitors without a VPN.
+# Same origin, same site snippet -- Cloudflare proxied (orange cloud), so
+# Let's Encrypt uses HTTP-01 (TLS-ALPN-01 would fail, Cloudflare terminates
+# the visitor's TLS before it reaches us -- same reasoning as niche-kld.ru).
+http://flacaud.com, http://www.flacaud.com {
+	redir https://{host}{uri} permanent
+}
+
+https://flacaud.com, https://www.flacaud.com {
+	import site
+}
+
 # --- Other tenants on this VPS, sharing this one Caddy process -----------
 # These are separate projects (not part of the flacaud deploy) that were
 # previously hand-patched directly onto the server's live Caddyfile after
