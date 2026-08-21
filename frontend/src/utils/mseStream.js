@@ -25,8 +25,20 @@ export function mseSupported(mimeType) {
 
 /**
  * Starts feeding an MSE MediaSource from `url`. Resolves to `{ blobUrl, abort }`
- * once the first chunk is appended (caller then sets `<audio>.src = blobUrl`),
- * or `null` if MSE can't be used for this stream at all.
+ * once fetch + codec support are confirmed, or `null` if MSE can't be used
+ * for this stream at all.
+ *
+ * `sourceopen` only fires once `blobUrl` is actually assigned to a media
+ * element's `src` — the caller must do that with the returned `blobUrl`
+ * *before* this promise's work continues, which is exactly why this
+ * function doesn't block on `sourceopen` itself (an earlier version did,
+ * and could never succeed: it awaited `sourceopen` before ever handing
+ * `blobUrl` back to the caller to assign, so the event that only fires
+ * *because* of that assignment could never arrive — a permanent deadlock
+ * that silently fell back to the pre-MSE path on every single play,
+ * confirmed live via the [mse] console diagnostics below). All of the
+ * real setup (addSourceBuffer, the segment feed loop) now happens inside
+ * the `sourceopen` handler instead.
  *
  * The codec MIME type isn't guessed client-side — it's read from the actual
  * `Content-Type` the server returns (derived server-side from the DASH
@@ -60,41 +72,11 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
   const blobUrl = URL.createObjectURL(mediaSource);
   let aborted = false;
   let sourceBuffer = null;
+  const reader = response.body.getReader();
 
   const cleanup = () => {
     try { URL.revokeObjectURL(blobUrl); } catch { /* noop */ }
   };
-
-  const opened = new Promise((resolve) => {
-    mediaSource.addEventListener('sourceopen', () => resolve(true), { once: true });
-  });
-
-  const didOpen = await Promise.race([
-    opened,
-    new Promise((resolve) => setTimeout(() => resolve(false), 5000)),
-  ]);
-  if (!didOpen || aborted) {
-    console.debug('[mse] MediaSource never reached sourceopen (5s timeout), falling back');
-    cleanup();
-    try { response.body.cancel(); } catch { /* noop */ }
-    return null;
-  }
-
-  try {
-    sourceBuffer = mediaSource.addSourceBuffer(mimeType);
-    // Real duration is already known from track metadata — never rely on
-    // the growing fMP4's own (unreliable while incomplete) moov duration.
-    if (trackDurationSec > 0) {
-      try { mediaSource.duration = trackDurationSec; } catch { /* noop */ }
-    }
-  } catch (e) {
-    console.debug('[mse] addSourceBuffer() rejected mimeType, falling back', mimeType, e);
-    cleanup();
-    try { response.body.cancel(); } catch { /* noop */ }
-    return null;
-  }
-
-  const reader = response.body.getReader();
 
   const appendChunk = (chunk) => new Promise((resolve, reject) => {
     const onUpdateEnd = () => {
@@ -118,7 +100,7 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
     }
   });
 
-  const feedLoop = (async () => {
+  const feedLoop = async () => {
     try {
       while (!aborted) {
         const { done, value } = await reader.read();
@@ -141,7 +123,25 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
     } finally {
       try { reader.cancel(); } catch { /* noop */ }
     }
-  })();
+  };
+
+  mediaSource.addEventListener('sourceopen', () => {
+    if (aborted) return;
+    try {
+      sourceBuffer = mediaSource.addSourceBuffer(mimeType);
+      // Real duration is already known from track metadata — never rely on
+      // the growing fMP4's own (unreliable while incomplete) moov duration.
+      if (trackDurationSec > 0) {
+        try { mediaSource.duration = trackDurationSec; } catch { /* noop */ }
+      }
+    } catch (e) {
+      console.debug('[mse] addSourceBuffer() rejected mimeType after sourceopen', mimeType, e);
+      cleanup();
+      try { reader.cancel(); } catch { /* noop */ }
+      return;
+    }
+    void feedLoop();
+  }, { once: true });
 
   return {
     blobUrl,
@@ -150,7 +150,6 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
       try { reader.cancel(); } catch { /* noop */ }
       try { if (mediaSource.readyState === 'open') mediaSource.endOfStream(); } catch { /* noop */ }
       cleanup();
-      void feedLoop;
     },
   };
 }
