@@ -66,6 +66,12 @@ http://{$DOMAIN} {
 }
 
 https://{$DOMAIN} {
+	# Disable HTTP/3 (QUIC/UDP) -- suspected cause of direct (non-VPN) loads
+	# being slow/flaky for RU visitors: browsers see our h3 Alt-Svc and try
+	# QUIC-over-UDP first, which some RU ISPs throttle/drop far more
+	# aggressively than plain TCP+TLS, wasting the QUIC handshake timeout
+	# before falling back to h2. TCP-only removes that stall entirely.
+	protocols h1 h2
 	import site
 }
 
