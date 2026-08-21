@@ -1,5 +1,17 @@
 {
 	email {$ACME_EMAIL}
+	# Disable HTTP/3 (QUIC/UDP) instance-wide -- suspected cause of direct
+	# (non-VPN) loads being slow/flaky for RU visitors: browsers see the h3
+	# Alt-Svc header and try QUIC-over-UDP first, which RU ISPs are known to
+	# throttle/drop more aggressively than plain TCP+TLS, wasting the QUIC
+	# handshake timeout before falling back to h2. This is a listener-level
+	# setting (all domains sharing :443 on this Caddy instance get it, since
+	# `protocols` isn't a valid per-site directive -- confirmed the hard way:
+	# it crash-looped Caddy with "unrecognized directive: protocols" when
+	# tried inside a site block).
+	servers {
+		protocols h1 h2
+	}
 }
 
 (site) {
