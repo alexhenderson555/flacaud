@@ -9,6 +9,7 @@
 const DEFAULTS = {
   aiDj: false, // AI DJ-set generator
   continuousMix: false, // beat-matched crossfade between tracks
+  mseLossless: true, // MSE progressive playback for LOSSLESS/HI_RES DASH tracks
 };
 
 const STORAGE_KEY = 'tidal-feature-flags';

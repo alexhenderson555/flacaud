@@ -31,6 +31,8 @@ import { readQualityProbeCache, writeQualityProbeCache } from '../utils/qualityP
 import { waitForLosslessStreamReady } from '../utils/streamReady';
 import { shouldPreservePausedStream, shouldIgnoreStreamError, urlTargetsTrack } from '../utils/playerTransportLogic';
 import { probeLosslessMeta, normalizeProbeResult } from '../utils/qualityProbeHelpers';
+import { isFeatureEnabled } from '../utils/featureFlags';
+import { startMseStream } from '../utils/mseStream';
 
 const LOSSLESS_TIERS = new Set(['LOSSLESS', 'HI_RES']);
 
@@ -98,6 +100,15 @@ export function usePlaybackQuality({
   const retryTimerRef = useRef(null);
   const warmInFlightRef = useRef('');
   const streamLoadGenRef = useRef(0);
+  // Guards the experimental MSE path (mseLossless flag) against re-attempting
+  // a fresh fetch()+MediaSource for a src-key it already resolved — this
+  // effect can legitimately re-run for reasons unrelated to actually needing
+  // a new stream (see downloadRegistryTick etc. in its deps below), and unlike
+  // the plain-URL path below (an idempotent string build, safe to recompute),
+  // starting MSE has a real side effect (a live fetch + MediaSource) that
+  // isn't safe to redo without tearing down the previous one first.
+  const mseAttemptedSrcKeyRef = useRef('');
+  const mseAbortRef = useRef(null);
   // Guards against concurrent updatePreloadForPlaylist invocations. The caller
   // (usePlayerMediaEffects) re-runs its own effect -- and re-invokes this
   // callback -- on several unrelated dependency changes; without this, a
@@ -289,6 +300,14 @@ export function usePlaybackQuality({
     return `/api/stream/${provider}/${track.provider_id}?quality=${quality}&bypass_registry=${bypass}&mt=${encodeURIComponent(mt)}&_rn=${rn}`;
   }, []);
 
+  const buildMseStreamUrl = useCallback(async (track, quality) => {
+    if (!track?.provider_id) return '';
+    const mt = await resolveMediaTokenForStream();
+    if (!mt) return '';
+    const provider = track.provider || 'tidal';
+    return `/api/stream/${provider}/${track.provider_id}/mse?quality=${quality}&mt=${encodeURIComponent(mt)}`;
+  }, []);
+
   const warmStream = useCallback(async (track, quality) => {
     if (!track?.provider_id || !LOSSLESS_TIERS.has(quality)) return;
     const provider = track.provider || 'tidal';
@@ -359,6 +378,9 @@ export function usePlaybackQuality({
       pendingSeekRef.current = null;
       pendingSeekTrackKeyRef.current = '';
       pendingPlayAfterSeekRef.current = false;
+      mseAbortRef.current?.abort();
+      mseAbortRef.current = null;
+      mseAttemptedSrcKeyRef.current = '';
       return undefined;
     }
 
@@ -375,6 +397,9 @@ export function usePlaybackQuality({
     pendingSeekRef.current = null;
     pendingSeekTrackKeyRef.current = '';
     pendingPlayAfterSeekRef.current = false;
+    mseAbortRef.current?.abort();
+    mseAbortRef.current = null;
+    mseAttemptedSrcKeyRef.current = '';
     trackChangePendingRef.current = true;
     streamErrorSuppressUntilRef.current = performance.now() + 1200;
     streamRetryNonceRef.current = 0;
@@ -626,23 +651,72 @@ export function usePlaybackQuality({
           setIsLoading?.(true);
           await warmStream(currentTrack, streamQuality);
         }
-        url = await buildStreamUrl(currentTrack, streamQuality, bypass);
-        if (!url) {
-          showToast?.(lang === 'ru' ? 'Войдите снова для воспроизведения' : 'Log in again to play');
-          return;
+
+        // Experimental (mseLossless flag): play the raw DASH segments as they
+        // arrive instead of waiting for the server's full download+remux
+        // below. Only attempted once per exact src-key (see mseAttemptedSrcKeyRef's
+        // comment) — this effect can re-run for unrelated reasons, and unlike
+        // buildStreamUrl (a pure string, safe to recompute) this has a real
+        // side effect. Any failure/unsupported-codec falls straight through
+        // to the existing behavior below, unchanged.
+        const mseSrcKey = LOSSLESS_TIERS.has(streamQuality) && !fromCache
+          ? buildStreamSrcKey(trackKey, streamQuality, streamRetryNonceRef.current, 'mse')
+          : '';
+        // A stale MSE stream from a previous key (quality changed, retry
+        // bumped the nonce, or we're no longer taking the MSE path at all —
+        // e.g. a fallback to HIGH after an error) is no longer wanted even
+        // if we don't end up starting a new one below.
+        if (mseAbortRef.current && mseAttemptedSrcKeyRef.current !== mseSrcKey) {
+          mseAbortRef.current.abort();
+          mseAbortRef.current = null;
         }
-        if (LOSSLESS_TIERS.has(streamQuality) && !fromCache) {
-          setIsLoading?.(true);
-          const ready = await waitForLosslessStreamReady(url, {
-            timeoutMs: 120_000,
-            intervalMs: 400,
-            signal: abortReady.signal,
-          });
+        if (
+          mseSrcKey
+          && isFeatureEnabled('mseLossless')
+          && !activelyPlaying
+          && !pausedMidTrack
+          && mseAttemptedSrcKeyRef.current !== mseSrcKey
+        ) {
+          mseAttemptedSrcKeyRef.current = mseSrcKey;
+          const mseUrl = await buildMseStreamUrl(currentTrack, streamQuality);
           if (cancelled || loadGen !== streamLoadGenRef.current) return;
-          if (!ready) {
-            streamRetryNonceRef.current += 1;
-            setStreamRetryNonce((n) => n + 1);
+          if (mseUrl) {
+            const trackDurationSec = Number(currentTrack?.duration_s ?? currentTrack?.duration ?? 0) || undefined;
+            const mseResult = await startMseStream(mseUrl, {
+              signal: abortReady.signal,
+              trackDurationSec,
+            });
+            if (cancelled || loadGen !== streamLoadGenRef.current) {
+              mseResult?.abort();
+              return;
+            }
+            if (mseResult) {
+              mseAbortRef.current?.abort();
+              mseAbortRef.current = mseResult.abort;
+              url = mseResult.blobUrl;
+            }
+          }
+        }
+
+        if (!url) {
+          url = await buildStreamUrl(currentTrack, streamQuality, bypass);
+          if (!url) {
+            showToast?.(lang === 'ru' ? 'Войдите снова для воспроизведения' : 'Log in again to play');
             return;
+          }
+          if (LOSSLESS_TIERS.has(streamQuality) && !fromCache) {
+            setIsLoading?.(true);
+            const ready = await waitForLosslessStreamReady(url, {
+              timeoutMs: 120_000,
+              intervalMs: 400,
+              signal: abortReady.signal,
+            });
+            if (cancelled || loadGen !== streamLoadGenRef.current) return;
+            if (!ready) {
+              streamRetryNonceRef.current += 1;
+              setStreamRetryNonce((n) => n + 1);
+              return;
+            }
           }
         }
         if (!activelyPlaying && !pausedMidTrack) {
@@ -695,6 +769,15 @@ export function usePlaybackQuality({
     return () => {
       cancelled = true;
       abortReady.abort();
+      // Deliberately NOT aborting mseAbortRef here: this effect's cleanup
+      // fires on every re-run, including ones unrelated to the actual stream
+      // (e.g. downloadRegistryTick ticking for some other track) — killing a
+      // live MSE stream on every such wobble would audibly interrupt
+      // playback for no reason. Starting a genuinely new attempt already
+      // aborts the previous one first (see mseAbortRef.current?.abort()
+      // above); teardown for "switched away entirely" belongs to the
+      // trackKey-keyed reset effect below, which only fires on a real track
+      // change.
     };
     // currentTrack is intentionally NOT a dependency -- trackKey already
     // identifies which track this effect is resolving a src for. playQueue's

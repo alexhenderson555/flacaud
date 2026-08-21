@@ -200,21 +200,35 @@ def _remux(src: Path, dest: Path) -> Path:
         fallback = dest.with_suffix(".m4a") if dest.suffix == ".flac" else dest
         src.rename(fallback)
         return fallback
+    # Write to a temp path and swap in atomically. ensure_dash_cache() polls
+    # dest.exists() from a *different* uvicorn worker process (--workers 2 —
+    # in-memory locks don't span processes) while this runs in a background
+    # thread; ffmpeg writing straight to `dest` with -y creates/truncates it
+    # up front and appends progressively, so that poller can see the file
+    # "exist" mid-remux and hand a still-growing file to FileResponse, whose
+    # Content-Length (captured from an early, incomplete stat) then falls
+    # behind what's actually on disk by the time the read catches up —
+    # surfaces as uvicorn's "Response content longer than Content-Length".
+    # An atomic rename means dest.exists() only ever observes the complete,
+    # correctly-sized file — same pattern already used for tmp_path/fmp4_path
+    # and the BTS .part downloads.
+    tmp_dest = dest.with_suffix(dest.suffix + ".remux-tmp")
     try:
         subprocess.run(
-            [ffmpeg, "-y", "-i", str(src), "-c", "copy", str(dest)],
+            [ffmpeg, "-y", "-i", str(src), "-c", "copy", str(tmp_dest)],
             check=True,
             capture_output=True,
         )
+        tmp_dest.replace(dest)
         src.unlink(missing_ok=True)
         return dest
     except subprocess.CalledProcessError:
         # ffmpeg failed (e.g. disk full mid-write) - it may have left a
-        # partial/truncated file at dest despite the nonzero exit. Remove it
-        # before falling back, otherwise a caller that only checks
+        # partial/truncated file at tmp_dest despite the nonzero exit. Remove
+        # it before falling back, otherwise a caller that only checks
         # dest.is_file() to decide "already cached" would serve that
         # truncated file forever instead of ever seeing this fallback.
-        dest.unlink(missing_ok=True)
+        tmp_dest.unlink(missing_ok=True)
         fallback = dest.with_suffix(".m4a") if dest.suffix == ".flac" else dest
         src.rename(fallback)
         return fallback

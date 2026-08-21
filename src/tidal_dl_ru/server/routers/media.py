@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from tidal_dl_ru.core.router import get_provider_by_name
 from tidal_dl_ru.database.auth import get_current_user, get_media_user
@@ -32,6 +32,7 @@ from tidal_dl_ru.server.streaming import (
     api_detail,
     bts_cache_path,
     dash_file_media_type,
+    dash_mse_media_type,
     dash_stream_bytes_needed,
     delivered_stream_meta,
     ensure_bts_cache,
@@ -44,6 +45,7 @@ from tidal_dl_ru.server.streaming import (
     schedule_dash_warm,
     serve_bts_progressive,
     stream_cache_dir,
+    stream_dash_segments_live,
 )
 
 logger = logging.getLogger(__name__)
@@ -532,3 +534,63 @@ async def stream_track(provider: str, track_id: str, request: Request, current_u
             ) from e
 
     raise HTTPException(status_code=400, detail="Streaming not supported for this provider")
+
+
+@router.get("/api/stream/{provider}/{track_id}/mse")
+async def stream_track_mse(
+    provider: str,
+    track_id: str,
+    current_user: User = Depends(get_media_user),
+    quality: str = "LOSSLESS",
+):
+    """Experimental: raw DASH init+media segments for a browser MediaSource
+    player (feature-flagged on the frontend) — lets playback start as soon as
+    enough has buffered instead of waiting for the full server-side
+    download+remux ``stream_track`` above requires for LOSSLESS/HI_RES.
+
+    Deliberately its own route rather than a query param on ``stream_track``:
+    it bypasses the local stream-cache/remux pipeline entirely (see
+    ``stream_dash_segments_live``'s docstring), so it must never be reachable
+    through the same code path other clients depend on for that cache.
+    """
+    if provider != "tidal":
+        raise HTTPException(status_code=400, detail="MSE streaming only supported for tidal")
+
+    p = get_provider_by_name(provider)
+    if not p:
+        raise HTTPException(status_code=400, detail="Provider not found")
+
+    quality = cap_stream_quality(quality, current_user.effective_plan)
+    q_enum = quality_to_enum(quality)
+    cache_dir = stream_cache_dir()
+
+    try:
+        dash = await resolve_dash_stream_cached(
+            p, track_id, q_enum, cache_dir, current_user.effective_plan,
+        )
+    except TidalStreamUnavailable as e:
+        raise HTTPException(
+            status_code=503,
+            detail=api_detail("stream_failed", "Could not prepare stream"),
+        ) from e
+
+    res = dash["res"]
+    if res["type"] != "dash_stream":
+        # BTS/HIGH already streams progressively via the redirect/proxy path
+        # in stream_track — no MSE benefit there, and stream_dash_segments_live
+        # only knows how to walk a DASH segment list.
+        raise HTTPException(status_code=400, detail="MSE streaming only supported for DASH tracks")
+
+    from tidal_dl_ru.providers.tidal.download import manifest_inspect
+
+    urls = dash["urls"]
+    try:
+        codecs = manifest_inspect(res["manifest"]).get("codecs", "")
+    except (ValueError, KeyError, TypeError):
+        codecs = ""
+
+    return StreamingResponse(
+        stream_dash_segments_live(urls),
+        media_type=dash_mse_media_type(codecs),
+        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"},
+    )

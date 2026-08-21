@@ -13,6 +13,7 @@ import the helpers they need from here.
 import asyncio
 import collections
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -104,6 +105,15 @@ _HOP_HEADERS = frozenset(
         "te",
         "trailers",
         "upgrade",
+        # cap_bts_range() rewrites the Range sent upstream, so Tidal's CDN
+        # declared Content-Length for that range doesn't always match what
+        # it actually streams back (seen in prod as uvicorn raising
+        # "Response content longer than Content-Length" and Caddy logging
+        # the resulting connection reset). The body is already relayed via
+        # a StreamingResponse generator with no fixed byte count promised,
+        # so let Starlette use chunked encoding instead of forwarding a
+        # length we can't guarantee.
+        "content-length",
     }
 )
 
@@ -801,6 +811,34 @@ async def _proxy_bts_stream(
         headers=headers,
         media_type=media_type,
     )
+
+
+def dash_mse_media_type(codecs: str) -> str:
+    """MIME type for MediaSource.isTypeSupported()/addSourceBuffer from a DASH
+    Representation's codecs attribute (e.g. "flac", "mp4a.40.2")."""
+    return f'audio/mp4; codecs="{codecs}"' if codecs else "audio/mp4"
+
+
+async def stream_dash_segments_live(urls: list[str]) -> AsyncIterator[bytes]:
+    """Fetch DASH init+media segments straight from Tidal's CDN and yield bytes
+    in order, for MSE (SourceBuffer.appendBuffer) consumption.
+
+    Deliberately independent of the local stream-cache/remux pipeline used by
+    the non-MSE playback path (ensure_dash_cache/_remux): MSE plays the raw
+    fMP4 segments directly (that's what MSE is for), so there's no need to
+    wait for -- or share any state with -- the ffmpeg remux-to-FLAC step that
+    exists only for the plain <audio src> and file-download code paths. This
+    keeps the MSE endpoint fully isolated from that pipeline: it can't be
+    affected by, or introduce a new race into, the existing cache/lock/remux
+    logic those other paths depend on.
+    """
+    limits = httpx.Limits(max_connections=4, max_keepalive_connections=4)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0), limits=limits) as client:
+        for url in urls:
+            async with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                async for chunk in resp.aiter_bytes(chunk_size=256 * 1024):
+                    yield chunk
 
 
 def stream_quality_candidates(q_enum: AudioQuality) -> list[AudioQuality]:
