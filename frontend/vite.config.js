@@ -35,7 +35,18 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 512000,
         runtimeCaching: [
           {
-            urlPattern: /^https?:\/\/.*\/api\/.*/i,
+            // Deliberately excludes /api/stream/* and .../mse -- these serve
+            // audio via HTTP Range requests, and Chrome/Workbox has a known
+            // bad interaction where a service-worker-intercepted Range
+            // request gets truncated to a tiny (~100 byte) response instead
+            // of the real byte range, then the player retries immediately —
+            // observed in prod as hundreds of MB of near-instant repeat
+            // requests for one track. Not matching these URLs at all here
+            // means the SW's fetch handler never touches them, so the
+            // browser's native network stack (which handles Range correctly)
+            // serves them directly instead of NetworkOnly's respondWith()
+            // passthrough.
+            urlPattern: /^https?:\/\/.*\/api\/(?!stream\/).*/i,
             handler: 'NetworkOnly',
           },
           {
