@@ -39,16 +39,19 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
   let response;
   try {
     response = await fetch(url, { signal });
-  } catch {
+  } catch (e) {
+    console.debug('[mse] fetch failed, falling back', e);
     return null;
   }
   if (!response.ok || !response.body) {
+    console.debug('[mse] bad response, falling back', response.status);
     try { response.body?.cancel(); } catch { /* noop */ }
     return null;
   }
 
   const mimeType = response.headers.get('content-type') || 'audio/mp4';
   if (!mseSupported(mimeType)) {
+    console.debug('[mse] MediaSource.isTypeSupported() rejected mimeType, falling back', mimeType);
     try { response.body.cancel(); } catch { /* noop */ }
     return null;
   }
@@ -71,6 +74,7 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
     new Promise((resolve) => setTimeout(() => resolve(false), 5000)),
   ]);
   if (!didOpen || aborted) {
+    console.debug('[mse] MediaSource never reached sourceopen (5s timeout), falling back');
     cleanup();
     try { response.body.cancel(); } catch { /* noop */ }
     return null;
@@ -83,7 +87,8 @@ export async function startMseStream(url, { signal, trackDurationSec } = {}) {
     if (trackDurationSec > 0) {
       try { mediaSource.duration = trackDurationSec; } catch { /* noop */ }
     }
-  } catch {
+  } catch (e) {
+    console.debug('[mse] addSourceBuffer() rejected mimeType, falling back', mimeType, e);
     cleanup();
     try { response.body.cancel(); } catch { /* noop */ }
     return null;

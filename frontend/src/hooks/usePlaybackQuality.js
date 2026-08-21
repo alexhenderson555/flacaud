@@ -670,13 +670,23 @@ export function usePlaybackQuality({
           mseAbortRef.current.abort();
           mseAbortRef.current = null;
         }
-        if (
+        const mseGatePassed = Boolean(
           mseSrcKey
           && isFeatureEnabled('mseLossless')
           && !activelyPlaying
           && !pausedMidTrack
-          && mseAttemptedSrcKeyRef.current !== mseSrcKey
-        ) {
+          && mseAttemptedSrcKeyRef.current !== mseSrcKey,
+        );
+        if (!mseGatePassed && LOSSLESS_TIERS.has(streamQuality) && !fromCache) {
+          console.debug('[mse] gate not passed, skipping attempt entirely', {
+            hasMseSrcKey: Boolean(mseSrcKey),
+            enabled: isFeatureEnabled('mseLossless'),
+            activelyPlaying,
+            pausedMidTrack,
+            alreadyAttempted: mseAttemptedSrcKeyRef.current === mseSrcKey,
+          });
+        }
+        if (mseGatePassed) {
           mseAttemptedSrcKeyRef.current = mseSrcKey;
           const mseUrl = await buildMseStreamUrl(currentTrack, streamQuality);
           if (cancelled || loadGen !== streamLoadGenRef.current) return;
@@ -694,7 +704,11 @@ export function usePlaybackQuality({
               mseAbortRef.current?.abort();
               mseAbortRef.current = mseResult.abort;
               url = mseResult.blobUrl;
+            } else {
+              console.debug('[mse] startMseStream returned null, falling back to buildStreamUrl');
             }
+          } else {
+            console.debug('[mse] buildMseStreamUrl returned empty (no media token?), falling back');
           }
         }
 
