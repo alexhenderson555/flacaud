@@ -496,7 +496,32 @@ def deploy_tidal_server() -> None:
         # proxy listening (this pattern caused a real flacaud.ru outage — see the
         # matching fix in .github/workflows/deploy.yml).
         "$COMPOSE up -d --remove-orphans && "
-        "bash ops/prune-frontend-dist.sh frontend/dist 2>/dev/null || true"
+        "bash ops/prune-frontend-dist.sh frontend/dist 2>/dev/null || true; "
+        # Recurring incident (hit 4 times in one session): `up` sometimes leaves
+        # api recreated against an env that resolves DATABASE_URL to the local
+        # SQLite fallback instead of Postgres, even though `docker compose
+        # config` for these exact files correctly resolves it to the Postgres
+        # URL -- root cause not yet pinned down (suspected Compose recreate/
+        # hash-caching quirk on this host). The app's own startup guard
+        # (database.py) now refuses to boot on that misconfiguration rather
+        # than silently running against an empty DB, which surfaces as a
+        # crash-loop / site-wide 502 instead of quietly serving wrong data --
+        # strictly better, but still real downtime if nothing catches it.
+        # Verify and self-heal here so a deploy can't complete leaving the
+        # site down.
+        "sleep 8; "
+        "DBURL=$($COMPOSE exec -T api printenv DATABASE_URL 2>/dev/null); "
+        "if [[ \"$DBURL\" != postgresql* ]]; then "
+        "echo 'DATABASE_URL wrong after deploy (got: '\"$DBURL\"') -- force-recreating api'; "
+        "$COMPOSE up -d --force-recreate --no-deps api; "
+        "sleep 10; "
+        "DBURL2=$($COMPOSE exec -T api printenv DATABASE_URL 2>/dev/null); "
+        "echo \"DATABASE_URL after self-heal: $DBURL2\"; "
+        "if [[ \"$DBURL2\" != postgresql* ]]; then "
+        "echo 'DATABASE_URL STILL wrong after self-heal retry -- needs manual investigation'; "
+        "exit 1; "
+        "fi; "
+        "fi"
     )
     code = _ssh_run(TIDAL_HOST, TIDAL_USER, pw, remote, timeout=3600)
     if code != 0:
